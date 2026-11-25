@@ -829,7 +829,7 @@ async fn with_no_selection_the_panel_shows_the_default_fonts() {
 }
 
 /// The heading picker shows "Body font" while the document names no
-/// heading font, a family hands its pick to the view, and the "Body font"
+/// heading font. A family hands its pick to the view, and the "Body font"
 /// entry hands the deletion of the key (`PROSE-UI-266`).
 #[wasm_bindgen_test]
 async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {

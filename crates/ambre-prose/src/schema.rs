@@ -96,7 +96,7 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
 ///
 /// The step rewrites nothing but the register. A version 1 document names no
 /// heading font, and an absent key sets each heading in the body font, the
-/// version 1 rule. So no block moves (`PROSE-149`).
+/// version 1 rule. So no block moves (`PROSE-146`).
 fn heading_font_v2(doc: &LoroDoc) -> Result<(), String> {
     stamp(doc);
     doc.commit();
@@ -301,7 +301,7 @@ mod tests {
     }
 
     /// The styled document as a version 1 build wrote it, frozen before the
-    /// heading font raised the version (`PROSE-149`).
+    /// heading font raised the version (`PROSE-146`).
     const VERSION_1: &[u8] =
         include_bytes!("../../../fixtures/frozen/prose/styled_document@v1-s1.ambre");
 
@@ -327,9 +327,9 @@ mod tests {
             .collect()
     }
 
-    /// A version 1 document opens under version 2, and every block resolves
-    /// as the version 2 build resolves the same commands: no heading moves
-    /// to another font (`PROSE-149`).
+    /// A version 1 document opens under version 2. Every block resolves as
+    /// this build resolves the same commands, so no heading moves to
+    /// another font (`PROSE-146`).
     #[test]
     fn a_version_1_document_opens_with_every_block_resolved_as_before() {
         let old = opened(VERSION_1, 1);
@@ -350,9 +350,9 @@ mod tests {
         }
     }
 
-    /// Two peers open one version 1 document, each migrates it, each types,
-    /// and both edits survive with equal version vectors: the step wrote one
-    /// set of operations, not two rivals (`SCHEMA-020`).
+    /// Two peers open one version 1 document, and each migrates it and
+    /// types. Both edits survive with equal version vectors, so the step
+    /// wrote one set of operations, not two rivals (`SCHEMA-020`).
     #[test]
     fn two_peers_migrating_a_version_1_document_keep_both_edits() {
         let (mut alice, mut bob) = (opened(VERSION_1, 1), opened(VERSION_1, 2));

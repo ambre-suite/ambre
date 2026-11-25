@@ -31,6 +31,7 @@
 | `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | implemented | 14 |  |
 | `prose-tables` | A grid of cells inside the document. | implemented | 47 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | implemented | 45 |  |
+| `prose-toolbar` | Select a few words and a small bar appears above them. | implemented | 31 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 6 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | implemented | 24 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 15 |  |
@@ -40,8 +41,7 @@
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 25 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | partial | 20 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | partial | 20 |  |
-| `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 31 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 
-**28 features: 19 implemented, 8 partial, 1 design-only. 828 contract rows, 0 loose.**
+**28 features: 20 implemented, 7 partial, 1 design-only. 828 contract rows, 0 loose.**

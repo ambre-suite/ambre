@@ -751,10 +751,10 @@ fn each_migration_step_writes_what_its_version_froze() {
     );
 }
 
-/// Version 2 adds one key to version 1 and moves no other line, so a
-/// version 1 reader, which ignores a key it does not know, loses the
-/// heading font alone. The key is optional: seed leaves it absent, and an
-/// absent key reads as the body font (`PROSE-UI-266`, `PROSE-149`).
+/// Version 2 adds one key to version 1 and moves no other line. A version 1
+/// reader ignores a key it does not know, so it loses the heading font
+/// alone. The key is optional: seed leaves it absent, and an
+/// absent key reads as the body font (`PROSE-146`).
 #[test]
 fn version_2_adds_the_optional_heading_font_and_moves_no_other_line() {
     let lines = |v: u32| -> BTreeSet<String> {
