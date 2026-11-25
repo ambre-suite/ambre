@@ -24,7 +24,6 @@
 // Tool map, the swatch set) lives in the always-compiled, host-tested `ui::palette`.
 // ============================================================================
 
-use ambre_chrome::commands::Locale;
 use ambre_core::{Commands, StaticKey};
 use leptos::html;
 use leptos::prelude::*;
@@ -51,7 +50,7 @@ use super::icons;
 /// (`UI-THREAD-019`), and `tool_for_command` says which tool the click arms.
 /// The button, the keyboard chord and the command palette then all agree.
 fn tool_button(active: RwSignal<Tool>, command: StaticKey<Commands>) -> impl IntoView {
-    let label = registry::title(command, &Locale::En)
+    let label = registry::title(command, &ambre_chrome::language())
         .map(ambre_core::Validated::into_string)
         .unwrap_or_default();
     let icon = registry::icon(command).and_then(icons::resolve);
@@ -108,7 +107,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     view! {
         <span class="ambre-color" node_ref=root_ref>
             <button
-                aria-label=registry::title(TOOL_STICKY, &Locale::En).map(ambre_core::Validated::into_string).unwrap_or_default()
+                aria-label=registry::title(TOOL_STICKY, &ambre_chrome::language()).map(ambre_core::Validated::into_string).unwrap_or_default()
                 aria-haspopup="true"
                 aria-expanded=move || open.get().aria()
                 aria-pressed=move || ambre_chrome::Pressed::from_bool(is_active()).aria()

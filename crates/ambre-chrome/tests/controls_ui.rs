@@ -10,7 +10,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Property, Reading};
+use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Property, Reading};
 use ambre_chrome::{
     Choice, ChoiceRow, ChoiceView, CommandButton, ContextPanel, DockSide, FONT_FAMILIES, Field,
     Fold, FontPicker, IconButton, LengthField, PanelPrefs, PanelSection, PanelWidth, Pressed,
@@ -31,7 +31,10 @@ const PAGE: StaticKey<PanelSections> = StaticKey::<PanelSections>::new("t.page")
 
 static BOLD: Command = Command {
     id: StaticKey::<Commands>::new("t.format.bold"),
-    title: |_: &Locale| ambre_core::Validated::new("Bold"),
+    title: ambre_commands::TitleWords {
+        en: "Bold",
+        fr: "Bold",
+    },
     icon: None,
     keybindings: &[KeyBinding::primary(KeyChar::B)],
     category: StaticKey::<Categories>::new("format"),
@@ -40,19 +43,28 @@ static BOLD: Command = Command {
 
 static ITALIC: Property = Property {
     id: StaticKey::<Properties>::new("t.italic"),
-    title: |_: &Locale| ambre_core::Validated::new("Italic"),
+    title: ambre_commands::TitleWords {
+        en: "Italic",
+        fr: "Italic",
+    },
     icon: None,
 };
 
 static MARGIN: Property = Property {
     id: StaticKey::<Properties>::new("t.margin"),
-    title: |_: &Locale| ambre_core::Validated::new("Margin"),
+    title: ambre_commands::TitleWords {
+        en: "Margin",
+        fr: "Margin",
+    },
     icon: None,
 };
 
 static PAPER: Property = Property {
     id: StaticKey::<Properties>::new("t.paper"),
-    title: |_: &Locale| ambre_core::Validated::new("Paper"),
+    title: ambre_commands::TitleWords {
+        en: "Paper",
+        fr: "Paper",
+    },
     icon: None,
 };
 

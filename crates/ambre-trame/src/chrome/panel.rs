@@ -77,7 +77,7 @@ fn label(id: StaticKey<ambre_core::Properties>) -> String {
     panel::PROPERTIES
         .iter()
         .find(|p| p.id == id)
-        .map(|p| (p.title)(&ambre_chrome::commands::Locale::En).into_string())
+        .map(|p| p.title.pick(&ambre_chrome::language()).into_string())
         .unwrap_or_default()
 }
 

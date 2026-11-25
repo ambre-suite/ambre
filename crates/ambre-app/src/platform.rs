@@ -230,6 +230,15 @@ pub(crate) fn reader_locale() -> ambre_client_core::ReaderLocale {
     reader
 }
 
+/// The browser's language, read with no wait. A malformed tag is none.
+pub(crate) fn browser_language() -> ambre_client_core::DocumentLocale {
+    ambre_client_core::DocumentLocale::from_register(
+        web_sys::window()
+            .and_then(|window| window.navigator().language())
+            .as_deref(),
+    )
+}
+
 /// localStorage key of the boot hint: the theme and the interface language
 /// of the account, in the clear, read before the unlock (`SETTINGS-028`).
 const BOOT_HINT_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
@@ -1139,6 +1148,28 @@ mod tests {
             crate::settings_view::boot_theme(boot_hint().as_ref(), ambre_canvas::Theme::Dark),
             ambre_canvas::Theme::Dark,
             "with no hint the system decides"
+        );
+    }
+
+    /// `SETTINGS-033`: a page boots in the interface language of the hint
+    /// the storage holds, whatever the browser asks for.
+    #[wasm_bindgen_test]
+    fn a_page_boots_in_the_language_of_the_stored_boot_hint() {
+        use ambre_chrome::commands::Locale;
+        let english = ambre_client_core::DocumentLocale::parse("en").expect("a tag");
+        keep_boot_hint(&ambre_client_core::BootHint {
+            theme: ambre_client_core::ThemeChoice::System,
+            interface_language: ambre_client_core::DocumentLocale::parse("fr").expect("a tag"),
+        });
+        assert_eq!(
+            crate::settings_view::boot_language(boot_hint().as_ref(), &english),
+            Locale::Fr
+        );
+        forget_boot_hint();
+        assert_eq!(
+            crate::settings_view::boot_language(boot_hint().as_ref(), &english),
+            Locale::En,
+            "with no hint the browser decides"
         );
     }
 

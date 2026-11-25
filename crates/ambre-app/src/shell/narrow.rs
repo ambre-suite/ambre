@@ -3,7 +3,7 @@
 // reads the viewport of the frame it runs in. So each test mounts into an
 // iframe of the width it reads.
 
-use ambre_chrome::commands::{Command, Home, Locale};
+use ambre_chrome::commands::{Command, Home};
 use ambre_chrome::{ContextMenu, MenuEntry};
 use ambre_core::{Categories, Commands, StaticKey};
 use leptos::mount::mount_to;
@@ -44,13 +44,16 @@ async fn menu_edges_at(width: u32) -> (f64, f64, f64) {
     let pos = RwSignal::new(Some(css_point(150.0, 60.0)));
     let copy = Command {
         id: StaticKey::<Commands>::new("clipboard.copy"),
-        title: |_| ambre_core::Validated::new("Copy"),
+        title: ambre_chrome::commands::TitleWords {
+            en: "Copy",
+            fr: "Copy",
+        },
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("edit"),
         home: Home::ContextMenu,
     };
-    let entries = Signal::stored(vec![MenuEntry::command(&copy, &Locale::En)]);
+    let entries = Signal::stored(vec![MenuEntry::command(&copy, &ambre_chrome::language())]);
     let handle = mount_to(inner.body().unwrap(), move || {
         view! { <ContextMenu pos=pos entries=entries on_command=Callback::new(|_| {}) /> }
     });

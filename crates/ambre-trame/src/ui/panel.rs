@@ -11,7 +11,7 @@
 // no control here: the Edit menu, its chord and the palette reach it.
 // ============================================================================
 
-use ambre_commands::{Locale, Property, Reach};
+use ambre_commands::{Property, Reach};
 use ambre_core::{Commands, PanelSections, Properties, StaticKey};
 
 use super::commands as cmd;
@@ -64,43 +64,33 @@ pub const MARGINS: StaticKey<Properties> = StaticKey::new("trame.page.margins");
 
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
-    ($($title_fn:ident: $id:expr, $label:literal;)*) => {
-        #[expect(
-            non_snake_case,
-            reason = "each title function takes the name of its property constant"
-        )]
-        mod titles {
-            use super::Locale;
-            $(pub fn $title_fn(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-                ambre_core::Validated::new($label)
-            })*
-        }
+    ($($title_fn:ident: $id:expr, $label:literal, $fr:literal;)*) => {
 
         /// Every property the sheet's panel edits, described once.
         pub const PROPERTIES: &[Property] = &[
-            $(Property { id: $id, title: titles::$title_fn, icon: None },)*
+            $(Property { id: $id, title: ambre_commands::TitleWords { en: $label, fr: $fr }, icon: None },)*
         ];
     };
 }
 
 properties! {
-    NUMBER_FORMAT: NUMBER_FORMAT, "Number format";
-    DECIMALS: DECIMALS, "Decimals";
-    FONT: FONT, "Font";
-    SIZE: SIZE, "Font size";
-    TEXT_COLOUR: TEXT_COLOUR, "Text colour";
-    FILL: FILL, "Fill colour";
-    UNDERLINE: UNDERLINE, "Underline";
-    STRIKETHROUGH: STRIKETHROUGH, "Strikethrough";
-    H_ALIGN: H_ALIGN, "Horizontal alignment";
-    V_ALIGN: V_ALIGN, "Vertical alignment";
-    BORDERS: BORDERS, "Borders";
-    WRAP: WRAP, "Wrap text";
-    FREEZE: FREEZE, "Freeze";
-    SHEET_NAME: SHEET_NAME, "Sheet name";
-    PAPER: PAPER, "Paper";
-    ORIENTATION: ORIENTATION, "Orientation";
-    MARGINS: MARGINS, "Margins";
+    NUMBER_FORMAT: NUMBER_FORMAT, "Number format", "Format de nombre";
+    DECIMALS: DECIMALS, "Decimals", "D\u{e9}cimales";
+    FONT: FONT, "Font", "Police";
+    SIZE: SIZE, "Font size", "Taille de police";
+    TEXT_COLOUR: TEXT_COLOUR, "Text colour", "Couleur du texte";
+    FILL: FILL, "Fill colour", "Couleur de remplissage";
+    UNDERLINE: UNDERLINE, "Underline", "Soulign\u{e9}";
+    STRIKETHROUGH: STRIKETHROUGH, "Strikethrough", "Barr\u{e9}";
+    H_ALIGN: H_ALIGN, "Horizontal alignment", "Alignement horizontal";
+    V_ALIGN: V_ALIGN, "Vertical alignment", "Alignement vertical";
+    BORDERS: BORDERS, "Borders", "Bordures";
+    WRAP: WRAP, "Wrap text", "Renvoyer \u{e0} la ligne";
+    FREEZE: FREEZE, "Freeze", "Figer";
+    SHEET_NAME: SHEET_NAME, "Sheet name", "Nom de la feuille";
+    PAPER: PAPER, "Paper", "Papier";
+    ORIENTATION: ORIENTATION, "Orientation", "Orientation";
+    MARGINS: MARGINS, "Margins", "Marges";
 }
 
 /// The sections the panel shows over a lone cell, in order.

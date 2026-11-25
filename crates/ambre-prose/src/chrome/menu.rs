@@ -5,7 +5,6 @@
 // renders it (`ARCH-018`). Undo and redo live in the Ambre menu.
 
 use ambre_chrome::MenuEntry;
-use ambre_commands::Locale;
 
 use crate::commands::{COMMANDS, CONTEXT_MENU, MENU_CLIPBOARD};
 
@@ -18,7 +17,7 @@ pub fn context_entries() -> Vec<MenuEntry> {
         .into_iter()
         .filter_map(|id| ambre_commands::find(COMMANDS, id))
     {
-        entries.push(MenuEntry::command(command, &Locale::En));
+        entries.push(MenuEntry::command(command, &ambre_chrome::language()));
         if Some(&command.id) == MENU_CLIPBOARD.last() {
             entries.push(MenuEntry::separator());
         }

@@ -61,7 +61,7 @@ pub fn matches(label: &str, query: &str) -> bool {
 pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a Command> {
     table
         .iter()
-        .filter(|c| matches((c.title)(locale).as_str(), query))
+        .filter(|c| matches(c.title.pick(locale).as_str(), query))
         .collect()
 }
 
@@ -171,13 +171,13 @@ pub fn CommandPalette(
 
     let rows = Memo::new(move |_| {
         let entries = entries.map(|e| e.get()).unwrap_or_default();
-        self::rows(&entries, table, &query.get(), &Locale::En)
+        self::rows(&entries, table, &query.get(), &crate::language())
             .into_iter()
             .map(|row| match row {
                 PaletteRow::Entry(e) => (Chosen::Entry(e.key), e.label.clone(), e.hint, None, None),
                 PaletteRow::Command(c) => (
                     Chosen::Command(c.id),
-                    (c.title)(&Locale::En).into_string(),
+                    c.title.pick(&crate::language()).into_string(),
                     None,
                     Some(c.home),
                     c.chord(),
@@ -288,7 +288,7 @@ pub fn CommandPalette(
                                             .map(|home: Home| {
                                                 view! {
                                                     <span class="ambre-palette-home">
-                                                        {home.name(&Locale::En).into_string()}
+                                                        {home.name(&crate::language()).into_string()}
                                                     </span>
                                                 }
                                             })}
@@ -317,20 +317,23 @@ mod tests {
     use ambre_commands::{KeyBinding, KeyChar};
     use ambre_core::{Categories, Icons};
 
-    fn bold(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-        ambre_core::Validated::new("Bold")
-    }
-    fn sort_asc(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-        ambre_core::Validated::new("Sort range ascending")
-    }
-    fn export(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-        ambre_core::Validated::new("Export CSV")
-    }
+    const BOLD: ambre_commands::TitleWords = ambre_commands::TitleWords {
+        en: "Bold",
+        fr: "Bold",
+    };
+    const SORT_ASC: ambre_commands::TitleWords = ambre_commands::TitleWords {
+        en: "Sort range ascending",
+        fr: "Sort range ascending",
+    };
+    const EXPORT: ambre_commands::TitleWords = ambre_commands::TitleWords {
+        en: "Export CSV",
+        fr: "Export CSV",
+    };
 
     const TABLE: &[Command] = &[
         Command {
             id: StaticKey::<Commands>::new("t.format.bold"),
-            title: bold,
+            title: BOLD,
             icon: Some(StaticKey::<Icons>::new("format-bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: StaticKey::<Categories>::new("format"),
@@ -338,7 +341,7 @@ mod tests {
         },
         Command {
             id: StaticKey::<Commands>::new("t.sort.asc"),
-            title: sort_asc,
+            title: SORT_ASC,
             icon: None,
             keybindings: &[],
             category: StaticKey::<Categories>::new("sort"),
@@ -346,7 +349,7 @@ mod tests {
         },
         Command {
             id: StaticKey::<Commands>::new("t.interop.export"),
-            title: export,
+            title: EXPORT,
             icon: None,
             keybindings: &[],
             category: StaticKey::<Categories>::new("interop"),

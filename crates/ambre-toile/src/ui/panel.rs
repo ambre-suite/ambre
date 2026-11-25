@@ -9,7 +9,7 @@
 // panel shows for that kind (`CHROME-208`).
 // ============================================================================
 
-use ambre_commands::{Locale, Property, Reach};
+use ambre_commands::{Property, Reach};
 use ambre_core::id::{Element, Id};
 use ambre_core::{Board, Count, PanelSections, Properties, Px, Radians, StaticKey};
 
@@ -68,42 +68,32 @@ pub const ROTATION: StaticKey<Properties> = StaticKey::new("toile.place.rotation
 
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
-    ($($title_fn:ident: $id:expr, $label:literal;)*) => {
-        #[expect(
-            non_snake_case,
-            reason = "each title function takes the name of its property constant"
-        )]
-        mod titles {
-            use super::Locale;
-            $(pub fn $title_fn(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-                ambre_core::Validated::new($label)
-            })*
-        }
+    ($($title_fn:ident: $id:expr, $label:literal, $fr:literal;)*) => {
 
         /// Every property the board's panel edits, described once.
         pub const PROPERTIES: &[Property] = &[
-            $(Property { id: $id, title: titles::$title_fn, icon: None },)*
+            $(Property { id: $id, title: ambre_commands::TitleWords { en: $label, fr: $fr }, icon: None },)*
         ];
     };
 }
 
 properties! {
-    FILL: FILL, "Fill";
-    STROKE: STROKE, "Stroke";
-    STROKE_WIDTH: STROKE_WIDTH, "Stroke width";
-    OPACITY: OPACITY, "Opacity";
-    TEXT_COLOUR: TEXT_COLOUR, "Text colour";
-    FONT: FONT, "Font";
-    SIZE: SIZE, "Size";
-    BOLD: BOLD, "Bold";
-    ITALIC: ITALIC, "Italic";
-    UNDERLINE: UNDERLINE, "Underline";
-    STRIKETHROUGH: STRIKETHROUGH, "Strikethrough";
-    X: X, "X";
-    Y: Y, "Y";
-    WIDTH: WIDTH, "Width";
-    HEIGHT: HEIGHT, "Height";
-    ROTATION: ROTATION, "Rotation";
+    FILL: FILL, "Fill", "Remplissage";
+    STROKE: STROKE, "Stroke", "Contour";
+    STROKE_WIDTH: STROKE_WIDTH, "Stroke width", "\u{c9}paisseur du contour";
+    OPACITY: OPACITY, "Opacity", "Opacit\u{e9}";
+    TEXT_COLOUR: TEXT_COLOUR, "Text colour", "Couleur du texte";
+    FONT: FONT, "Font", "Police";
+    SIZE: SIZE, "Size", "Taille";
+    BOLD: BOLD, "Bold", "Gras";
+    ITALIC: ITALIC, "Italic", "Italique";
+    UNDERLINE: UNDERLINE, "Underline", "Soulign\u{e9}";
+    STRIKETHROUGH: STRIKETHROUGH, "Strikethrough", "Barr\u{e9}";
+    X: X, "X", "X";
+    Y: Y, "Y", "Y";
+    WIDTH: WIDTH, "Width", "Largeur";
+    HEIGHT: HEIGHT, "Height", "Hauteur";
+    ROTATION: ROTATION, "Rotation", "Rotation";
 }
 
 /// The box and the rotation of a lone selected shape, as the board stores
@@ -169,15 +159,16 @@ impl PlaceEdit {
 }
 
 /// The title of a property no table describes.
-fn unnamed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Property")
-}
+const UNNAMED_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Property",
+    fr: "Propri\u{e9}t\u{e9}",
+};
 
 /// What [`property`] answers for an id no table describes. Every id the
 /// panel names is in the table, which a test holds.
 const UNNAMED: Property = Property {
     id: StaticKey::new("toile.unnamed"),
-    title: unnamed_title,
+    title: UNNAMED_TITLE,
     icon: None,
 };
 

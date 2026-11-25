@@ -9,7 +9,6 @@
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
 // ============================================================================
 
-use ambre_commands::Locale;
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Commands, StaticKey};
 use std::collections::{HashMap, HashSet};
@@ -682,7 +681,7 @@ impl MurmureRelay {
                 message_actions(target, me)
                     .into_iter()
                     .filter_map(|id| ambre_commands::find(COMMANDS, id))
-                    .map(|command| MenuEntry::command(command, &Locale::En))
+                    .map(|command| MenuEntry::command(command, &ambre_chrome::language()))
                     .collect()
             })
         })
@@ -2256,7 +2255,7 @@ pub fn EmojiPicker(
 /// it.
 #[component]
 pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
-    let rows = key_list(&Locale::En);
+    let rows = key_list(&ambre_chrome::language());
     view! {
         <ambre_chrome::Dialog
             open=relay.keys

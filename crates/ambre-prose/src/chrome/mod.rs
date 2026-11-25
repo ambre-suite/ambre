@@ -559,7 +559,7 @@ fn bar_kind_list(
 fn bar_comment(signals: ProseSignals) -> impl IntoView {
     let command = ambre_commands::find(crate::commands::COMMANDS, crate::commands::COMMENT);
     let label = command
-        .map(|command| (command.title)(&ambre_commands::Locale::En).into_string())
+        .map(|command| command.title.pick(&ambre_chrome::language()).into_string())
         .unwrap_or_default();
     command.and_then(icon_of).map(|icon| {
         view! {
@@ -670,7 +670,7 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
 fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
     let command = ambre_commands::find(crate::commands::COMMANDS, id);
     let label = command
-        .map(|command| (command.title)(&ambre_commands::Locale::En).into_string())
+        .map(|command| command.title.pick(&ambre_chrome::language()).into_string())
         .unwrap_or_default();
     FormatControl {
         label,

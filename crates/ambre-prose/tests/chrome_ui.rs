@@ -489,7 +489,7 @@ async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
         let named = match entry {
             ambre_chrome::commands::Reach::Command(id) => {
                 ambre_commands::find(ambre_prose::commands::COMMANDS, *id)
-                    .map(|c| (c.title)(&ambre_commands::Locale::En).into_string())
+                    .map(|c| c.title.pick(&ambre_commands::Locale::En).into_string())
                     .is_some_and(|label| *found == label)
             }
             _ => false,

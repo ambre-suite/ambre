@@ -88,7 +88,8 @@ pub struct StaticKey<K: KeyKind> { text: &'static str, kind: PhantomData<fn() ->
 /// The description every view of a command derives from (`UI-THREAD-019`).
 pub struct Command {
     pub id: StaticKey<Commands>,
-    pub title: fn(&Locale) -> String,
+    /// The words of the label in each interface language (`SETTINGS-043`).
+    pub title: TitleWords,
     pub icon: Option<StaticKey<Icons>>,
     /// Every chord it answers, the announced one first (`UI-THREAD-011`).
     pub keybindings: &'static [KeyBinding],
@@ -211,8 +212,9 @@ changes nothing does not refresh them.
 | Copy, cut and paste ride the browser's events | decoding the three chords in the keyboard path beside every other command | the browser raises them with the clipboard attached, and decoding the chords again means guessing when the browser will also act. What the chords must agree on is the identity they name, so the table describes the three intents and the seeding refuses to bind their chords |
 | The two accelerator keys fold, they are not mapped per platform | reading the platform at boot and translating each table entry into the local accelerator | a table that names one platform's accelerator is a table per platform, and the second one is written by whoever notices the first is wrong. The price is that a Mac's own control chords reach the same command as its command chords, which costs a text navigation the operating system offers and no application here implements |
 | The shared chords live in the identity crate, not in an application | each application declaring the alias beside its own table, which is where the Ctrl+Y alias sat | the pair `Ctrl+Shift+Z` and `Ctrl+Y` is one decision, and an application that declares it a second time is where the two drift apart. The crate that owns what a chord is owns which chords the universal operations answer |
-| The title is a function of the locale, on the description | a static label on the description | it makes a command untranslatable, and a title is read by every view |
-| The title is a function of the locale, on the description | a translation table in the shared crate | it makes the leaf own the languages, which is exactly the dependency the crate is kept free of. A function keeps the title where every view derives it from without either cost |
+| The title is its words in each language, on the description | a static label on the description | it makes a command untranslatable, and a title is read by every view |
+| The title is its words in each language, on the description | a translation table in the shared crate | it makes the leaf own the words of every application. The words stay on the description each view derives from |
+| The title is its words in each language, on the description | a function of the locale per title | each function cost Main about 47 bytes beyond its words. On 2026-11-25, `just size` read 11 875 bytes of growth for 185 titles as functions, and 7 516 as data |
 
 ---
 
@@ -227,11 +229,6 @@ changes nothing does not refresh them.
 * **Nothing rules on which operations are shared beyond the clipboard.** Undo and redo share their
   chords and keep an identity per application, which is the state the two surfaces need today. No
   document says where that line is.
-* **Nothing supplies the active language.** A description carries `title: fn(&Locale) -> String`,
-  and the argument is the reader's own, ruled out of the document by `ambre-spec-locale.md`,
-  `LOCALE-003`. Where the client reads it from is still unwritten. Trame's table answers both
-  variants with the English label it shows today, so the function is a shape with one language
-  behind it.
 * **Nothing rules on a user rebinding.** The table accepts one and reports the displacement. No
   document says where a rebinding is stored, whether it survives a reload, or how a conflict is
   shown.

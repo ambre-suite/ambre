@@ -337,7 +337,7 @@ async fn the_format_bar_announces_the_registry_labels() {
     for id in ids {
         let command = ambre_commands::find(ambre_prose::commands::COMMANDS, id)
             .expect("the control is described");
-        let expected = (command.title)(&ambre_commands::Locale::En);
+        let expected = command.title.pick(&ambre_commands::Locale::En);
         let found = root
             .query_selector(&format!("[aria-label=\"{expected}\"]"))
             .unwrap();

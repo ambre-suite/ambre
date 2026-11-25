@@ -19,7 +19,6 @@
 // (`toile-menus`).
 // ============================================================================
 
-use ambre_chrome::commands::Locale;
 use ambre_chrome::{Availability, ContextMenu, MenuEntry};
 use ambre_core::{Commands, StaticKey};
 use leptos::prelude::*;
@@ -44,7 +43,7 @@ fn entries_for(id: MenuId, toggles: Toggles) -> Vec<MenuEntry> {
             MenuRow::Separator => Some(MenuEntry::separator()),
             MenuRow::Command(command) => {
                 let cmd = ambre_chrome::commands::find(registry::COMMANDS, command)?;
-                let entry = MenuEntry::command(cmd, &Locale::En);
+                let entry = MenuEntry::command(cmd, &ambre_chrome::language());
                 let entry = match cmd.chord() {
                     Some(kb) => entry.shortcut(kb),
                     None => entry,

@@ -6,7 +6,7 @@
 //! table names them. Undo and redo are described here for their menu rows,
 //! and the view decodes their chords too: the shell binds none of them.
 
-use ambre_commands::{Command, Home, KeyBinding, KeyChar, Keymap, Locale};
+use ambre_commands::{Command, Home, KeyBinding, KeyChar, Keymap};
 use ambre_core::{Categories, Commands, Icons, StaticKey};
 
 use crate::mark::MarkRoot;
@@ -173,138 +173,167 @@ pub fn mark_key(id: StaticKey<Commands>) -> Option<MarkRoot> {
         .map(|(_, key)| *key)
 }
 
-fn superscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Superscript")
-}
+const SUPERSCRIPT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Superscript",
+    fr: "Exposant",
+};
 
-fn subscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Subscript")
-}
+const SUBSCRIPT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Subscript",
+    fr: "Indice",
+};
 
-fn clear_formatting_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Clear formatting")
-}
+const CLEAR_FORMATTING_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Clear formatting",
+    fr: "Effacer la mise en forme",
+};
 
-fn link_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Link")
-}
+const LINK_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Link",
+    fr: "Lien",
+};
 
-fn comment_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Comment")
-}
+const COMMENT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Comment",
+    fr: "Commentaire",
+};
 
-fn bold_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Bold")
-}
+const BOLD_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Bold",
+    fr: "Gras",
+};
 
-fn italic_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Italic")
-}
+const ITALIC_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Italic",
+    fr: "Italique",
+};
 
-fn underline_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Underline")
-}
+const UNDERLINE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Underline",
+    fr: "Soulign\u{e9}",
+};
 
-fn strikethrough_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Strikethrough")
-}
+const STRIKETHROUGH_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Strikethrough",
+    fr: "Barr\u{e9}",
+};
 
-fn code_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Inline code")
-}
+const CODE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Inline code",
+    fr: "Code en ligne",
+};
 
-fn cut_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Cut")
-}
+const CUT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Cut",
+    fr: "Couper",
+};
 
-fn copy_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Copy")
-}
+const COPY_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Copy",
+    fr: "Copier",
+};
 
-fn paste_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Paste")
-}
+const PASTE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Paste",
+    fr: "Coller",
+};
 
-fn paste_plain_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Paste as plain text")
-}
+const PASTE_PLAIN_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Paste as plain text",
+    fr: "Coller en texte brut",
+};
 
-fn undo_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Undo")
-}
+const UNDO_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Undo",
+    fr: "Annuler",
+};
 
-fn redo_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Redo")
-}
+const REDO_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Redo",
+    fr: "R\u{e9}tablir",
+};
 
-fn palette_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Command palette")
-}
+const PALETTE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Command palette",
+    fr: "Palette de commandes",
+};
 
-fn import_markdown_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Import a Markdown file")
-}
+const IMPORT_MARKDOWN_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Import a Markdown file",
+    fr: "Importer un fichier Markdown",
+};
 
-fn export_markdown_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to Markdown (.md)")
-}
+const EXPORT_MARKDOWN_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to Markdown (.md)",
+    fr: "Exporter en Markdown (.md)",
+};
 
-fn import_word_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Import a Word file")
-}
+const IMPORT_WORD_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Import a Word file",
+    fr: "Importer un fichier Word",
+};
 
-fn export_word_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to Word (.docx)")
-}
+const EXPORT_WORD_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to Word (.docx)",
+    fr: "Exporter en Word (.docx)",
+};
 
-fn export_word_reviewed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to Word with comments and suggestions (.docx)")
-}
+const EXPORT_WORD_REVIEWED_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to Word with comments and suggestions (.docx)",
+    fr: "Exporter en Word avec commentaires et suggestions (.docx)",
+};
 
-fn import_odt_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Import an OpenDocument text")
-}
+const IMPORT_ODT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Import an OpenDocument text",
+    fr: "Importer un texte OpenDocument",
+};
 
-fn export_odt_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to OpenDocument (.odt)")
-}
+const EXPORT_ODT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to OpenDocument (.odt)",
+    fr: "Exporter en OpenDocument (.odt)",
+};
 
-fn export_odt_reviewed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to OpenDocument with comments and suggestions (.odt)")
-}
+const EXPORT_ODT_REVIEWED_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to OpenDocument with comments and suggestions (.odt)",
+    fr: "Exporter en OpenDocument avec commentaires et suggestions (.odt)",
+};
 
-fn insert_picture_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Insert a picture")
-}
+const INSERT_PICTURE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Insert a picture",
+    fr: "Ins\u{e9}rer une image",
+};
 
-fn import_html_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Import an HTML document")
-}
+const IMPORT_HTML_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Import an HTML document",
+    fr: "Importer un document HTML",
+};
 
-fn export_html_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to HTML (.html)")
-}
+const EXPORT_HTML_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to HTML (.html)",
+    fr: "Exporter en HTML (.html)",
+};
 
-fn export_html_reviewed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to HTML with comments and suggestions (.html)")
-}
+const EXPORT_HTML_REVIEWED_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to HTML with comments and suggestions (.html)",
+    fr: "Exporter en HTML avec commentaires et suggestions (.html)",
+};
 
-fn export_pdf_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Export to PDF (.pdf)")
-}
+const EXPORT_PDF_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Export to PDF (.pdf)",
+    fr: "Exporter en PDF (.pdf)",
+};
 
-fn save_file_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new(
-        // The file is not sealed, and the label says so (`DOCFILE-009`).
-        "Save to a file (.ambre, not encrypted)",
-    )
-}
+// The file is not sealed, and the label says so (`DOCFILE-009`).
+const SAVE_FILE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Save to a file (.ambre, not encrypted)",
+    fr: "Enregistrer dans un fichier (.ambre, non chiffr\u{e9})",
+};
 
 /// Every command Prose contributes, described once.
 pub const COMMANDS: &[Command] = &[
     Command {
         id: BOLD,
-        title: bold_title,
+        title: BOLD_TITLE,
         icon: Some(StaticKey::<Icons>::new("format-bold")),
         keybindings: &[KeyBinding::primary(KeyChar::B)],
         category: FORMAT,
@@ -312,7 +341,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: ITALIC,
-        title: italic_title,
+        title: ITALIC_TITLE,
         icon: Some(StaticKey::<Icons>::new("format-italic")),
         keybindings: &[KeyBinding::primary(KeyChar::I)],
         category: FORMAT,
@@ -320,7 +349,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: UNDERLINE,
-        title: underline_title,
+        title: UNDERLINE_TITLE,
         icon: Some(StaticKey::<Icons>::new("format-underline")),
         keybindings: &[KeyBinding::primary(KeyChar::U)],
         category: FORMAT,
@@ -328,7 +357,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: STRIKETHROUGH,
-        title: strikethrough_title,
+        title: STRIKETHROUGH_TITLE,
         icon: Some(StaticKey::<Icons>::new("format-strikethrough")),
         keybindings: &[KeyBinding::primary_shift(KeyChar::X)],
         category: FORMAT,
@@ -336,7 +365,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: CODE,
-        title: code_title,
+        title: CODE_TITLE,
         icon: Some(StaticKey::<Icons>::new("code-tags")),
         keybindings: &[KeyBinding::primary(KeyChar::E)],
         category: FORMAT,
@@ -344,7 +373,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SUPERSCRIPT,
-        title: superscript_title,
+        title: SUPERSCRIPT_TITLE,
         icon: Some(StaticKey::<Icons>::new("format-superscript")),
         keybindings: &[],
         category: FORMAT,
@@ -352,7 +381,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SUBSCRIPT,
-        title: subscript_title,
+        title: SUBSCRIPT_TITLE,
         icon: Some(StaticKey::<Icons>::new("format-subscript")),
         keybindings: &[],
         category: FORMAT,
@@ -360,7 +389,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: CLEAR_FORMATTING,
-        title: clear_formatting_title,
+        title: CLEAR_FORMATTING_TITLE,
         icon: Some(StaticKey::<Icons>::new("format-clear")),
         keybindings: &[KeyBinding::primary(KeyChar::new('\\'))],
         category: FORMAT,
@@ -368,7 +397,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: LINK,
-        title: link_title,
+        title: LINK_TITLE,
         icon: Some(StaticKey::<Icons>::new("link")),
         keybindings: &[],
         category: FORMAT,
@@ -376,7 +405,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: COMMENT,
-        title: comment_title,
+        title: COMMENT_TITLE,
         icon: Some(StaticKey::<Icons>::new("comment-outline")),
         keybindings: &[],
         category: FORMAT,
@@ -384,7 +413,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SAVE_FILE,
-        title: save_file_title,
+        title: SAVE_FILE_TITLE,
         icon: Some(StaticKey::<Icons>::new("content-save")),
         keybindings: &[],
         category: FILE,
@@ -392,7 +421,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: IMPORT_MARKDOWN,
-        title: import_markdown_title,
+        title: IMPORT_MARKDOWN_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
@@ -400,7 +429,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_MARKDOWN,
-        title: export_markdown_title,
+        title: EXPORT_MARKDOWN_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -408,7 +437,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: IMPORT_WORD,
-        title: import_word_title,
+        title: IMPORT_WORD_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
@@ -416,7 +445,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_WORD,
-        title: export_word_title,
+        title: EXPORT_WORD_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -424,7 +453,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_WORD_REVIEWED,
-        title: export_word_reviewed_title,
+        title: EXPORT_WORD_REVIEWED_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -432,7 +461,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: IMPORT_ODT,
-        title: import_odt_title,
+        title: IMPORT_ODT_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
@@ -440,7 +469,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_ODT,
-        title: export_odt_title,
+        title: EXPORT_ODT_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -448,7 +477,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_ODT_REVIEWED,
-        title: export_odt_reviewed_title,
+        title: EXPORT_ODT_REVIEWED_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -456,7 +485,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: IMPORT_HTML,
-        title: import_html_title,
+        title: IMPORT_HTML_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
@@ -464,7 +493,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_HTML,
-        title: export_html_title,
+        title: EXPORT_HTML_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -472,7 +501,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_HTML_REVIEWED,
-        title: export_html_reviewed_title,
+        title: EXPORT_HTML_REVIEWED_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -480,7 +509,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: INSERT_PICTURE,
-        title: insert_picture_title,
+        title: INSERT_PICTURE_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
@@ -488,7 +517,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EXPORT_PDF,
-        title: export_pdf_title,
+        title: EXPORT_PDF_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -496,7 +525,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: CUT,
-        title: cut_title,
+        title: CUT_TITLE,
         icon: Some(StaticKey::<Icons>::new("content-cut")),
         keybindings: ambre_commands::shared::CUT_CHORDS,
         category: CLIPBOARD,
@@ -504,7 +533,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: COPY,
-        title: copy_title,
+        title: COPY_TITLE,
         icon: Some(StaticKey::<Icons>::new("content-copy")),
         keybindings: ambre_commands::shared::COPY_CHORDS,
         category: CLIPBOARD,
@@ -512,7 +541,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: PASTE,
-        title: paste_title,
+        title: PASTE_TITLE,
         icon: Some(StaticKey::<Icons>::new("content-paste")),
         keybindings: ambre_commands::shared::PASTE_CHORDS,
         category: CLIPBOARD,
@@ -520,7 +549,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: PASTE_PLAIN,
-        title: paste_plain_title,
+        title: PASTE_PLAIN_TITLE,
         icon: Some(StaticKey::<Icons>::new("content-paste")),
         keybindings: ambre_commands::shared::PASTE_PLAIN_CHORDS,
         category: CLIPBOARD,
@@ -528,7 +557,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: UNDO,
-        title: undo_title,
+        title: UNDO_TITLE,
         icon: Some(StaticKey::<Icons>::new("undo")),
         keybindings: ambre_commands::shared::UNDO_CHORDS,
         category: HISTORY,
@@ -536,7 +565,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: REDO,
-        title: redo_title,
+        title: REDO_TITLE,
         icon: Some(StaticKey::<Icons>::new("redo")),
         keybindings: ambre_commands::shared::REDO_CHORDS,
         category: HISTORY,
@@ -544,7 +573,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: PALETTE,
-        title: palette_title,
+        title: PALETTE_TITLE,
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,

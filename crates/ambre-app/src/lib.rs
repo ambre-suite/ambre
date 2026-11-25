@@ -813,6 +813,12 @@ pub fn main() {
         platform::boot_theme(platform::system_scheme()),
     ));
     inject_theme(theme_ctl.get());
+    // The interface language of the boot hint, or the browser's, set before
+    // the first frame so no label shows in another (`SETTINGS-033`).
+    ambre_chrome::set_language(settings_view::boot_language(
+        platform::boot_hint().as_ref(),
+        &platform::browser_language(),
+    ));
     // The theme of the account, which the header follows to redraw the glyph
     // of the theme switch when another device moves it.
     let account_theme = RwSignal::new(
@@ -1300,6 +1306,12 @@ pub fn main() {
                             platform::set_theme(&settings_theme, theme);
                         }
                         account_theme.set(settings.theme);
+                        // Another device, or the picker, moved the language:
+                        // every label redraws (`SETTINGS-037`).
+                        ambre_chrome::set_language(ambre_chrome::interface_locale(
+                            &settings.interface_language,
+                            &platform::browser_language(),
+                        ));
                         platform::keep_boot_hint(&settings.boot_hint());
                     }
                     switchboard::Effect::Send(command) => {

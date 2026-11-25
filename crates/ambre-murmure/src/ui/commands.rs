@@ -94,91 +94,113 @@ pub const SHOW_SPACE: [StaticKey<Commands>; 9] = [
     StaticKey::<Commands>::new("murmure.navigate.space_9"),
 ];
 
-fn show_space_1_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 1")
-}
-fn show_space_2_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 2")
-}
-fn show_space_3_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 3")
-}
-fn show_space_4_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 4")
-}
-fn show_space_5_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 5")
-}
-fn show_space_6_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 6")
-}
-fn show_space_7_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 7")
-}
-fn show_space_8_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 8")
-}
-fn show_space_9_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Show space 9")
-}
+const SHOW_SPACE_1_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 1",
+    fr: "Afficher l'espace 1",
+};
+const SHOW_SPACE_2_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 2",
+    fr: "Afficher l'espace 2",
+};
+const SHOW_SPACE_3_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 3",
+    fr: "Afficher l'espace 3",
+};
+const SHOW_SPACE_4_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 4",
+    fr: "Afficher l'espace 4",
+};
+const SHOW_SPACE_5_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 5",
+    fr: "Afficher l'espace 5",
+};
+const SHOW_SPACE_6_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 6",
+    fr: "Afficher l'espace 6",
+};
+const SHOW_SPACE_7_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 7",
+    fr: "Afficher l'espace 7",
+};
+const SHOW_SPACE_8_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 8",
+    fr: "Afficher l'espace 8",
+};
+const SHOW_SPACE_9_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Show space 9",
+    fr: "Afficher l'espace 9",
+};
 
-fn palette_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Command palette")
-}
+const PALETTE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Command palette",
+    fr: "Palette de commandes",
+};
 
-fn next_activity_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Next channel with activity")
-}
+const NEXT_ACTIVITY_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Next channel with activity",
+    fr: "Canal actif suivant",
+};
 
-fn previous_activity_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Previous channel with activity")
-}
+const PREVIOUS_ACTIVITY_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Previous channel with activity",
+    fr: "Canal actif pr\u{e9}c\u{e9}dent",
+};
 
-fn mark_all_read_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Mark everything read")
-}
+const MARK_ALL_READ_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Mark everything read",
+    fr: "Tout marquer comme lu",
+};
 
-fn search_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Search messages")
-}
+const SEARCH_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Search messages",
+    fr: "Rechercher dans les messages",
+};
 
-fn reply_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Reply in thread")
-}
+const REPLY_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Reply in thread",
+    fr: "R\u{e9}pondre dans le fil",
+};
 
-fn mark_unread_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Mark unread")
-}
+const MARK_UNREAD_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Mark unread",
+    fr: "Marquer comme non lu",
+};
 
-fn react_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Add reaction")
-}
+const REACT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Add reaction",
+    fr: "Ajouter une r\u{e9}action",
+};
 
-fn copy_text_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Copy text")
-}
+const COPY_TEXT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Copy text",
+    fr: "Copier le texte",
+};
 
-fn edit_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Edit message")
-}
+const EDIT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Edit message",
+    fr: "Modifier le message",
+};
 
-fn delete_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Delete message")
-}
+const DELETE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Delete message",
+    fr: "Supprimer le message",
+};
 
-fn join_call_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Join call")
-}
+const JOIN_CALL_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Join call",
+    fr: "Rejoindre l'appel",
+};
 
-fn keys_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Keyboard shortcuts")
-}
+const KEYS_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Keyboard shortcuts",
+    fr: "Raccourcis clavier",
+};
 
 /// Every command Murmure contributes, described once.
 pub const COMMANDS: &[Command] = &[
     Command {
         id: PALETTE,
-        title: palette_title,
+        title: PALETTE_TITLE,
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
@@ -186,7 +208,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: NEXT_ACTIVITY,
-        title: next_activity_title,
+        title: NEXT_ACTIVITY_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowDown)],
         category: NAVIGATE,
@@ -194,7 +216,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: PREVIOUS_ACTIVITY,
-        title: previous_activity_title,
+        title: PREVIOUS_ACTIVITY_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowUp)],
         category: NAVIGATE,
@@ -202,7 +224,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: MARK_ALL_READ,
-        title: mark_all_read_title,
+        title: MARK_ALL_READ_TITLE,
         icon: None,
         // Not Shift+Escape: Chrome opens its task manager on it, and the
         // page never sees the key.
@@ -215,7 +237,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SEARCH,
-        title: search_title,
+        title: SEARCH_TITLE,
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::F)],
         category: SEARCH_CATEGORY,
@@ -225,7 +247,7 @@ pub const COMMANDS: &[Command] = &[
     // needs Shift on a French keyboard. The palette reaches it.
     Command {
         id: KEYS,
-        title: keys_title,
+        title: KEYS_TITLE,
         icon: None,
         keybindings: &[],
         category: GENERAL,
@@ -235,7 +257,7 @@ pub const COMMANDS: &[Command] = &[
     // act on, and the keyboard reaches them through the focused one.
     Command {
         id: JOIN_CALL,
-        title: join_call_title,
+        title: JOIN_CALL_TITLE,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -243,7 +265,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: REPLY,
-        title: reply_title,
+        title: REPLY_TITLE,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -251,7 +273,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: REACT,
-        title: react_title,
+        title: REACT_TITLE,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -259,7 +281,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: MARK_UNREAD,
-        title: mark_unread_title,
+        title: MARK_UNREAD_TITLE,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -267,7 +289,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: COPY_TEXT,
-        title: copy_text_title,
+        title: COPY_TEXT_TITLE,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -275,7 +297,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: EDIT,
-        title: edit_title,
+        title: EDIT_TITLE,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -283,7 +305,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: DELETE,
-        title: delete_title,
+        title: DELETE_TITLE,
         icon: None,
         keybindings: &[],
         category: MESSAGE,
@@ -294,7 +316,7 @@ pub const COMMANDS: &[Command] = &[
     // from the key, so a French keyboard reaches it too.
     Command {
         id: SHOW_SPACE[0],
-        title: show_space_1_title,
+        title: SHOW_SPACE_1_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -305,7 +327,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[1],
-        title: show_space_2_title,
+        title: SHOW_SPACE_2_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -316,7 +338,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[2],
-        title: show_space_3_title,
+        title: SHOW_SPACE_3_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -327,7 +349,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[3],
-        title: show_space_4_title,
+        title: SHOW_SPACE_4_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -338,7 +360,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[4],
-        title: show_space_5_title,
+        title: SHOW_SPACE_5_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -349,7 +371,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[5],
-        title: show_space_6_title,
+        title: SHOW_SPACE_6_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -360,7 +382,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[6],
-        title: show_space_7_title,
+        title: SHOW_SPACE_7_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -371,7 +393,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[7],
-        title: show_space_8_title,
+        title: SHOW_SPACE_8_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -382,7 +404,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         id: SHOW_SPACE[8],
-        title: show_space_9_title,
+        title: SHOW_SPACE_9_TITLE,
         icon: None,
         keybindings: &[KeyBinding::new(
             SPACE_MODIFIERS,
@@ -907,7 +929,7 @@ pub fn key_list(locale: &Locale) -> Vec<KeyRow> {
     let chords = COMMANDS.iter().flat_map(|command| {
         command.keybindings.iter().map(|keys| KeyRow {
             keys: *keys,
-            action: (command.title)(locale).into_string(),
+            action: command.title.pick(locale).into_string(),
             place: KeyPlace::Anywhere,
         })
     });

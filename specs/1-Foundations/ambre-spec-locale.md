@@ -159,9 +159,8 @@ pub enum NumberConvention { Document, TypeMine, AllMine }
 **Two languages, and they never meet.** The document's locale is a property of the content: the
 numbers, the currencies, the dates and the collation a reader sees inside the document. The
 interface language is a property of the reader, written in no document but the reader's sealed
-settings (`LOCALE-003`, `SETTINGS-024`). A command title is the second one --
-`title: fn(&Locale) -> String` in `ambre-spec-commands.md` takes the reader's, and this document
-supplies neither.
+settings (`LOCALE-003`, `SETTINGS-024`). A command title reads the second one: the page holds
+the reader's interface language, and every label reads it (`SETTINGS-033`, `SETTINGS-042`).
 
 **Resolving, in order.** Three steps, and the third is a value:
 
@@ -222,10 +221,6 @@ Collation is its own Story. Each other gap below waits on the
   the reader's convention, and Toile formats no number.
 * **Collation is named, not ruled.** `ambre-spec-find.md` records that a byte comparison and a
   locale-aware one disagree; which collation a tag selects, and for which operation, is open.
-* **Nothing supplies the reader's interface language.** `ambre-spec-commands.md` carries
-  `title: fn(&Locale) -> String` and no document says who holds that argument. This one rules it out
-  of the document (`LOCALE-003`). The user settings store it (`SETTINGS-024`), and no title reads
-  it yet.
 * **An array constant keeps its separators.** The edit bar translates the decimal mark and the
   argument separator of a formula, and leaves the separators of a `{...}` array as stored.
 

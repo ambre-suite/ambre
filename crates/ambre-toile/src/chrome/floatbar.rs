@@ -23,7 +23,7 @@
 // pipe, the palette / inspector hazard. A click then never clears the selection the bar
 // acts on. ============================================================================
 
-use ambre_chrome::commands::{Locale, Reach};
+use ambre_chrome::commands::Reach;
 use ambre_core::{Commands, Rgba, StaticKey};
 
 use super::icons;
@@ -87,7 +87,7 @@ pub fn SelectionToolbar(
     // does. The tooltip and the glyph are the ones the command declares
     // (`UI-THREAD-019`).
     let cmd_button = move |command: StaticKey<Commands>| {
-        let label = registry::title(command, &Locale::En)
+        let label = registry::title(command, &ambre_chrome::language())
             .map(ambre_core::Validated::into_string)
             .unwrap_or_default();
         let icon = registry::icon(command).and_then(icons::resolve);
