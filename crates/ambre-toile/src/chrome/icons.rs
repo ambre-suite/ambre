@@ -63,6 +63,8 @@ pub fn resolve(id: StaticKey<Icons>) -> Option<icondata::Icon> {
         "cursor-pointer" => icondata::MdiCursorPointer,
         "comment-multiple-outline" => icondata::MdiCommentMultipleOutline,
         "hand-back-right" => icondata::MdiHandBackRight,
+        "web" => icondata::MdiWeb,
+        "file-document-outline" => icondata::MdiFileDocumentOutline,
         "view-carousel-outline" => icondata::MdiViewCarouselOutline,
         "file-import-outline" => icondata::MdiFileImportOutline,
         "file-export-outline" => icondata::MdiFileExportOutline,

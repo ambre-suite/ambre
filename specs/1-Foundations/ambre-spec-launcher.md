@@ -173,7 +173,8 @@ person into the third party's account. The address the relay answers is followed
 
 The address must also lie on the authorization host of a provider the client knows. Otherwise a
 relay shows a page of its choice where the person expects the provider's password prompt
-(`CHROME-139`).
+(`CHROME-139`). The client build names the issuer of the `oidc` provider, and its host is the
+authorization host. So the relay alone cannot move it (`ambre-spec-session.md` section 3).
 
 **The keys gate.** The two middle faces share one gate, which stands before the sign-in panel and
 the list while it shows.

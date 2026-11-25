@@ -177,10 +177,7 @@ impl SyncState {
                 held.seen = floor;
             }
             doc_state.unvouched.extend(refused);
-            let overflow = doc_state.unvouched.len().saturating_sub(
-                usize::try_from(crate::QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX),
-            );
-            doc_state.unvouched.drain(..overflow);
+            crate::trim_held(&mut doc_state.unvouched);
             self.handle_list_document_members(None, document_id);
             // Until the answer, the document lands no delta and seals no
             // frame: the walk may find the log rooted outside (`SYNC-232`).
@@ -225,6 +222,21 @@ impl SyncState {
         self.channel_metas
             .get(&document_id)
             .map_or(document_id, |meta| meta.document_id())
+    }
+
+    /// The documents open here whose log is the log of `meta`, `meta` aside:
+    /// the open documents of the channel whose `meta` it is. A revoke on that
+    /// log caps its member in each of them (`SYNC-311`).
+    pub(crate) fn open_channel_documents(&self, meta: Id<Document>) -> Vec<Id<Document>> {
+        self.channel_metas
+            .iter()
+            .filter(|(document_id, of)| {
+                of.document_id() == meta
+                    && **document_id != meta
+                    && self.documents.contains_key(document_id)
+            })
+            .map(|(document_id, _)| *document_id)
+            .collect()
     }
 
     /// The rule a walk of `document_id`'s log applies, the log of its `meta`
@@ -517,7 +529,9 @@ impl SyncState {
     }
 
     /// `name` sealed for the relay beside `meta`, under the key meta holds
-    /// now, once the walk of its log settled that key (`SYNC-234`).
+    /// now, once the walk of its log settled that key (`SYNC-234`). A client
+    /// that may not write meta seals nothing: the relay refuses its write,
+    /// and a stale hint waits for a writer's open (`SYNC-318`).
     fn sealed_channel_name(
         &self,
         meta: Id<Meta>,
@@ -527,6 +541,9 @@ impl SyncState {
             .documents
             .get(&meta.document_id())
             .ok_or(SyncError::NotOpen)?;
+        if !held.role.can_write_document() {
+            return Err(SyncError::NameRefused);
+        }
         self.seal_channel_name(meta, held.sealing_key()?, name)
     }
 
@@ -784,7 +801,24 @@ impl SyncState {
     /// Ask the relay to remove this user from a channel. The documents stay
     /// open here until the Logic thread hears the answer and closes them. A
     /// refusal leaves the channel whole, as with a delete.
-    pub(crate) fn handle_leave_channel(&self, channel_id: Id<Channel>) {
+    ///
+    /// The census opens each document of the channel not open here first,
+    /// so the departure caps this user in each one (`SYNC-312`). `named`
+    /// lists the documents the sealed `meta` names (`SYNC-320`).
+    pub(crate) fn handle_leave_channel(
+        &mut self,
+        channel_id: Id<Channel>,
+        named: Vec<Id<Document>>,
+    ) {
+        self.begin_removal(
+            crate::census::Removal::LeaveChannel { channel_id },
+            Some(named),
+        );
+    }
+
+    /// The departure of [`handle_leave_channel`](Self::handle_leave_channel),
+    /// from the documents open here.
+    pub(crate) fn leave_channel_now(&self, channel_id: Id<Channel>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.channel_answered(channel_id, Err(SyncError::NoRelay.into()));
         };
@@ -796,12 +830,27 @@ impl SyncState {
                 )),
             );
         };
+        // The departure caps this user in each document of the channel open
+        // here, at the last clock they wrote in it (`SYNC-311`).
+        let key = author.public();
+        let written = self
+            .documents
+            .iter()
+            .map(|(document_id, doc)| {
+                (
+                    *document_id,
+                    self.log_document(*document_id),
+                    doc.own_last_clock(&key),
+                )
+            })
+            .collect();
         let params = crate::sharing::ChannelLeaveParams {
             channel_id,
             author,
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
             exchange_key,
+            written,
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
@@ -842,6 +891,12 @@ impl SyncState {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
+        // The keys this session showed for each member, whose fingerprint
+        // the user compared before the request (audit `P44`).
+        let shown: Vec<_> = members
+            .iter()
+            .map(|member| self.shown_identities.get(&member.user_id).copied())
+            .collect();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
@@ -849,11 +904,11 @@ impl SyncState {
             let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             let result = async {
                 let mut signing_keys = Vec::with_capacity(members.len());
-                for member in &members {
+                for (member, shown) in members.iter().zip(&shown) {
                     let url = base.route(format!("/users/{}/pubkeys", member.user_id));
                     let served =
                         http::get_json_auth::<http::PubkeysResponse>(&url, auth.clone()).await?;
-                    check_pinned(member, &served.exchange_pubkey)?;
+                    check_pinned(member, &served, shown.as_ref())?;
                     signing_keys.push(served.signing_pubkey);
                 }
                 let invited: Vec<_> = members.iter().zip(signing_keys).collect();
@@ -1474,13 +1529,23 @@ pub(crate) fn direct_message_request(
     })
 }
 
-/// Refuse a member whose exchange key, as the relay serves it now, is not
-/// the one the view pinned for them.
+/// Refuse a member whose keys, as the relay serves them now, differ from
+/// the keys this session showed. Those are the exchange key the view pinned
+/// and the signing key the fingerprint covered beside it (`CHROME-140`).
+///
+/// A member this session showed no keys for is refused too. The signing key
+/// the entry binds would then be one no person compared.
 pub(crate) fn check_pinned(
     member: &DirectMember,
-    served: &FixedBytes<ambre_core::ExchangePublicKey>,
+    served: &http::PubkeysResponse,
+    shown: Option<&ambre_crypto::IdentityKeys>,
 ) -> Result<(), SyncError> {
-    if *served == member.exchange_pub_key {
+    let served_keys = ambre_crypto::IdentityKeys {
+        exchange: served.exchange_pubkey,
+        signing: served.signing_pubkey,
+    };
+    let pinned = served.exchange_pubkey == member.exchange_pub_key;
+    if pinned && shown == Some(&served_keys) {
         Ok(())
     } else {
         Err(SyncError::PinMismatch(member.user_id))
@@ -2113,7 +2178,7 @@ pub(crate) mod tests {
             ),
         );
 
-        state.handle_leave_channel(channel_id);
+        state.handle_leave_channel(channel_id, vec![meta]);
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
             result: Err(crate::http::HttpError::Local(
@@ -2561,6 +2626,23 @@ pub(crate) mod tests {
             Some("Design")
         );
         assert_eq!(open(Id::<Document>::mint()), None);
+    }
+
+    /// `SYNC-318`: a member that only reads meta seals no name beside it,
+    /// whatever the name, and a writer of the same meta seals it.
+    #[test]
+    fn a_reader_of_meta_seals_no_channel_name() {
+        let (mut state, _rx, _events, meta) = gated_meta(false);
+        let held = state.documents.get_mut(&meta.document_id()).unwrap();
+        held.gate = LogGate::Open;
+        held.role = Role::Viewer;
+        let design = ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap();
+        assert!(matches!(
+            state.sealed_channel_name(meta, &design),
+            Err(SyncError::NameRefused)
+        ));
+        state.documents.get_mut(&meta.document_id()).unwrap().role = Role::Editor;
+        assert!(state.sealed_channel_name(meta, &design).is_ok());
     }
 
     /// `SYNC-170`: a space this client creates is marked until the relay
@@ -3073,13 +3155,39 @@ pub(crate) mod tests {
     }
 
     /// A member whose key the relay now serves differently is refused: no
-    /// wrap leaves under a key the view did not pin.
+    /// wrap leaves under a key the view did not pin. `CHROME-140`, audit
+    /// `P44`: a signing key other than the one this session showed, or a
+    /// member this session showed nothing for, is refused too.
     #[test]
     fn a_key_other_than_the_pinned_one_is_refused() {
         let bob = member_of(&exchange_key(2));
-        assert!(check_pinned(&bob, &bob.exchange_pub_key).is_ok());
-        let other = crate::sharing::own_exchange_key(&exchange_key(3));
-        assert!(check_pinned(&bob, &other).is_err());
+        let signing = FixedBytes::<ambre_core::PublicKey>::from_array([0x5B; 32]);
+        let served = http::PubkeysResponse {
+            signing_pubkey: signing,
+            exchange_pubkey: bob.exchange_pub_key,
+        };
+        let shown = ambre_crypto::IdentityKeys {
+            exchange: bob.exchange_pub_key,
+            signing,
+        };
+        assert!(check_pinned(&bob, &served, Some(&shown)).is_ok());
+        let other = http::PubkeysResponse {
+            exchange_pubkey: crate::sharing::own_exchange_key(&exchange_key(3)),
+            ..served
+        };
+        assert!(
+            check_pinned(&bob, &other, Some(&shown)).is_err(),
+            "another exchange key"
+        );
+        let swapped = http::PubkeysResponse {
+            signing_pubkey: FixedBytes::from_array([0xEE; 32]),
+            ..served
+        };
+        assert!(
+            check_pinned(&bob, &swapped, Some(&shown)).is_err(),
+            "another signing key"
+        );
+        assert!(check_pinned(&bob, &served, None).is_err(), "no keys shown");
         // A key that is not hex never reaches the pin: the answer that
         // carries it is refused when it is read.
         let served = serde_json::json!({

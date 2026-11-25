@@ -755,6 +755,7 @@ fn sign_in_panel(
             // Ask the Sync worker for the provider's address; the reply sends
             // the browser there (`CHROME-095`). The page itself requests nothing.
             let to_logic = to_logic.clone();
+            let provider = crate::signin::offered_provider();
             view! {
                 <div class="ambre-signin">
                     <span class="ambre-signin-wordmark">"Ambre"</span>
@@ -766,13 +767,14 @@ fn sign_in_panel(
                         on:click=move |_| {
                             to_logic.send(LogicCommand::Rest {
                                 id: ambre_bus::next_request(),
-                                cmd: RestCommand::ProviderSignIn {
-                                    provider: ambre_core::OidcProvider::Google,
-                                },
+                                cmd: RestCommand::ProviderSignIn { provider },
                             });
                         }
                     >
-                        "Sign in with Google"
+                        {match provider {
+                            ambre_core::OidcProvider::Google => "Sign in with Google",
+                            ambre_core::OidcProvider::Oidc => "Sign in with your organization",
+                        }}
                     </button>
                 </div>
             }

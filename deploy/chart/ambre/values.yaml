@@ -1,0 +1,100 @@
+# The values of the chart (`deploy/chart/README.md`). No value below is a
+# secret: every secret comes from the Secret that `existingSecret` names, which
+# `deploy/chart/secret.sh` writes. The chart renders nothing without it.
+
+# The public name of the suite, which its certificate and its links carry.
+domain: ""
+# The ACME account of Caddy, or "internal" for a certificate of its own
+# authority, which no browser trusts unless told to.
+tls: ""
+# The Secret of the deployment (`deploy/chart/secret.sh`).
+existingSecret: ""
+
+# The images of Ambre. A release writes the digest of each one
+# (`scripts/chart.py pin`), and an image with a digest is pulled by it alone.
+images:
+  registry: ghcr.io/ambre-suite/ambre
+  pullPolicy: IfNotPresent
+  relay:
+    repository: relay
+    tag: ""
+    digest: ""
+  sfu:
+    repository: sfu
+    tag: ""
+    digest: ""
+  web:
+    repository: web
+    tag: ""
+    digest: ""
+  init:
+    repository: init
+    tag: ""
+    digest: ""
+
+relay:
+  replicas: 1
+  # The development mode of the relay: its fallback credentials and the
+  # sign-in by bare name of a client built with it. Never in a deployment.
+  devMode: false
+  resources: {}
+
+# The SFU. One pod, on the network of its node, so the address it announces
+# is an address of that node and no load balancer fronts it (`CALL-141`).
+sfu:
+  # The address the SFU binds and announces for its media. Empty takes the
+  # address of the node, which must then be public. A node behind a 1:1 NAT
+  # does not hold its public address, and the SFU cannot bind it.
+  publicAddress: ""
+  mediaPort: 3481
+  signalPort: 3480
+  # The node the SFU runs on, for example `ambre.example.org/sfu: "true"`.
+  nodeSelector: {}
+  tolerations: []
+  resources: {}
+
+# The web server: the client, and the routes to the relay, the object store
+# and the signalling of the SFU. It holds the certificate of `domain`.
+web:
+  service:
+    type: LoadBalancer
+    # Empty lets the cluster choose. A NodePort service takes them as given.
+    httpNodePort: null
+    httpsNodePort: null
+  # The certificate and the account of Caddy survive a restart on this
+  # volume, so a restart asks the ACME authority for nothing.
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  resources: {}
+
+# The stores. Each runs in the cluster when enabled. Disabled, the Secret
+# names the address of an external store (`deploy/chart/README.md`).
+postgres:
+  enabled: true
+  image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+  size: 10Gi
+  storageClass: ""
+  resources: {}
+
+redis:
+  enabled: true
+  image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+  resources: {}
+
+garage:
+  enabled: true
+  image: dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
+  metaSize: 1Gi
+  dataSize: 50Gi
+  storageClass: ""
+  resources: {}
+
+# The object store when `garage.enabled` is false: its S3 endpoint for the
+# relay, the public endpoint a presigned link names, its bucket and region.
+s3:
+  endpoint: ""
+  publicEndpoint: ""
+  bucket: ambre
+  region: us-east-1

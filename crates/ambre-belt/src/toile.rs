@@ -13,11 +13,12 @@ pub(crate) mod tests {
     /// The release clears the drag's preview, and the shape shows once the
     /// Logic thread answers with it. A click before that hits an empty board,
     /// as no user could click it. So the click waits for the screen to change
-    /// at the centre: geckodriver sends it within the frame of the release.
+    /// on the top edge: geckodriver sends it within the frame of the release.
+    /// The default fill is the white of the board, so only the stroke shows.
     pub(crate) async fn draw_rect(page: &Page, a: (f64, f64), b: (f64, f64)) {
         let (ox, oy) = page.canvas_origin().await;
         let centre = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-        let blank = page.color_at(centre).await;
+        let edge = top_edge(a, b);
         page.focus_canvas().await;
         page.browser.perform(json!([key("r")])).await;
         // An armed creation tool shows the crosshair (`toile-tools`).
@@ -33,8 +34,8 @@ pub(crate) mod tests {
             .await;
         let deadline = std::time::Instant::now() + STEP;
         loop {
-            let seen = page.color_at(centre).await;
-            if seen.iter().zip(blank).any(|(s, b)| s.abs_diff(b) > 8) {
+            let seen = edge_colors(page, edge).await;
+            if shows_stroke(&seen) {
                 break;
             }
             assert!(
@@ -47,6 +48,43 @@ pub(crate) mod tests {
         click(page, centre).await;
         page.wait_announced("Rectangle").await;
     }
+
+    /// The middle of the top edge of the rectangle drawn from `a` to `b`, in
+    /// canvas pixels.
+    pub(crate) fn top_edge(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+        ((a.0 + b.0) / 2.0, a.1.min(b.1))
+    }
+
+    /// The colours of a vertical strip of five pixels centred on `at`, in
+    /// canvas pixels. The one-pixel stroke of a shape falls in it, wherever
+    /// the rasteriser rounds its half pixel.
+    pub(crate) async fn edge_colors(page: &Page, at: (f64, f64)) -> Vec<[u8; 3]> {
+        let mut seen = Vec::with_capacity(5);
+        for dy in -2..=2 {
+            seen.push(page.color_at((at.0, at.1 + f64::from(dy))).await);
+        }
+        seen
+    }
+
+    /// Whether a strip shows the dark grey stroke of a shape (`#333333`),
+    /// even spread over two pixels. A grid line (about `#d2d5da`) is too
+    /// light, and the outline of a selection (about `#b06f0a`) is not grey.
+    /// A strip read before the draw is no reference: the grid moves once the
+    /// board holds an element.
+    pub(crate) fn shows_stroke(strip: &[[u8; 3]]) -> bool {
+        strip.iter().any(|p| {
+            let (lo, hi) = (p.iter().min(), p.iter().max());
+            lo.zip(hi)
+                .is_some_and(|(lo, hi)| *hi < STROKE_CUT && hi - lo < GREY_SPREAD)
+        })
+    }
+
+    /// The channel value under which a pixel belongs to a stroke: `#333333`
+    /// on white, at half coverage, reads about 153.
+    const STROKE_CUT: u8 = 170;
+
+    /// The widest gap between the channels of a grey pixel.
+    const GREY_SPREAD: u8 = 32;
 
     /// Clicks the canvas at `at`, in canvas pixels.
     async fn click(page: &Page, at: (f64, f64)) {
@@ -430,9 +468,9 @@ pub(crate) mod tests {
         const DOWN: &str = "\u{E015}";
         const ENTER: &str = "\u{E007}";
         let page = Page::new_document("toile").await;
-        let centre = (360.0, 250.0);
-        let blank = page.color_at(centre).await;
-        draw_rect(&page, (300.0, 200.0), (420.0, 300.0)).await;
+        let (a, b) = ((300.0, 200.0), (420.0, 300.0));
+        let edge = top_edge(a, b);
+        draw_rect(&page, a, b).await;
 
         page.browser
             .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
@@ -474,8 +512,8 @@ pub(crate) mod tests {
             .await;
         let deadline = std::time::Instant::now() + STEP;
         loop {
-            let seen = page.color_at(centre).await;
-            if seen.iter().zip(blank).all(|(s, b)| s.abs_diff(b) <= 8) {
+            let seen = edge_colors(&page, edge).await;
+            if !shows_stroke(&seen) {
                 break;
             }
             assert!(

@@ -9,8 +9,10 @@
 //         or single-element selection shows only the count (no meaningful
 //         multi-element bounds); the pure model + formatting live in
 //         `ui::status` and are host-tested there.
-// Right : the shared interactive zoom chip (board zoom) and the shared perf chip
-//         (fps + a Toile-specific frame-timing panel).
+// Right : the start of the presentation, the shared perf chip (fps + a
+//         Toile-specific frame-timing panel) and the shared interactive zoom
+//         chip (board zoom). The start of the presentation lives here: it
+//         changes how the board is seen and writes nothing (`CHROME-149`).
 // ============================================================================
 
 use ambre_canvas::PerfSnapshot;
@@ -30,24 +32,32 @@ pub fn StatusBar(
     perf: RwSignal<PerfSnapshot>,
     zoom: RwSignal<Scale<Board, View>>,
     board: RwSignal<crate::ui::grid::BoardLook>,
-    on_command: Callback<ambre_core::StaticKey<ambre_core::Commands>>,
+    /// The sink of the board's commands, which the start of the
+    /// presentation and the grid toggle run through. A band with no sink
+    /// offers neither.
+    #[prop(optional)]
+    on_command: Option<Callback<ambre_core::StaticKey<ambre_core::Commands>>>,
 ) -> impl IntoView {
+    let present =
+        ambre_chrome::commands::find(crate::ui::commands::COMMANDS, crate::ui::menu_bar::PRESENT);
     // The grid of this user, view state alone: the toggle writes nothing
     // (`CHROME-149`). Its title is the one the command table gives it.
-    let grid = view! {
-        <ambre_chrome::IconButton
-            icon=icondata::MdiDotsGrid
-            label="Show grid"
-            pressed=Some(Signal::derive(move || {
-                ambre_chrome::Pressed::from_bool(
-                    board.with(|b| b.grid == crate::ui::grid::GridShown::Shown),
-                )
-            }))
-            reach=ambre_chrome::commands::Reach::Command(crate::ui::menu_bar::GRID)
-            on_press=Callback::new(move |()| on_command.run(crate::ui::menu_bar::GRID))
-        />
-    }
-    .into_any();
+    let grid = on_command.map(|on_command| {
+        view! {
+            <ambre_chrome::IconButton
+                icon=icondata::MdiDotsGrid
+                label="Show grid"
+                pressed=Some(Signal::derive(move || {
+                    ambre_chrome::Pressed::from_bool(
+                        board.with(|b| b.grid == crate::ui::grid::GridShown::Shown),
+                    )
+                }))
+                reach=Some(ambre_chrome::commands::Reach::Command(crate::ui::menu_bar::GRID))
+                on_press=Callback::new(move |()| on_command.run(crate::ui::menu_bar::GRID))
+            />
+        }
+        .into_any()
+    });
     // The aggregates line, recomputed whenever the selection stats change. An
     // absent/empty selection collapses to nothing (only the zoom chip shows).
     let aggregates = move || {
@@ -66,6 +76,9 @@ pub fn StatusBar(
         <StatusLabel label="Toile" />
         <span class="statusbar-stats">{aggregates}</span>
         <span class="spacer"></span>
+        {on_command.zip(present).map(|(on_command, command)| view! {
+            <ambre_chrome::CommandButton command=command icon=None on_command=on_command />
+        })}
         // Shared interactive zoom + fps chips (identical to Trame). Toile uses
         // the default preset ladder; the perf panel shows the board frame timings.
         <PerfChip fps=Signal::derive(move || perf.get().fps)>

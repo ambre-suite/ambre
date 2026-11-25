@@ -89,6 +89,17 @@ pub fn tool_for_command(id: StaticKey<Commands>) -> Option<Tool> {
     }
 }
 
+/// The tool command that arms `tool`, whatever its sub-option: any shape kind
+/// and any note colour name the one command. The creation bar reads it to
+/// press one button (`toile-tools`).
+#[must_use]
+pub fn command_for_tool(tool: Tool) -> Option<StaticKey<Commands>> {
+    TOOL_COMMANDS.iter().copied().find(|&id| {
+        tool_for_command(id)
+            .is_some_and(|armed| std::mem::discriminant(&armed) == std::mem::discriminant(&tool))
+    })
+}
+
 /// The sticky-note colour swatches offered by the palette's colour picker
 /// (`toile-tools`), RGBA. The first entry is [`STICKY_DEFAULT_FILL`]
 /// (the bare-key / default colour); the rest are the standard whiteboard pastels
@@ -346,6 +357,20 @@ mod tests {
         assert_eq!(
             tool_for_command(StaticKey::<Commands>::new("nonsense")),
             None
+        );
+    }
+
+    /// The creation bar presses the one tool the board holds, whatever its
+    /// sub-option.
+    #[test]
+    fn each_tool_names_the_command_that_arms_it() {
+        for &id in TOOL_COMMANDS {
+            let tool = tool_for_command(id).expect("a tool command arms a tool");
+            assert_eq!(command_for_tool(tool), Some(id), "{id:?}");
+        }
+        assert_eq!(
+            command_for_tool(Tool::Shape(ShapeKind::Ellipse)),
+            Some(TOOL_SHAPE)
         );
     }
 

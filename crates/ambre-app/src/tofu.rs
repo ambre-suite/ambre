@@ -5,7 +5,7 @@
 // invitation and the request of a direct message, so every route to either
 // passes a decision.
 
-use ambre_bus::{Authored, DirectMember, FixedBytes, Instant, RestCommand, Role};
+use ambre_bus::{Authored, DirectMember, Instant, RecipientKeys, RestCommand, Role};
 #[cfg(target_arch = "wasm32")]
 use ambre_chrome::Dialog;
 use ambre_core::id::{Channel, Document, Id, User};
@@ -49,9 +49,11 @@ pub(crate) struct TofuPrompt {
     /// The recipient's display name, shown in the prompt. `None` when the
     /// relay named no one, and the prompt reads "This member".
     pub(crate) display_name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
-    /// Raw X25519 key the server just returned: pinned on confirmation and
-    /// sent beside the request, so Sync wraps only if it still matches.
-    pub(crate) exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
+    /// The two keys the server just returned, both pinned on confirmation.
+    /// The exchange key travels beside the request, so Sync wraps only if it
+    /// still matches. The signing key is the one the fingerprint covers and
+    /// the invite binds (`CHROME-141`).
+    pub(crate) keys: RecipientKeys,
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
     pub(crate) fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     /// Whether the key is a first contact or diverges from the pin.
@@ -105,17 +107,19 @@ pub(crate) enum Next {
     Ask(TofuPrompt),
 }
 
-/// Classify a fetched key against the pin (`CHROME-050`, `CHROME-051`).
+/// Classify the fetched keys against the pin (`CHROME-050`, `CHROME-051`).
+/// Both keys must equal the pinned pair: another signing key beside the
+/// pinned exchange key is a change too (`CHROME-141`).
 /// `role` is the one an invitation grants; a direct message ignores it.
 /// `now` dates the request a trusted key sends, and nothing else.
 pub(crate) fn classify(
     prompt: TofuPrompt,
-    pinned: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
+    pinned: Option<RecipientKeys>,
     role: Role,
     now: Instant<Authored>,
 ) -> Next {
     match pinned {
-        Some(key) if key == prompt.exchange_pub_key => Next::Proceed(request(&prompt, role, now)),
+        Some(keys) if keys == prompt.keys => Next::Proceed(request(&prompt, role, now)),
         Some(_) => Next::Ask(TofuPrompt {
             contact: KeyContact::Changed,
             ..prompt
@@ -135,10 +139,10 @@ pub(crate) fn confirm(
     prompt: &TofuPrompt,
     role: Role,
     now: Instant<Authored>,
-    pin: impl FnOnce(Id<User>, &FixedBytes<ambre_core::ExchangePublicKey>),
+    pin: impl FnOnce(Id<User>, &RecipientKeys),
     dispatch: impl FnOnce(LogicCommand),
 ) {
-    pin(prompt.user_id, &prompt.exchange_pub_key);
+    pin(prompt.user_id, &prompt.keys);
     dispatch(request(prompt, role, now));
 }
 
@@ -160,7 +164,7 @@ fn request(prompt: &TofuPrompt, role: Role, now: Instant<Authored>) -> LogicComm
                 invitee_email: Some(email.clone()),
                 invitee: prompt.user_id,
                 role,
-                expect_exchange_pub_key: prompt.exchange_pub_key,
+                expect_exchange_pub_key: prompt.keys.exchange,
                 now,
             },
         },
@@ -169,7 +173,7 @@ fn request(prompt: &TofuPrompt, role: Role, now: Instant<Authored>) -> LogicComm
                 channel_id: *channel_id,
                 members: vec![DirectMember {
                     user_id: prompt.user_id,
-                    exchange_pub_key: prompt.exchange_pub_key,
+                    exchange_pub_key: prompt.keys.exchange,
                 }],
             },
             now,
@@ -179,7 +183,7 @@ fn request(prompt: &TofuPrompt, role: Role, now: Instant<Authored>) -> LogicComm
             channel_id: *channel_id,
             invitee: DirectMember {
                 user_id: prompt.user_id,
-                exchange_pub_key: prompt.exchange_pub_key,
+                exchange_pub_key: prompt.keys.exchange,
             },
             now,
         },
@@ -320,6 +324,7 @@ pub(crate) fn TofuDialog(
 #[cfg(target_arch = "wasm32")]
 mod tests {
     use super::*;
+    use ambre_bus::FixedBytes;
     use leptos::mount::mount_to;
     use leptos::wasm_bindgen::JsCast;
     use std::cell::RefCell;
@@ -338,11 +343,19 @@ mod tests {
             },
             user_id: Id::<User>::mint(),
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").ok(),
-            exchange_pub_key: FixedBytes::from_array([byte; 32]),
+            keys: keys(byte),
             fingerprint: ambre_core::Opaque::<ambre_core::KeyFingerprints>::new(
                 "ABCD EFGH".to_owned(),
             ),
             contact: KeyContact::New,
+        }
+    }
+
+    /// The pair of keys of `byte`, as the relay serves it and the pin holds it.
+    fn keys(byte: u8) -> RecipientKeys {
+        RecipientKeys {
+            exchange: FixedBytes::from_array([byte; 32]),
+            signing: FixedBytes::from_array([byte; 32]),
         }
     }
 
@@ -380,12 +393,7 @@ mod tests {
                 Next::Ask(p) => assert_eq!(p.contact, KeyContact::New, "a first contact is new"),
                 other => panic!("a new key went out: {other:?}"),
             }
-            match classify(
-                prompt,
-                Some(FixedBytes::from_array([9; 32])),
-                Role::Editor,
-                NOW,
-            ) {
+            match classify(prompt, Some(keys(9)), Role::Editor, NOW) {
                 Next::Ask(p) => assert_eq!(
                     p.contact,
                     KeyContact::Changed,
@@ -394,12 +402,7 @@ mod tests {
                 other => panic!("a substituted key went out: {other:?}"),
             }
         }
-        let trusted = classify(
-            fetched(1),
-            Some(FixedBytes::from_array([1; 32])),
-            Role::Editor,
-            NOW,
-        );
+        let trusted = classify(fetched(1), Some(keys(1)), Role::Editor, NOW);
         assert_eq!(invited_with(&trusted), Some([1; 32]));
     }
 
@@ -416,12 +419,9 @@ mod tests {
             user_id: prompt.user_id,
             exchange_pub_key: FixedBytes::from_array([6; 32]),
         }];
-        let Next::Proceed(LogicCommand::OpenDirectMessage { draft, .. }) = classify(
-            prompt.clone(),
-            Some(FixedBytes::from_array([6; 32])),
-            Role::Viewer,
-            NOW,
-        ) else {
+        let Next::Proceed(LogicCommand::OpenDirectMessage { draft, .. }) =
+            classify(prompt.clone(), Some(keys(6)), Role::Viewer, NOW)
+        else {
             panic!("a pinned key asks again");
         };
         assert_eq!(draft.channel_id, channel_id);
@@ -432,7 +432,10 @@ mod tests {
             &prompt,
             Role::Viewer,
             NOW,
-            |_, key| log.borrow_mut().push(format!("pin {}", key.as_array()[0])),
+            |_, keys| {
+                log.borrow_mut()
+                    .push(format!("pin {}", keys.exchange.as_array()[0]))
+            },
             |cmd| {
                 let LogicCommand::OpenDirectMessage { draft, .. } = cmd else {
                     panic!("not a direct message: {cmd:?}");
@@ -462,12 +465,7 @@ mod tests {
             channel_id: sent,
             invitee,
             ..
-        }) = classify(
-            prompt.clone(),
-            Some(FixedBytes::from_array([7; 32])),
-            Role::Editor,
-            NOW,
-        )
+        }) = classify(prompt.clone(), Some(keys(7)), Role::Editor, NOW)
         else {
             panic!("a pinned key did not invite into the channel");
         };
@@ -491,9 +489,12 @@ mod tests {
             &prompt,
             Role::Viewer,
             NOW,
-            |user, key| {
-                log.borrow_mut()
-                    .push(format!("pin {:?} {}", user.as_bytes(), key.as_array()[0]))
+            |user, keys| {
+                log.borrow_mut().push(format!(
+                    "pin {:?} {}",
+                    user.as_bytes(),
+                    keys.exchange.as_array()[0]
+                ))
             },
             |cmd| {
                 let LogicCommand::Rest {

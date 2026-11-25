@@ -181,6 +181,20 @@ pub fn format_s3_delta_key(
     ))
 }
 
+/// S3 object key a recorded snapshot is copied to, on a store that does not
+/// verify the digest a link signs. No link ever names a key of this branch,
+/// so a later put through the upload link leaves the copy whole (`SRV-315`).
+/// It stays under the document prefix, so a delete of the document removes it.
+pub fn format_s3_kept_snapshot_key(
+    env_prefix: &StoreText<EnvPrefix>,
+    document_id: &Id<Document>,
+    snapshot_id: &Id<Snapshot>,
+) -> ambre_core::ObjectKey {
+    ambre_core::ObjectKey::new(format!(
+        "{env_prefix}/documents/{document_id}/kept/{snapshot_id}"
+    ))
+}
+
 /// Validates that a client-supplied snapshot `s3_key` actually belongs to the
 /// document the caller is authorized on. The check runs before the key is
 /// persisted and later handed back as a presigned download URL.
@@ -385,6 +399,142 @@ pub async fn generate_presigned_download_url(
     published_link(&request, public)
 }
 
+/// Who keeps the bytes of a snapshot fixed once the snapshot is recorded
+/// (`SRV-315`). The relay reads it from the store at start, never from a
+/// setting: an operator who names it wrongly would reopen audit `P40`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SnapshotCustody {
+    /// The store refuses a body whose digest differs from the one a link
+    /// signs, so the object under the link is the object recorded (`SRV-313`).
+    StoreVerifies,
+    /// The store takes any body of the signed size through a link. The record
+    /// copies the object to a key that no link names.
+    RelayCopies,
+}
+
+/// The digest a probe put names: that of its own body, or that of other bytes.
+#[derive(Clone, Copy)]
+enum ProbeDigest {
+    OtherBytes,
+    OwnBody,
+}
+
+/// Reads from the store whether it verifies `x-amz-checksum-sha256`.
+///
+/// The probe puts one small object twice under a key outside every document:
+/// once under the digest of other bytes, once under its own. A store that
+/// refuses the first and takes the second verifies the digest. Any other
+/// answer reads as [`SnapshotCustody::RelayCopies`], an unreachable store
+/// included. The copy costs one request per record, and a wrong guess the
+/// other way reopens audit `P40` (`SRV-334`).
+pub async fn read_snapshot_custody(
+    s3: &S3Client,
+    bucket: &StoreText<BucketName>,
+    env_prefix: &StoreText<EnvPrefix>,
+) -> SnapshotCustody {
+    let key = ambre_core::ObjectKey::new(format!("{env_prefix}/probe/checksum"));
+    let forged = probe_put(s3, bucket, &key, ProbeDigest::OtherBytes).await;
+    let honest = probe_put(s3, bucket, &key, ProbeDigest::OwnBody).await;
+    if let Err(e) = s3
+        .delete_object()
+        .bucket(bucket.as_str())
+        .key(key.as_str())
+        .send()
+        .await
+    {
+        tracing::warn!(error = %e, "checksum probe: delete failed");
+    }
+    match (forged, honest) {
+        (Err(_), Ok(_)) => SnapshotCustody::StoreVerifies,
+        (forged, honest) => {
+            tracing::warn!(
+                forged_taken = forged.is_ok(),
+                honest_taken = honest.is_ok(),
+                "the object store does not verify a signed digest: each snapshot record copies its object"
+            );
+            SnapshotCustody::RelayCopies
+        }
+    }
+}
+
+/// Puts the probe body under the SHA-256 digest `digest` names.
+async fn probe_put(
+    s3: &S3Client,
+    bucket: &StoreText<BucketName>,
+    key: &ambre_core::ObjectKey,
+    digest: ProbeDigest,
+) -> Result<(), AppError> {
+    use base64::Engine as _;
+    use sha2::Digest as _;
+    let body = b"ambre checksum probe";
+    let digest = match digest {
+        ProbeDigest::OtherBytes => sha2::Sha256::digest(b"ambre checksum forge"),
+        ProbeDigest::OwnBody => sha2::Sha256::digest(body),
+    };
+    s3.put_object()
+        .bucket(bucket.as_str())
+        .key(key.as_str())
+        .checksum_sha256(base64::engine::general_purpose::STANDARD.encode(digest))
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(body))
+        .send()
+        .await
+        .map(|_| ())
+        .map_err(|e| AppError::S3(crate::error::FaultText::of("checksum probe", e)))
+}
+
+/// The characters a copy source keeps as they are: the unreserved set of
+/// RFC 3986 and the separator of a key.
+const COPY_SOURCE: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~')
+    .remove(b'/');
+
+/// Copies the object under `from` to `to`, then deletes `from` (`SRV-315`).
+///
+/// The copy runs inside the store, so the relay never reads the bytes
+/// (`ZK-001`). A missing object refuses the record. A failed delete of
+/// `from` is logged alone: no row names that object, and a delete of the
+/// document removes it.
+pub async fn keep_snapshot(
+    s3: &S3Client,
+    bucket: &StoreText<BucketName>,
+    from: &ambre_core::ObjectKey,
+    to: &ambre_core::ObjectKey,
+) -> Result<(), AppError> {
+    use aws_sdk_s3::error::ProvideErrorMetadata as _;
+    let source =
+        percent_encoding::utf8_percent_encode(&format!("{bucket}/{from}"), COPY_SOURCE).to_string();
+    if let Err(e) = s3
+        .copy_object()
+        .bucket(bucket.as_str())
+        .key(to.as_str())
+        .copy_source(source)
+        .send()
+        .await
+    {
+        // `as_service_error` and never `into_service_error`, as in `fetch_object`.
+        if e.as_service_error().and_then(|se| se.code()) == Some("NoSuchKey") {
+            return Err(AppError::BadRequest("no object under s3_key".into()));
+        }
+        return Err(AppError::S3(crate::error::FaultText::of(
+            "copy a snapshot",
+            e,
+        )));
+    }
+    if let Err(e) = s3
+        .delete_object()
+        .bucket(bucket.as_str())
+        .key(from.as_str())
+        .send()
+        .await
+    {
+        tracing::warn!(error = %e, "kept snapshot: delete of the uploaded object failed");
+    }
+    Ok(())
+}
+
 /// The prefix every object of one document lives under: its snapshots, its
 /// deltas and its media.
 pub fn format_s3_document_prefix(
@@ -522,11 +672,45 @@ pub async fn fetch_object(
     }
 }
 
+/// How long the write path waits for the object of one delta: the wait of the
+/// delta object row of `ambre-spec-budgets.md section 3`. A store that hangs
+/// would hold the connection of the writer, so past this wait the index row
+/// takes the frame instead (`SRV-034`, `SRV-336`).
+pub(crate) const DELTA_PUT_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Writes the object of delta `key` before the relay acknowledges it, so a
+/// loss of the ephemeral store loses no acknowledged delta (`SRV-307`).
+///
+/// # Errors
+///
+/// The store refused the write, or did not answer within the wait. The error
+/// text names no key: a store failure is logged (`ZK-030`).
+pub async fn put_delta_object(
+    state: &crate::state::AppState,
+    key: &ambre_core::ObjectKey,
+    wire: &StoredPayload,
+) -> Result<(), AppError> {
+    let put = state
+        .s3
+        .put_object()
+        .bucket(state.s3_bucket.as_str())
+        .key(key.as_str())
+        .body(wire.clone().into_body())
+        .send();
+    match tokio::time::timeout(DELTA_PUT_TIMEOUT, put).await {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(AppError::S3(crate::error::FaultText::of("delta put", e))),
+        Err(_) => Err(AppError::S3(crate::error::FaultText::bare(
+            "delta put timed out",
+        ))),
+    }
+}
+
 /// Background task that periodically flushes pending deltas from Redis to S3.
 ///
 /// Runs once per Axum instance, every 15 seconds. The work list is the
 /// `flush:dirty` SET, the documents that actually have unflushed deltas,
-/// maintained by `append_pending_delta`. The common path is therefore O(dirty
+/// which a relay marked as it queued a delta. The common path is therefore O(dirty
 /// docs), instead of an O(keyspace) `SCAN doc:{*}:pending` every cycle. A full
 /// SCAN reconciliation runs only occasionally, and on the first cycle, seeding
 /// the set on upgrade. It re-marks any pending key missing from the set, so no
@@ -662,8 +846,11 @@ async fn reconcile_node(state: &crate::state::AppState, node: &rustis::client::C
             }
         };
         for key in keys.iter().filter_map(|text| PendingKey::parse(text)) {
+            // The list keeps its entries: the next sweep tries the mark
+            // again, and an operator sees the delay (`SRV-262`).
             if let Err(e) = crate::redis_ops::mark_pending_dirty(&state.redis, &key).await {
-                tracing::warn!(error = %e, "flusher reconcile: mark dirty failed");
+                tracing::error!(error = %e, "flusher reconcile: mark dirty failed");
+                crate::metrics::failed(crate::metrics::Failure::DirtyMark);
             }
         }
         cursor = next_cursor;
@@ -903,6 +1090,35 @@ mod tests {
             "the sweep missed {} of 20 lists",
             missed.len()
         );
+    }
+
+    /// `SRV-262`: a sweep whose dirty mark the store refuses keeps the pending
+    /// list whole, and counts the miss. The connection reaches the keys of a
+    /// document alone, so the dirty set refuses every mark.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_refused_mark_in_a_sweep_keeps_the_list_and_is_counted(pool: sqlx::PgPool) {
+        use crate::metrics::{Failure, RELAY};
+        let base = crate::test_helpers::test_app_state(pool).await;
+        let redis = crate::test_helpers::connect_document_keys_redis()
+            .await
+            .expect("db-tier tests require a reachable Redis");
+        let state = crate::test_helpers::with_redis(&base, redis);
+        let key = PendingKey::of(&Id::<Document>::mint());
+        let _: usize = base
+            .redis
+            .rpush(key.as_str(), "entry")
+            .await
+            .expect("rpush");
+        let before = RELAY.failures.read(Failure::DirtyMark);
+
+        reconcile_dirty_set(&state).await;
+
+        let after = RELAY.failures.read(Failure::DirtyMark);
+        let held: usize = base.redis.llen(key.as_str()).await.expect("llen");
+        let _: usize = base.redis.del([key.as_str()]).await.expect("del");
+        assert!(after > before, "the refused mark is counted");
+        assert_eq!(held, 1, "the list keeps its entry");
     }
 
     /// The deployment prefix `text`.

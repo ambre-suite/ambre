@@ -478,6 +478,12 @@ impl ProseView {
         if self.annotations.page.with_untracked(|shown| *shown != page) {
             self.annotations.page.set(page);
         }
+        // The mode the Logic thread last reported, for the control of the
+        // panel and the status chip (`PROSE-UI-275`).
+        let mode = self.state.edit_mode;
+        if self.annotations.mode.get_untracked() != mode {
+            self.annotations.mode.set(mode);
+        }
         // The default fonts, for the default styles section (`PROSE-UI-261`).
         let fonts = Some(self.state.shaped.layout.fonts.clone());
         if self
@@ -492,9 +498,15 @@ impl ProseView {
         self.publish_ruler();
     }
 
-    /// Publish the hovered suggestion, where the popover goes.
+    /// Publish where the popover goes: the hovered suggestion, else the one
+    /// at the caret, which the context panel also reaches (`PROSE-UI-272`,
+    /// `PROSE-UI-273`).
     fn publish_hover(&self) {
-        let hovered = self.state.hovered;
+        let at_caret = self.state.suggestion_at_caret();
+        if self.annotations.at_caret.get_untracked() != at_caret {
+            self.annotations.at_caret.set(at_caret);
+        }
+        let hovered = self.state.popover_suggestion();
         if self.annotations.hovered.get_untracked() != hovered {
             self.annotations.hovered.set(hovered);
         }
@@ -815,6 +827,9 @@ impl ProseView {
         self.busy_pub
             .publish(BusyLevel::from_busy(self.outbox.is_busy()));
         self.publish_toolbar();
+        // A key or a tap that moves the caret into a suggestion raises its
+        // popover (`PROSE-UI-272`).
+        self.publish_hover();
         self.dirty |= consumed.is_yes();
         consumed
     }
@@ -1191,7 +1206,7 @@ mod tests {
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
         mount_to(
             target,
-            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+            move || view! { <ProseFigures figures=figures zoom=zoom signals=ProseSignals::new() /> },
         )
         .forget();
 
@@ -1269,7 +1284,7 @@ mod tests {
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
         mount_to(
             target,
-            move || view! { <ProseFigures figures=figures zoom=zoom /> },
+            move || view! { <ProseFigures figures=figures zoom=zoom signals=ProseSignals::new() /> },
         )
         .forget();
         let last = slot.last_element_child().expect("a band child");

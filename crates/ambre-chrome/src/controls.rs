@@ -4,7 +4,8 @@
 // visual system). Each one draws one control at a height of the control
 // scale, with the focus ring and the colours of the design tokens.
 //
-//   IconButton:  an icon in a box of one size, a tooltip with its name.
+//   IconButton:  an icon in a box of one size, a tooltip with its name,
+//                which a long press of a touch shows too (`tip`).
 //   Select:      a styled list of choices, operable from the keyboard.
 //   SegmentBar:  a row of exclusive choices on one track.
 //   Stepper:     a number, its unit, and two steppers in one field.
@@ -15,6 +16,10 @@
 // control serves every value type. The property shims of `kit` map a value
 // to its place and back. A generic control would compile once per type, and
 // the main wasm is near its ceiling (`ambre-spec-budgets.md` section 5).
+//
+// Each control erases its view type with `into_any`. A typed view nests into
+// the view type of every caller. Each caller then compiles its own build,
+// rebuild and drop of the control: 82 KB of Main on 2026-11-24.
 //
 // Every control prevents the default of `mousedown`. A control that takes the
 // focus would steal it from the canvas text pipe (the format bar hazard). The
@@ -33,6 +38,7 @@ use crate::debounce::{DRAG_DEBOUNCE, Debouncer};
 use crate::format::Pressed;
 use crate::kit::Step;
 use crate::menu::{MenuKey, MenuRow, Openness, Selected, initial, menu_key};
+use crate::tip::{LONG_PRESS, PointerKind, Press, PressEnd, TIP_DWELL, next_tip};
 
 /// The height of a control, one step of the control scale of the tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -169,65 +175,221 @@ fn below(el: &web_sys::Element) -> Point<Px<Css>> {
     }
 }
 
+/// The viewport point that a fixed descendant of `el` measures its `left` and
+/// `top` from. That point is the corner of the viewport by default. An
+/// ancestor with a transform, a filter, a perspective or a containment holds
+/// its fixed descendants, as a floating bar centred by a transform does. The
+/// point is then the corner of that ancestor.
+fn fixed_origin(el: &web_sys::Element) -> Point<Px<Css>> {
+    let Some(window) = web_sys::window() else {
+        return Point::default();
+    };
+    let mut at = Some(el.clone());
+    while let Some(node) = at {
+        if let Ok(Some(style)) = window.get_computed_style(&node) {
+            let set = |name| {
+                let value = style.get_property_value(name).unwrap_or_default();
+                !value.is_empty() && value != "none" && value != "auto" && value != "normal"
+            };
+            let will_change = style.get_property_value("will-change").unwrap_or_default();
+            let contain = style.get_property_value("contain").unwrap_or_default();
+            let holds = set("transform")
+                || set("filter")
+                || set("backdrop-filter")
+                || set("perspective")
+                || will_change.contains("transform")
+                || will_change.contains("filter")
+                || ["paint", "layout", "strict", "content"]
+                    .iter()
+                    .any(|word| contain.contains(word));
+            if holds {
+                let rect = node.get_bounding_client_rect();
+                return Point {
+                    x: Px::<Css>::new((rect.left() + f64::from(node.client_left())) as f32),
+                    y: Px::<Css>::new((rect.top() + f64::from(node.client_top())) as f32),
+                };
+            }
+        }
+        at = node.parent_element();
+    }
+    Point::default()
+}
+
 /// A button that shows one icon in a box of one size. A tooltip shows its
-/// name and its chord under the pointer and the keyboard focus.
+/// name, its chord and its line of description under the pointer and the
+/// keyboard focus (`CHROME-185`, `CHROME-187`). On a touch screen, a long
+/// press shows the tooltip in place of the press (`CHROME-188`).
 ///
-/// The name is the accessible name too, so a screen reader hears what the
-/// tooltip shows. `pressed` makes it a toggle. `expanded` makes it the
-/// opener of a list or a panel. `reach` is the id of the command or the
-/// property it reaches (`CHROME-207`). The icon and the name may follow a state, as a
-/// toggle whose press does the opposite does. `class` names the button for
-/// the stylesheet of its application and for its tests.
+/// The name is the accessible name too. The chord and the description are its
+/// accessible description, so a screen reader hears what the tooltip shows
+/// (`CHROME-189`). A command's icon takes its words from a
+/// [`CommandTip`](crate::CommandTip) (`CHROME-186`).
+///
+/// `tip` names the command the icon reaches. It gives the name, the chord, the description and
+/// the reach, in place of `label`, `chord`, `description` and `reach`. It may follow a
+/// state: a toggle names the command its press runs now (`CHROME-256`).
+///
+/// `pressed` makes it a toggle. `checked` makes it one radio of a group, as a
+/// segment of a [`SegmentBar`] is. `expanded` makes it the opener of a list or
+/// a panel. `reach` is the id of the command or the property it reaches
+/// (`CHROME-207`). The icon and the name may follow a state, as a toggle whose
+/// press does the opposite does. `class` names the button for the stylesheet
+/// of its application and for its tests.
 #[component]
 pub fn IconButton(
     #[prop(into)] icon: Signal<icondata::Icon>,
-    #[prop(into)] label: Signal<String>,
+    #[prop(optional, into)] label: Option<Signal<String>>,
+    #[prop(optional, into)] tip: Option<Signal<crate::CommandTip>>,
     on_press: Callback<()>,
     #[prop(optional_no_strip)] chord: Option<KeyBinding>,
+    #[prop(optional_no_strip)] description: Option<
+        ambre_core::Validated<ambre_commands::CommandDescription>,
+    >,
     #[prop(optional_no_strip)] pressed: Option<Signal<Pressed>>,
+    #[prop(optional_no_strip)] checked: Option<Signal<crate::Checked>>,
+    #[prop(optional_no_strip)] expanded: Option<Signal<Openness>>,
     #[prop(optional, into)] availability: Option<Signal<Availability>>,
     #[prop(optional)] size: ControlSize,
     #[prop(optional)] look: IconLook,
-    #[prop(optional)] reach: Option<Reach>,
-    #[prop(optional_no_strip)] expanded: Option<Signal<Openness>>,
+    #[prop(optional_no_strip)] reach: Option<Reach>,
     #[prop(optional)] class: Option<&'static str>,
+    #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     let tip_at = RwSignal::new(None::<Point<Px<Css>>>);
-    let show = move |ev: web_sys::Event| {
-        if let Some(el) = ev
-            .current_target()
-            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
-        {
-            tip_at.set(Some(below(&el)));
+    let press = StoredValue::new(Press::Idle);
+    let wait = StoredValue::new(None::<TimeoutHandle>);
+    let node = NodeRef::<leptos::html::Button>::new();
+    // The tooltip hangs under the button, in the frame of whatever holds its
+    // fixed box: the viewport, or a floating bar a transform centres.
+    let show = move || {
+        if let Some(el) = node.get_untracked() {
+            let (at, origin) = (below(&el), fixed_origin(&el));
+            tip_at.try_set(Some(Point {
+                x: at.x - origin.x,
+                y: at.y - origin.y,
+            }));
         }
     };
-    let hide = move || tip_at.set(None);
+    let hide = move || {
+        tip_at.try_set(None);
+    };
+    let cancel_wait = move || {
+        if let Some(handle) = wait.try_get_value().flatten() {
+            handle.clear();
+        }
+        wait.try_set_value(None);
+    };
+    on_cleanup(cancel_wait);
+    // A touch starts the wait of a long press; the end of the wait shows the
+    // tooltip if the touch still holds the icon.
+    let down = move |ev: web_sys::PointerEvent| {
+        cancel_wait();
+        let next = Press::down(PointerKind::of(&ev));
+        press.set_value(next);
+        if next == Press::Pending {
+            let handle = set_timeout_with_handle(
+                move || {
+                    let held = press.try_get_value().map(Press::waited);
+                    if let Some(held) = held {
+                        press.try_set_value(held);
+                    }
+                    if held == Some(Press::Held) {
+                        show();
+                    }
+                },
+                LONG_PRESS,
+            );
+            wait.set_value(handle.ok());
+        }
+    };
+    // The finger lifts. A long press keeps its tooltip a moment, so the
+    // person reads it with the finger away.
+    let lift = move || {
+        cancel_wait();
+        let next = press.get_value().lifted();
+        press.set_value(next);
+        if next == Press::Held {
+            set_timeout(hide, TIP_DWELL);
+        }
+    };
     let class = class.map_or_else(
         || "ambre-icon-button".to_owned(),
         |c| format!("ambre-icon-button {c}"),
     );
+    // A tip gives every word of the tooltip, and follows its signal; the plain props are fixed.
+    let name = move || match (tip, label) {
+        (Some(tip), _) => tip.with(|t| t.title().as_str().to_owned()),
+        (None, Some(label)) => label.get(),
+        (None, None) => String::new(),
+    };
+    let chord_now = move || tip.map_or(chord, |tip| tip.with(crate::CommandTip::chord));
+    let description = StoredValue::new(description);
+    let line = move || match tip {
+        Some(tip) => tip.with(|t| t.description().map(|d| d.as_str().to_owned())),
+        None => description.with_value(|d| d.as_ref().map(|d| d.as_str().to_owned())),
+    };
+    let reach_now = move || tip.map_or(reach, |tip| Some(tip.with(crate::CommandTip::reach)));
+    let spoken = move || {
+        let parts: Vec<String> = chord_now()
+            .map(|c| c.to_string())
+            .into_iter()
+            .chain(line())
+            .collect();
+        parts.join(". ")
+    };
+    let described = (tip.is_some() || chord.is_some() || description.with_value(Option::is_some))
+        .then(|| format!("ambre-tip-{}", next_tip()));
+    let described_by = described.clone();
+    let described_by = move || described_by.clone().filter(|_| !spoken().is_empty());
     view! {
         <button
             class=class
+            node_ref=node
             data-size=size.as_str()
             data-look=look.as_str()
-            data-reach=reach.map(|r| r.marker())
-            aria-label=move || label.get()
-            aria-keyshortcuts=chord.map(|c| c.to_string())
+            data-reach=move || reach_now().map(|r| r.marker())
+            aria-label=name
+            aria-describedby=described_by
+            aria-keyshortcuts=move || chord_now().map(|c| c.to_string())
             aria-pressed=move || pressed.map(|p| p.get().aria())
+            role=checked.map(|_| "radio")
+            aria-checked=move || checked.map(|c| c.get().aria())
             aria-expanded=move || expanded.map(|e| e.get().aria())
             disabled=move || availability.is_some_and(|a| a.get() == Availability::Disabled)
             on:mousedown=move |ev| ev.prevent_default()
-            on:pointerenter=move |ev| show(ev.into())
-            on:pointerleave=move |_| hide()
-            on:focus=move |ev| show(ev.into())
+            on:pointerdown=down
+            on:pointerup=move |_| lift()
+            on:pointercancel=move |_| lift()
+            on:pointerenter=move |ev: web_sys::PointerEvent| {
+                if PointerKind::of(&ev) == PointerKind::Hover {
+                    show();
+                }
+            }
+            on:pointerleave=move |ev: web_sys::PointerEvent| {
+                if PointerKind::of(&ev) == PointerKind::Hover {
+                    hide();
+                }
+            }
+            on:contextmenu=move |ev| {
+                // The platform menu of a long press would cover the tooltip.
+                if press.get_value() != Press::Idle {
+                    ev.prevent_default();
+                }
+            }
+            on:focus=move |_| show()
             on:blur=move |_| hide()
             on:click=move |_| {
+                let end = press.get_value().click();
+                press.set_value(Press::Idle);
+                if end == PressEnd::KeepTip {
+                    return;
+                }
                 hide();
                 on_press.run(());
             }
         >
             <Icon icon=icon />
+            {children.map(|c| c())}
             <span
                 class="ambre-tip"
                 role="tooltip"
@@ -236,11 +398,16 @@ pub fn IconButton(
                 style:left=move || tip_at.get().map(|p| format!("{}px", p.x.get()))
                 style:top=move || tip_at.get().map(|p| format!("{}px", p.y.get()))
             >
-                <span>{move || label.get()}</span>
-                {chord.map(|c| view! { <crate::Kbd binding=c /> })}
+                <span class="ambre-tip-head">
+                    <span class="ambre-tip-name">{name}</span>
+                    {move || chord_now().map(|c| view! { <crate::Kbd binding=c /> })}
+                </span>
+                {move || line().map(|l| view! { <span class="ambre-tip-description">{l}</span> })}
             </span>
+            {described.map(|id| view! { <span id=id hidden>{spoken}</span> })}
         </button>
     }
+    .into_any()
 }
 
 /// The place of the choice an open list moves to on `ev`, from `at`, or what
@@ -460,6 +627,7 @@ pub fn Select(
             </div>
         </span>
     }
+    .into_any()
 }
 
 /// A row of exclusive choices on one track: an alignment, an orientation.
@@ -479,22 +647,37 @@ pub fn SegmentBar(
         .map(|(i, choice)| {
             let p = Pos::<ChoiceRow>::from_usize(i);
             let checked = move || selected.get() == Some(p);
-            let name = choice.label.clone();
-            view! {
-                <button
-                    role="radio"
-                    data-reach=choice.reach.map(|r| r.marker())
-                    aria-checked=move || crate::Checked::from_bool(checked()).aria()
-                    aria-label=name.clone()
-                    title=name
-                    on:mousedown=move |ev| ev.prevent_default()
-                    on:click=move |_| on_pick.run(p)
-                >
-                    {match choice.icon {
-                        Some(icon) => view! { <Icon icon=icon /> }.into_any(),
-                        None => view! { <span>{choice.label}</span> }.into_any(),
-                    }}
-                </button>
+            let checked = Signal::derive(move || crate::Checked::from_bool(checked()));
+            // An icon names itself in a tooltip, as every icon of the chrome
+            // does (`CHROME-185`). A word needs none.
+            match choice.icon {
+                Some(icon) => view! {
+                    <IconButton
+                        icon=icon
+                        label=choice.label
+                        checked=Some(checked)
+                        reach=choice.reach
+                        on_press=Callback::new(move |()| on_pick.run(p))
+                    />
+                }
+                .into_any(),
+                None => {
+                    let (name, tip) = (choice.label.clone(), choice.label.clone());
+                    view! {
+                    <button
+                        role="radio"
+                        data-reach=choice.reach.map(|r| r.marker())
+                        aria-checked=move || checked.get().aria()
+                        aria-label=name
+                        title=tip
+                        on:mousedown=move |ev| ev.prevent_default()
+                        on:click=move |_| on_pick.run(p)
+                    >
+                        <span>{choice.label}</span>
+                    </button>
+                    }
+                    .into_any()
+                }
             }
         })
         .collect_view();
@@ -503,6 +686,7 @@ pub fn SegmentBar(
             {segments}
         </span>
     }
+    .into_any()
 }
 
 /// A number and its unit in one field, between a step down and a step up.
@@ -548,6 +732,7 @@ pub fn Stepper(
             </button>
         </span>
     }
+    .into_any()
 }
 
 /// A square of one colour that reports a press. `colour` is `None` for no
@@ -575,6 +760,7 @@ pub fn ColorSwatch(
             on:click=move |_| on_press.run(())
         ></button>
     }
+    .into_any()
 }
 
 /// What a [`Slider`] shows beside its track.
@@ -645,6 +831,7 @@ pub fn Slider(
             </span>
         </span>
     }
+    .into_any()
 }
 
 #[cfg(test)]

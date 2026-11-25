@@ -1,0 +1,26 @@
+# The values of the stack under test (`just chart-test`). It signs in by a
+# bare name, which the client build allows only outside a release
+# (`ZK-045`), and takes a certificate of Caddy's own authority. Neither
+# setting belongs in a deployment.
+domain: localhost
+tls: internal
+existingSecret: ambre-test
+images:
+  registry: ""
+  pullPolicy: Never
+  relay: {repository: ambre-relay, tag: local}
+  sfu: {repository: ambre-sfu, tag: local}
+  web: {repository: ambre-web, tag: local}
+  init: {repository: ambre-init, tag: local}
+relay:
+  devMode: true
+web:
+  service:
+    type: NodePort
+    httpsNodePort: 30443
+  persistence:
+    enabled: false
+postgres:
+  size: 1Gi
+garage:
+  dataSize: 1Gi

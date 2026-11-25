@@ -90,6 +90,7 @@ pub fn FontSizeSelect(
             />
         </span>
     }
+    .into_any()
 }
 
 /// A single pressed-state format toggle button (bold / italic / underline /
@@ -120,6 +121,7 @@ pub fn FormatToggle(
             {icon.map(|ic| view! { <Icon icon=ic /> })}
         </button>
     }
+    .into_any()
 }
 
 /// How far above its anchor the format bar sits, in CSS pixels.
@@ -163,18 +165,54 @@ pub struct FormatControl {
     pub icon: Option<icondata::Icon>,
     /// The chord the tooltip names beside the label.
     pub chord: Option<ambre_commands::KeyBinding>,
+    /// The line the tooltip shows under the label, where the label is not
+    /// enough (`CHROME-185`).
+    pub description: Option<ambre_core::Validated<ambre_commands::CommandDescription>>,
+    /// The command the control runs, which a test reads back (`CHROME-207`).
+    /// `None` for a control that backs no command.
+    pub reach: Option<ambre_commands::Reach>,
+}
+
+impl FormatControl {
+    /// The control of `command`: its words are the ones the command describes
+    /// (`CHROME-186`), and `icon` its glyph.
+    pub fn of(
+        command: &ambre_commands::Command,
+        icon: Option<icondata::Icon>,
+        pressed: Pressed,
+        on_press: Callback<()>,
+    ) -> Self {
+        let tip = crate::CommandTip::of(command);
+        Self {
+            label: tip.title().as_str().to_owned(),
+            pressed,
+            on_press,
+            icon,
+            chord: tip.chord(),
+            description: tip.description().cloned(),
+            reach: Some(tip.reach()),
+        }
+    }
 }
 
 /// The format bar over a selection, centred on `anchor` in the viewport
 /// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
 /// `children` follow the controls: a list or a colour, which a press button
 /// cannot hold (`CHROME-246`).
+///
+/// The bar is a context bar. Given a `cover`, it publishes how far it reaches
+/// above the selection, so a fit frames clear of it (`CHROME-171`).
 #[component]
 pub fn FormatBar(
     anchor: Point<Px<Css>>,
     #[prop(optional)] controls: Vec<FormatControl>,
     #[prop(optional)] children: Option<Children>,
+    #[prop(optional)] cover: Option<RwSignal<ambre_client_core::cover::Cover>>,
 ) -> impl IntoView {
+    let node = NodeRef::<leptos::html::Div>::new();
+    if let Some(cover) = cover {
+        crate::cover::watch_above(node, move || Some(anchor.y), cover);
+    }
     let left = format!("{}px", anchor.x.get());
     let top = format!(
         "{}px",
@@ -191,6 +229,8 @@ pub fn FormatBar(
                     icon=icon
                     label=control.label
                     chord=control.chord
+                    description=control.description
+                    reach=control.reach
                     pressed=Some(Signal::stored(control.pressed))
                     size=crate::ControlSize::Large
                     look=crate::IconLook::Ghost
@@ -219,6 +259,7 @@ pub fn FormatBar(
     });
     view! {
         <div
+            node_ref=node
             class="ambre-format-bar"
             style:position="fixed"
             style:left=left
@@ -232,4 +273,5 @@ pub fn FormatBar(
             {children.map(|c| c())}
         </div>
     }
+    .into_any()
 }

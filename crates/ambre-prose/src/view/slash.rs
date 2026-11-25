@@ -48,6 +48,20 @@ pub enum SlashCommand {
     Toc,
 }
 
+/// The item of the slash menu a command of the creation bar inserts, or
+/// `None` for a command that inserts no block. The bar and the menu then
+/// insert one object the same way (`PROSE-UI-062`).
+#[must_use]
+pub fn inserted(id: ambre_core::StaticKey<ambre_core::Commands>) -> Option<SlashCommand> {
+    use crate::commands::{INSERT_SEPARATOR, INSERT_TABLE, INSERT_TEXT};
+    match id {
+        INSERT_TEXT => Some(SlashCommand::Paragraph),
+        INSERT_TABLE => Some(SlashCommand::Table),
+        INSERT_SEPARATOR => Some(SlashCommand::Rule),
+        _ => None,
+    }
+}
+
 /// One item of the menu.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SlashItem {

@@ -35,6 +35,10 @@ pub(crate) enum SyncError {
     /// outside its space: nothing is sealed under its key (`SYNC-232`).
     #[error("the log of the document is not settled")]
     LogUnsettled,
+    /// This client reads the document and may not write it, so it seals no
+    /// name beside it (`SYNC-318`).
+    #[error("this client may not name the document")]
+    NameRefused,
     /// The document is open here and not yet on the relay.
     #[error("the document is not on the relay yet")]
     NotOnRelay,
@@ -133,6 +137,7 @@ impl SyncError {
             Self::NotOpen => LocalFailure::DocumentNotOpen,
             Self::NotOnRelay => LocalFailure::NotOnRelay,
             Self::LogUnsettled => LocalFailure::LogUnsettled,
+            Self::NameRefused => LocalFailure::NameRefused,
             Self::OwnRowMissing => LocalFailure::OwnRowMissing,
             Self::Malformed(_) => LocalFailure::Malformed,
             Self::KeyOutOfReach => LocalFailure::KeyOutOfReach,

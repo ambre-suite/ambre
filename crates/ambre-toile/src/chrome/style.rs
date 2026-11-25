@@ -155,7 +155,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                     icon=icon
                     label=(c.title)(&ambre_chrome::commands::Locale::En).into_string()
                     chord=c.chord()
-                    reach=ambre_chrome::commands::Reach::Command(id)
+                    reach=Some(ambre_chrome::commands::Reach::Command(id))
                     on_press=Callback::new(move |()| on_command.run(id))
                 />
             }

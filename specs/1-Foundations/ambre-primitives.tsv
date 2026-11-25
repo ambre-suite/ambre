@@ -81,6 +81,7 @@ ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	gener
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
 ambre-app | src/shell/mod.rs | crate::shell | ShellWiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
+ambre-app | src/signin.rs | crate::signin | BUILD_ISSUER | const | Option<&str>	foreign-api	the issuer address the client build names at compile time, which one foreign call, web_sys::Url::new, alone reads; the parsed Url is the type every other site holds
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	generic	the path prefix of a provider return address, which is_return_path and parse_return match back: part of the codec of that address
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
@@ -350,8 +351,6 @@ ambre-murmure | src/message/mod.rs | crate::message | MurmureCommand::is_mutatin
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | field | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Fill::label() | ret | &'static str	free-text	the accessible name of the fill button, which a person reads and no code matches back
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Turn::label() | ret | &'static str	free-text	the accessible name of a page button of the header, which a person reads and no code matches back
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Turn::arrow() | ret | &'static str	free-text	the sign an arrow of the grid draws for a person to read, which no code matches back
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | PINNED_SHARE | const | f32	math	the share of the area of the grid a pinned tile takes at most, a scalar multiplier of that width
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | BESIDE_PINNED | const | f32	math	the share of the width of a pinned tile a tile of the grid beside it takes at most, a scalar multiplier of that width
@@ -1084,7 +1083,7 @@ ambre-core | src/object_key.rs | crate::object_key | ObjectKey::into_inner() | r
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::new(value) | param | String	newtype-inner	the constructor of the ObjectKey newtype
 ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
-ambre-core | src/provider.rs | crate::provider | OidcProvider::authorization_host() | ret | &'static str	generic	the host of a provider's authorization endpoint, which the sign-in compares the host of a relay's address against; a host name has no type in the workspace, and web_sys hands the compared host as text
+ambre-core | src/provider.rs | crate::provider | OidcProvider::authorization_host() | ret | Option<&'static str>	generic	the host of a provider's authorization endpoint, which the sign-in compares the host of a relay's address against, or none for the provider whose host the client build names; a host name has no type in the workspace, and web_sys hands the compared host as text
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
@@ -1816,6 +1815,7 @@ ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Float.0 | field | f64	
 ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Int.0 | field | i64	generic	an integer mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Text.0 | field | String	generic	a mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, read when no richer half is usable
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_over(text) | param | &str	free-text	the plain-text half of the clipboard, pasted over a selection when no richer half is usable
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	pasted plain text of several lines, one paragraph per line
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	generic	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
 ambre-prose-form | src/clip.rs | crate::clip | safe_family() | ret | bool	generic	whether a paste keeps a family name: not empty, short enough, no control or closing character
@@ -2013,6 +2013,8 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads the entry of the first trusted proxy into an IpAddr at once
+ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::Future | assoc | Pin<Box<dyn Future<Output=Result<HttpResponse,Self::Error>>+Send+'c>>	foreign-api	the future the AsyncHttpClient trait of oauth2 fixes, whose answer is the http::Response<Vec<u8>> the provider crate parses
+ambre-server | src/oidc.rs | crate::oidc | <ProviderHttp as AsyncHttpClient<'c>>::call(request) | param | HttpRequest	trait	the request the AsyncHttpClient trait of oauth2 fixes, an http::Request<Vec<u8>> the provider crate builds
 ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
@@ -2027,7 +2029,6 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | ROTATION_OWED | const | &st
 ambre-server | src/redis_ops.rs | crate::redis_ops | SEGMENT_LOCKED | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.major | field | u16	generic	version component, compared as a pair
 ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.minor | field | u16	generic	version component, compared as a pair
-ambre-server | src/redis_ops.rs | crate::redis_ops | append_pending_delta::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | check_store_version(info) | param | &str	generic	parses a store reply text
 ambre-server | src/redis_ops.rs | crate::redis_ops | primary_servers(nodes) | param | &str	generic	parses a store reply text, the CLUSTER NODES reply
 ambre-server | src/redis_ops.rs | crate::redis_ops | claim_snapshot_ask() | ret | Result<bool,AppError>	generic	predicate result
@@ -2067,7 +2068,6 @@ ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | ClockFe
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | membership_still_valid() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse(detail) | param | &str	free-text	refusal detail
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse_delta(detail) | param | &str	free-text	refusal detail
-ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | store_index_row() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState::watches_channel() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(field) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic codec/parser/bytes API
@@ -2407,7 +2407,6 @@ ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope::multi() | ret | bool	
 ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_locked() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_unlocked() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | rect_contains_rect() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/menu_bar.rs | crate::ui::menu_bar | TOP_MENUS | const | &[(MenuId,&str)]	free-text	label, message or user text
 ambre-toile | src/ui/mod.rs | crate::ui | PanelState::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor.0 | field | Cow<'static,str>	newtype-inner	CanvasCursor inner
 ambre-toile | src/ui/palette.rs | crate::ui::palette | Host::content_editable_if(editable) | param | bool	newtype-inner	the bool the one constructor of Host reads into its variant
@@ -3856,13 +3855,11 @@ ambre-murmure | src/logic/call.rs | crate::logic::call | is_own_end() | ret | bo
 ambre-murmure | src/logic/call.rs | crate::logic::call | is_own_end(key) | param | &str	generic	the codec of a call_end key: a stored key, decoded back into the Id<User> of its writer
 ambre-murmure | src/logic/call.rs | crate::logic::call | write_end() | ret | Result<bool,loro::LoroError>	generic	predicate result: whether the end was written, false when the member wrote it already
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CallPhase::accepts_a_gesture() | ret | bool	generic	predicate result: whether a call gesture may open a call now
-ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Camera::label() | ret | &'static str	free-text	the accessible name of the camera button, which says what a press does
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Camera::sends() | ret | bool	generic	predicate result: whether the camera goes into the call, which the pressed state of the button reads
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CameraRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CameraRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the camera is refused
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
-ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::label() | ret | &'static str	free-text	the accessible name of the share button, which says what a press does
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::notice() | ret | Option<&'static str>	free-text	the words the header shows the user when no screen is shared or another member took the share over
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::sends() | ret | bool	generic	predicate result: whether a screen goes into the call, which the pressed state of the button reads
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | ShareRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getDisplayMedia, which this parses into the fieldless enum
@@ -4865,6 +4862,27 @@ ambre-murmure | src/logic/schema.rs | crate::logic::schema | blank() | ret | boo
 ambre-server | src/s3.rs | crate::s3 | holds_object() | ret | Result<bool,AppError>	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | read_metered() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
 ambre-sync | src/http.rs | crate::http | read_body() | ret | Result<Vec<u8>,TransportError>	generic	opaque bytes of a response body, read under its byte cap and handed to a parser
+ambre-sync | src/json.rs | crate::json | <Objects<A> as de::VariantAccess<'de>>::struct_variant(_fields) | param | &'static[&'static str]	trait	serde VariantAccess signature: the field names a map read does not take, so the wrapper drops them
+ambre-sync | src/json.rs | crate::json | <Objects<A> as de::VariantAccess<'de>>::tuple_variant(len) | param | usize	trait	serde VariantAccess signature: the length serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_enum(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_enum(variants) | param | &'static[&'static str]	trait	serde Deserializer signature: the variant names serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_newtype_struct(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_struct(_fields) | param | &'static[&'static str]	trait	serde Deserializer signature: the field names a map read does not take, so the wrapper drops them
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_struct(_name) | param | &'static str	trait	serde Deserializer signature: the struct name a map read does not take, so the wrapper drops it
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_tuple(len) | param | usize	trait	serde Deserializer signature: the length serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_tuple_struct(len) | param | usize	trait	serde Deserializer signature: the length serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_tuple_struct(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<D> as Deserializer<'de>>::deserialize_unit_struct(name) | param | &'static str	trait	serde Deserializer signature: the name serde_json takes, which the wrapper forwards untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_bool(value) | param | bool	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_borrowed_bytes(value) | param | &'de[u8]	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_borrowed_str(value) | param | &'de str	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_bytes(value) | param | &[u8]	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_f64(value) | param | f64	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_i128(value) | param | i128	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_i64(value) | param | i64	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_str(value) | param | &str	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_u128(value) | param | u128	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_u64(value) | param | u64	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_overflows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::applied_past_cap() | ret | bool	generic	predicate result
 ambre-sync | src/lib.rs | crate | Applied::is_empty() | ret | bool	generic	predicate result
@@ -4895,7 +4913,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_del
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits_snapshot() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::admits() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::readmits() | ret | bool	generic	predicate result
-ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap() | ret | bool	generic	predicate result: whether a snapshot fold passes a cap, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap_of() | ret | bool	generic	predicate result: whether a snapshot fold passes a cap, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | Trusted::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/snapshot_trust.rs | crate::snapshot_trust | confirmation_admitted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | absent_opens_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -4931,7 +4949,7 @@ ambre-trame | src/chrome/panel.rs | crate::chrome::panel | label() | ret | Strin
 ambre-chrome | src/controls.rs | crate::controls | ColorSwatch(label) | param | String	free-text	the accessible name and tooltip of a swatch, display text
 ambre-chrome | src/controls.rs | crate::controls | ControlSize::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-size word, which the stylesheet reads off the attribute
 ambre-chrome | src/controls.rs | crate::controls | IconLook::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-look word, which the stylesheet reads off the attribute
-ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | Signal<String>	free-text	the accessible name and tooltip of an icon button, read from a command or a property description, or following the state of a toggle
+ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | Option<Signal<String>>	free-text	the accessible name and tooltip of an icon button, for a control that reaches no command: a property, or a control of the shell alone
 ambre-chrome | src/controls.rs | crate::controls | IconButton(class) | param | Option<&'static str>	free-text	the class an application gives the button for its own stylesheet and its tests
 ambre-chrome | src/controls.rs | crate::controls | SLIDER_STEPS | const | f32	foreign-api	the max of the range input, which the one foreign call that renders the input reads
 ambre-chrome | src/controls.rs | crate::controls | SegmentBar(label) | param | String	free-text	the accessible name of a radio group, display text
@@ -4968,7 +4986,6 @@ ambre-core | src/zoom.rs | crate::zoom | WheelRate.0 | field | f64	newtype-inner
 ambre-core | src/zoom.rs | crate::zoom | WheelRate::ratio() | ret | f64	math	a scalar multiplier: the ratio a wheel step applies to the zoom factor
 ambre-toile | src/chrome/style.rs | crate::chrome::style | pressed(on) | param | bool	generic	the state a style field reads, computed by the caller, never a literal
 ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
-ambre-toile | src/chrome/cover.rs | crate::chrome::cover | shown() | ret | bool	generic	predicate result
 ambre-prose | src/doc.rs | crate::doc | write_whole_page_format() | ret | bool	generic	whether the whole page register was written; false on a refused format or a refused write
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'static str	free-text	the name of a paper a person reads
@@ -4979,6 +4996,13 @@ ambre-prose | src/view/panel.rs | crate::view::panel | LINE_SPACINGS | const | [
 ambre-prose | src/view/panel.rs | crate::view::panel | LISTS | const | [(crate::events::ListStyle,&str);3]	free-text	each list marker the paragraph section offers, beside the label a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints
+ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_space_signed() | ret | bool	generic	predicate result
+ambre-murmure | src/logic/runtime/spaces.rs | crate::logic::runtime::spaces | Runtime<D>::keep_space_signed() | ret | bool	generic	predicate result
+ambre-protocol | src/membership.rs | crate::membership | <MembershipEntry as TryFrom<Wire>>::Error | assoc | &'static str	foreign-api	the error serde's try_from attribute formats with Display; a peer never reads it back
+ambre-protocol | src/membership.rs | crate::membership | CapSlot::into_caps() | ret | Result<Caps,&'static str>	foreign-api	the error of the serde try_from conversion it feeds, formatted with Display
+ambre-logic | src/persistence.rs | crate::persistence | pinned_keys(row) | param | &[u8]	foreign-api	a trusted_keys row as the store returns it; split into typed keys at once
+ambre-prose | src/commands.rs | crate::commands | formats_selection() | ret | bool	generic	predicate result
+ambre-sync | src/census.rs | crate::census | Census::awaits() | ret | bool	generic	predicate result
 ambre-chrome | src/kit.rs | crate::kit | swatch_row(none_label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | INLINE | const | [(&str,&str,Rgb);7]	free-text	the name a person reads and the CSS text of each inline swatch, beside its colour
 ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
@@ -5029,6 +5053,11 @@ ambre-chrome | src/command.rs | crate::command | digit_of_code(code) | param | &
 ambre-core | src/call.rs | crate::call | FORWARDED | const | u32	generic	the one written figure of the call row of the budgets, which the forwarded count and the slots past it are built on
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView.hint | field | Option<String>	free-text	the muted hint at the end of a row of a select, as a chord, display text
 ambre-chrome | src/controls.rs | crate::controls | ChoiceView::hinted(hint) | param | impl Into<String>	free-text	the muted hint at the end of a row of a select, display text
+ambre-protocol | src/snapshot_confirm.rs | crate::snapshot_confirm | CONFIRM_HEAD_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-sync | src/membership_log.rs | crate::membership_log | Readmitted::under_every_cap() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::folds_past_cap_under() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | continues() | ret | bool	generic	predicate result
+ambre-chrome | src/tip.rs | crate::tip | untipped_icons() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for icon controls whose tooltip breaks the rule, which a test prints
 ambre-client-core | src/settings.rs | crate::settings | BOOT_HINT_VERSION | const | &str	generic	the version word that opens a boot hint text, which BootHint::decode matches back: part of the codec of the hint
 ambre-client-core | src/settings.rs | crate::settings | BootHintText.0 | field | String	newtype-inner	the stored text of the boot hint the newtype wraps
 ambre-client-core | src/settings.rs | crate::settings | BootHintText::as_str() | ret | &str	newtype-inner	the stored text the newtype wraps, handed to the one storage call that keeps it
@@ -5042,3 +5071,13 @@ ambre-logic | src/settings.rs | crate::settings | KIND | const | &str	generic	th
 ambre-logic | src/settings.rs | crate::settings | META | const | &str	generic	the name of the map that holds the kind marker, which the open reads back: part of the codec of the settings document
 ambre-logic | src/settings.rs | crate::settings | SETTINGS_KIND | const | &str	generic	the word the kind marker holds, which the open matches back: part of the codec of the settings document
 ambre-logic | src/settings_flow.rs | crate::settings_flow | LogicState::is_settings() | ret | bool	generic	predicate result
+ambre-chrome | src/cover.rs | crate::cover | css(v) | param | f64	foreign-api	a length getBoundingClientRect returns, narrowed once into a Px<Css> at the DOM call
+ambre-chrome | src/cover.rs | crate::cover | shown() | ret | bool	generic	predicate result: whether a measured box has an area, selects no mode
+ambre-client-core | src/cover.rs | crate::cover | PageBox::overlaps() | ret | bool	generic	predicate result: whether two boxes share an area, selects no mode
+ambre-app | src/call.rs | crate::call | leave_channel(space) | param | &str	foreign-api	the space id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Space> at once
+ambre-murmure | src/logic/runtime/removals.rs | crate::logic::runtime::removals | Runtime<D>::revoke_in_channel() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-prose | src/chrome/panel.rs | crate::chrome::panel | label_of() | ret | String	free-text	the name of a control of the text section a person reads
+ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::is_swept() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::sweep_arrival() | ret | bool	generic	state flag/predicate
+ambre-toile | src/chrome/floatbar.rs | crate::chrome::floatbar | property_title() | ret | String	free-text	the label a person reads in the tooltip of a colour trigger
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | CallIcon(class) | param | &'static str	free-text	the class an icon of the call gives its button for the stylesheet and the tests, as IconButton(class)

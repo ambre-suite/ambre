@@ -64,17 +64,42 @@ pub(crate) fn accept_return(
         .then_some(ret)
 }
 
+/// The issuer of the `oidc` provider, as the client build names it in
+/// `AMBRE_OIDC_ISSUER`. The build, never the relay, names it. So a relay
+/// still cannot send the sign-in to a host of its choice (`CHROME-139`).
+const BUILD_ISSUER: Option<&str> = option_env!("AMBRE_OIDC_ISSUER");
+
+/// The issuer the client build names, when it is an `https` address.
+fn build_issuer() -> Option<web_sys::Url> {
+    BUILD_ISSUER
+        .and_then(|text| web_sys::Url::new(text).ok())
+        .filter(|issuer| issuer.protocol() == "https:")
+}
+
+/// The provider the sign-in offers: the `oidc` provider when the client build
+/// names its issuer, Google otherwise (`ambre-spec-session.md` section 3).
+pub(crate) fn offered_provider() -> ambre_core::OidcProvider {
+    match build_issuer() {
+        Some(_) => ambre_core::OidcProvider::Oidc,
+        None => ambre_core::OidcProvider::Google,
+    }
+}
+
 /// Whether `url` may be followed: an `https` address on the authorization
-/// host of a provider the client knows. The address is data from the relay. A
-/// `javascript:` one would run in this page's origin. Any other host would
-/// show a page of the relay's choice where the user expects the provider's
-/// password prompt (`CHROME-139`).
+/// host of a provider the client knows. The host of the `oidc` provider is the
+/// host of the issuer the build names, port included. The address is data
+/// from the relay. A `javascript:` one would run in this page's origin. Any
+/// other host would show a page of the relay's choice where the user expects
+/// the provider's password prompt (`CHROME-139`).
 pub(crate) fn is_followable(url: &ambre_core::Opaque<ambre_core::ProviderUrls>) -> bool {
     web_sys::Url::new(url.as_str()).is_ok_and(|u| {
         u.protocol() == "https:"
-            && ambre_core::OidcProvider::ALL
-                .iter()
-                .any(|provider| u.host() == provider.authorization_host())
+            && ambre_core::OidcProvider::ALL.iter().any(|provider| {
+                match provider.authorization_host() {
+                    Some(host) => u.host() == host,
+                    None => build_issuer().is_some_and(|issuer| issuer.host() == u.host()),
+                }
+            })
     })
 }
 

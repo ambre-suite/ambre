@@ -380,6 +380,7 @@ async fn the_search_field_runs_the_palette_command() {
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: StaticKey::<Categories>::new("general"),
         home: Home::AmbreMenu,
+        description: None,
     };
     let ran = RwSignal::new(None::<StaticKey<Commands>>);
     let root = mount_in_container(move || {
@@ -601,6 +602,8 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         on_press: Callback::new(move |()| pressed.update(|p| p.push(label))),
         icon: None,
         chord: None,
+        description: None,
+        reach: None,
     };
     let controls = vec![
         control("Bold", Pressed::On),
@@ -608,7 +611,7 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         control("Code", Pressed::Off),
     ];
     let root = mount_in_container(
-        move || view! { <FormatBar anchor=css_point(200.0, 100.0) controls=controls /> },
+        move || view! { <FormatBar anchor=css_point(200.0, 100.0) controls=controls cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> },
     );
 
     let bar = root.query_selector("[role=\"toolbar\"]").unwrap().unwrap();
@@ -640,6 +643,64 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         .dispatch_event(&web_sys::MouseEvent::new("click").unwrap())
         .unwrap();
     assert_eq!(pressed.get_untracked(), vec!["Italic"]);
+    root.remove();
+}
+
+/// Wait for the page to lay out and paint twice, so a `ResizeObserver` has
+/// reported.
+async fn two_frames() {
+    leptos::task::tick().await;
+    for _ in 0..2 {
+        let next = js_sys::Promise::new(&mut |resolve, _| {
+            web_sys::window()
+                .unwrap()
+                .request_animation_frame(&resolve)
+                .unwrap();
+        });
+        wasm_bindgen_futures::JsFuture::from(next).await.unwrap();
+    }
+}
+
+/// `CHROME-171`: the format bar is the context bar of Prose and of Murmure.
+/// It publishes how far it reaches above the selection, and clears it when
+/// it leaves the page.
+#[wasm_bindgen_test]
+async fn the_format_bar_publishes_its_reach_and_clears_it_when_it_leaves() {
+    use ambre_client_core::cover::{Cover, Covered, Surface};
+    let cover = RwSignal::new(Cover::default());
+    let shown = RwSignal::new(true);
+    let control = FormatControl {
+        label: "Bold".to_owned(),
+        pressed: Pressed::Off,
+        on_press: Callback::new(|()| {}),
+        icon: None,
+        chord: None,
+        description: None,
+        reach: None,
+    };
+    let root = mount_in_container(move || {
+        let control = control.clone();
+        view! {
+            <Show when=move || shown.get()>
+                <FormatBar anchor=css_point(200.0, 100.0) controls=vec![control.clone()] cover=cover />
+            </Show>
+        }
+    });
+    two_frames().await;
+    let bar = root.query_selector(".ambre-format-bar").unwrap().unwrap();
+    let top = bar.get_bounding_client_rect().top();
+    let reach = match cover.get_untracked().of(Surface::ContextBar) {
+        Some(Covered::Above(reach)) => Some(reach),
+        _ => None,
+    }
+    // The bar publishes a reach above the selection.
+    .unwrap();
+    assert!((f64::from(reach.get()) - (100.0 - top)).abs() < 0.5);
+    assert!(reach.get() > 0.0);
+
+    shown.set(false);
+    two_frames().await;
+    assert_eq!(cover.get_untracked().of(Surface::ContextBar), None);
     root.remove();
 }
 
@@ -812,6 +873,7 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     };
     let entries = vec![MenuEntry::command(&item, &ambre_commands::Locale::En)];
     let root = mount_in_container(move || {
@@ -953,6 +1015,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         )],
         category: StaticKey::<Categories>::new("general"),
         home: ambre_commands::Home::AmbreMenu,
+        description: None,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.engine.recalc"),
@@ -961,6 +1024,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         keybindings: &[],
         category: StaticKey::<Categories>::new("engine"),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.merge"),
@@ -969,6 +1033,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
         keybindings: &[],
         category: StaticKey::<Categories>::new("structure"),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     },
 ];
 
@@ -1515,6 +1580,7 @@ fn ctx_command(
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
         home: ambre_commands::Home::ContextPanel,
+        description: None,
     }
 }
 

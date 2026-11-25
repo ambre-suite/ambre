@@ -32,8 +32,8 @@ fn parse_status(text: &str) -> Result<SnapshotStatus, AppError> {
 }
 
 /// The columns [`snapshot_row`] reads, in one place for every query.
-const SNAPSHOT_COLUMNS: &str =
-    "id, author_pubkey, s3_key, covered_seq, status, confirmer_pubkey, confirm_signature";
+const SNAPSHOT_COLUMNS: &str = "id, author_pubkey, s3_key, covered_seq, status, confirmer_pubkey, \
+     confirm_signature, confirm_head_position, confirm_head_digest";
 
 /// One `snapshots` row, read from [`SNAPSHOT_COLUMNS`].
 fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
@@ -55,6 +55,27 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
                     confirmer: decode_key(confirmer)?,
                     signature: FixedBytes::from_slice(&signature)
                         .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+                    head: {
+                        // The log head the confirmer signed (`AUTHOR-038`). A
+                        // negative place, or a digest of another length, is a
+                        // decode error.
+                        let position: Option<i64> = r.try_get("confirm_head_position")?;
+                        let digest: Option<Vec<u8>> = r.try_get("confirm_head_digest")?;
+                        position
+                            .map(|position| {
+                                let previous = digest
+                                    .map(|digest| FixedBytes::from_slice(&digest))
+                                    .transpose()
+                                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+                                u64::try_from(position)
+                                    .map(|position| ambre_protocol::LogHead {
+                                        position: ambre_core::Seq::new(position),
+                                        previous,
+                                    })
+                                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))
+                            })
+                            .transpose()?
+                    },
                 }),
                 _ => {
                     return Err(AppError::Internal(
@@ -238,7 +259,9 @@ pub async fn confirm_snapshot(
         "UPDATE snapshots s
          SET status = CASE WHEN s.author_pubkey = $3 THEN 'self' ELSE 'confirmed' END,
              confirmer_pubkey = CASE WHEN s.author_pubkey = $3 THEN NULL ELSE $3 END,
-             confirm_signature = CASE WHEN s.author_pubkey = $3 THEN NULL ELSE $4 END
+             confirm_signature = CASE WHEN s.author_pubkey = $3 THEN NULL ELSE $4 END,
+             confirm_head_position = CASE WHEN s.author_pubkey = $3 THEN NULL ELSE $5 END,
+             confirm_head_digest = CASE WHEN s.author_pubkey = $3 THEN NULL ELSE $6 END
          WHERE s.id = $1 AND s.document_id = $2 AND (
              (s.author_pubkey <> $3 AND s.status <> 'confirmed')
              OR (s.author_pubkey = $3 AND s.status = 'pending' AND NOT EXISTS (
@@ -257,6 +280,17 @@ pub async fn confirm_snapshot(
     .bind(did)
     .bind(confirmation.confirmer.as_slice())
     .bind(confirmation.signature.as_slice())
+    .bind(
+        confirmation
+            .head
+            .map(|head| i64::try_from(head.position.get()).unwrap_or(i64::MAX)),
+    )
+    .bind(
+        confirmation
+            .head
+            .and_then(|head| head.previous)
+            .map(|digest| digest.as_slice().to_vec()),
+    )
     .execute(pool)
     .await?;
     let status: Option<String> =
@@ -970,5 +1004,6 @@ pub(crate) fn vouched_by(confirmer: &FixedBytes<ambre_core::PublicKey>) -> Signe
     SignedConfirmation {
         confirmer: *confirmer,
         signature: FixedBytes::from_array([0; 64]),
+        head: None,
     }
 }

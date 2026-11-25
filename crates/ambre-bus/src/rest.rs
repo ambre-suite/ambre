@@ -52,6 +52,22 @@ use ambre_core::id::{Document, Id, Meeting, User};
 pub use ambre_core::{Confidential, Plaintext, RecoveryWords};
 
 // -----------------------------------------------------------------------------
+// The public keys of a recipient
+// -----------------------------------------------------------------------------
+
+/// The two public keys the relay serves for a recipient. The exchange key
+/// receives a wrapped copy, and an invite binds the signing key to them.
+///
+/// The fingerprint covers both, so the pin of a confirmed recipient holds
+/// both too. A pin of the exchange key alone would take a signing key the
+/// relay swapped in as trusted (`CHROME-141`, audit `P44`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecipientKeys {
+    pub exchange: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    pub signing: ambre_core::FixedBytes<ambre_core::PublicKey>,
+}
+
+// -----------------------------------------------------------------------------
 // Request -- request/response correlation
 // -----------------------------------------------------------------------------
 
@@ -459,9 +475,9 @@ pub enum RestEvent {
 
     // -- Sharing -----------------------------------------------------------------
     /// Phase 1 answer of the TOFU invite (`ambre-spec-key-verification.md`).
-    /// Carries the invitee's raw X25519 `exchange_pub_key` (for the byte
-    /// comparison against the `trusted_keys` store, done on the Main thread) and
-    /// the already-formatted `fingerprint` string (the chrome never hashes).
+    /// Carries the invitee's two public keys (for the byte comparison against
+    /// the `trusted_keys` store, done on the Main thread) and the
+    /// already-formatted `fingerprint` string (the chrome never hashes).
     InviteeKey {
         document_id: Id<Document>,
         user_id: Id<User>,
@@ -470,14 +486,15 @@ pub enum RestEvent {
         /// Whether a provider proved `email`. An asserted one may be a squat,
         /// so the prompt says so before any key is wrapped (`CHROME-138`).
         email_proof: ambre_core::EmailProof,
-        exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+        /// The two keys the relay serves, both compared with the pin.
+        keys: RecipientKeys,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
-    /// The answer to `FetchMemberKey`: the key the relay serves for that
-    /// user, and its fingerprint, for the same comparison with the pin.
+    /// The answer to `FetchMemberKey`: the keys the relay serves for that
+    /// user, and their fingerprint, for the same comparison with the pin.
     MemberKey {
         user_id: Id<User>,
-        exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+        keys: RecipientKeys,
         fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
     InviteSent {

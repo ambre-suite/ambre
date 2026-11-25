@@ -51,6 +51,7 @@ fn document() -> (ProseState, ambre_prose::message::BlockId, u32) {
     let text = vec![PARAGRAPH.repeat(26); 40].join("\n");
     let pasted = state.handle_view_command(ProseCommand::Paste {
         at: (first, Pos::<DocChar>::ZERO),
+        over: None,
         text,
         html: None,
         payload: None,

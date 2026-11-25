@@ -375,14 +375,37 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_provider_return_signs_the_person_in(pool: sqlx::PgPool) {
+        a_return_signs_the_person_in(pool, ambre_core::OidcProvider::Google).await;
+    }
+
+    // `SRV-340`: the same, through the issuer the configuration names, under
+    // the `oidc` paths of the shipped router.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_return_from_the_issuer_the_configuration_names_signs_the_person_in(
+        pool: sqlx::PgPool,
+    ) {
+        a_return_signs_the_person_in(pool, ambre_core::OidcProvider::Oidc).await;
+    }
+
+    /// A return from `provider` through the shipped router, the provider a
+    /// stub. The session it opens answers `/auth/me` as the person, and the
+    /// same return is not taken twice.
+    async fn a_return_signs_the_person_in(pool: sqlx::PgPool, provider: ambre_core::OidcProvider) {
         use crate::oidc::stub::{CLIENT_ID, EMAIL, NAME, StubProvider};
         let stub = StubProvider::spawn().await;
-        let clients = crate::oidc::start_oidc_clients(Some(&crate::oidc::OidcRegistration {
-            issuer: openidconnect::IssuerUrl::new(stub.issuer.clone()).unwrap(),
-            client_id: openidconnect::ClientId::new(CLIENT_ID.to_owned()),
-            client_secret: ambre_core::Confidential::<crate::oidc::OidcSecret>::new("s".to_owned()),
-            redirect_uri: openidconnect::RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
-        }))
+        let clients = crate::oidc::start_oidc_clients(
+            &[crate::oidc::OidcRegistration {
+                provider,
+                issuer: openidconnect::IssuerUrl::new(stub.issuer.clone()).unwrap(),
+                client_id: openidconnect::ClientId::new(CLIENT_ID.to_owned()),
+                client_secret: ambre_core::Confidential::<crate::oidc::OidcSecret>::new(
+                    "s".to_owned(),
+                ),
+                redirect_uri: openidconnect::RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
+            }],
+            crate::oidc::ProviderTransport::LoopbackHttp,
+        )
         .await
         .unwrap();
         let app = shipped_router(test_app_state_with(pool, clients).await);
@@ -404,7 +427,7 @@ mod handler_tests {
         };
 
         let (status, login) = send(
-            Request::get("/api/auth/google/login")
+            Request::get(format!("/api/auth/{provider}/login"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -413,7 +436,7 @@ mod handler_tests {
         let code = stub.authorize(login["url"].as_str().unwrap());
         let callback = serde_json::json!({ "code": code, "state": login["state"] }).to_string();
         let post = || {
-            Request::post("/api/auth/google/callback")
+            Request::post(format!("/api/auth/{provider}/callback"))
                 .header("content-type", "application/json")
                 .body(Body::from(callback.clone()))
                 .unwrap()
@@ -1185,6 +1208,8 @@ mod handler_tests {
             ),
             author,
             cap: None,
+            document_caps: Vec::new(),
+            elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         }
     }
@@ -1634,6 +1659,321 @@ mod handler_tests {
         assert_eq!(status, StatusCode::OK);
     }
 
+    /// A cap continuation of a revoke of `member` at `position`: a revoke
+    /// at `role` with no key, no own cap and one document cap.
+    fn continuation_at(
+        doc: Id<Document>,
+        position: u64,
+        author: Id<User>,
+        member: (Id<User>, &ed25519_dalek::SigningKey),
+        role: ambre_core::Role,
+    ) -> ambre_protocol::MembershipEntry {
+        let mut entry = entry_at(
+            doc,
+            position,
+            author,
+            member,
+            ambre_protocol::MembershipAct::Revoke,
+            role,
+        );
+        entry.document_caps = vec![ambre_protocol::DocumentCap {
+            document: Id::<Document>::mint(),
+            cap: ambre_core::Seq::<ambre_protocol::messages::DeltaAuthor>::new(position),
+        }];
+        entry
+    }
+
+    /// A document `owner` created and shared with `bob` as an editor, so its
+    /// log holds the creation and the invite. Answers the two entries.
+    async fn logged_share(
+        app: &Router,
+        owner: (&str, Id<User>, &ed25519_dalek::SigningKey),
+        bob: (Id<User>, &ed25519_dalek::SigningKey),
+        bob_email: &str,
+        doc: Id<Document>,
+    ) -> [String; 2] {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let (auth, owner_id, owner_key) = owner;
+        let create = sealed(
+            entry_at(
+                doc,
+                0,
+                owner_id,
+                (owner_id, owner_key),
+                MembershipAct::Create,
+                Role::Owner,
+            ),
+            owner_key,
+        );
+        let body = serde_json::json!({
+            "doc_type": "prose", "document_id": doc.to_string(),
+            "doc_key_enc": base64_encode(&[5u8; 73]), "entry": create,
+        });
+        let (status, _) =
+            status_and_code(app, json_request("POST", "/api/documents", auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        let invite = sealed(
+            entry_at(doc, 1, owner_id, bob, MembershipAct::Invite, Role::Editor),
+            owner_key,
+        );
+        let body = serde_json::json!({
+            "invitee_email": bob_email, "role": "editor",
+            "doc_key_enc": base64_encode(&[9u8; 73]), "key_id": key_id_hex(1), "entry": invite,
+        });
+        let share = format!("/api/documents/{doc}/share");
+        let (status, _) = status_and_code(app, json_request("POST", &share, auth, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        [create, invite]
+    }
+
+    /// Holds `SRV-339`. A removal with no rotation appends its entry, then
+    /// each cap continuation at the next place, in the order sent.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removal_appends_its_cap_continuations_after_its_entry(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@cont.test", 61).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@cont.test", 62).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let bob = (bob_id, &bob_key);
+        let [create, invite] = logged_share(
+            &app,
+            (&owner, owner_id, &owner_key),
+            bob,
+            "bob@cont.test",
+            doc,
+        )
+        .await;
+
+        let revoke = sealed(
+            entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor),
+            &owner_key,
+        );
+        let first = sealed(
+            continuation_at(doc, 3, owner_id, bob, Role::Editor),
+            &owner_key,
+        );
+        let second = sealed(
+            continuation_at(doc, 4, owner_id, bob, Role::Editor),
+            &owner_key,
+        );
+        let body = serde_json::json!({ "entry": revoke, "continued": [first, second] });
+        let removal = format!("/api/documents/{doc_id}/share/{bob_id}");
+        let (status, _) =
+            status_and_code(&app, json_request("DELETE", &removal, &owner, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [
+                create.as_str(),
+                invite.as_str(),
+                revoke.as_str(),
+                first.as_str(),
+                second.as_str()
+            ]
+        );
+        assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 1);
+    }
+
+    /// Holds `SRV-339`. A revoke that rotates the key appends its entry,
+    /// then each cap continuation at the next place, with the new key.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_revoke_appends_its_cap_continuations_after_its_entry(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@rot.test", 63).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@rot.test", 64).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let bob = (bob_id, &bob_key);
+        let [create, invite] = logged_share(
+            &app,
+            (&owner, owner_id, &owner_key),
+            bob,
+            "bob@rot.test",
+            doc,
+        )
+        .await;
+
+        let mut revoke = entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor);
+        revoke.key = Some(ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(
+            [2; 16],
+        ));
+        let revoke = sealed(revoke, &owner_key);
+        let first = sealed(
+            continuation_at(doc, 3, owner_id, bob, Role::Editor),
+            &owner_key,
+        );
+        let new_key = base64_encode(&[0xEFu8; 73]);
+        let body = serde_json::json!({
+            "user_id": bob_id.to_string(),
+            "keys": [ { "user_id": owner_id.to_string(), "doc_key_enc": new_key } ],
+            "members": [ owner_id.to_string() ],
+            "link": link_text(&doc_id, 2, 1),
+            "entry": revoke,
+            "continued": [first],
+        });
+        let path = format!("/api/documents/{doc_id}/revoke");
+        let (status, _) = status_and_code(&app, json_request("POST", &path, &owner, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [
+                create.as_str(),
+                invite.as_str(),
+                revoke.as_str(),
+                first.as_str()
+            ]
+        );
+        let members = list_members(&app, &owner, &doc_id).await;
+        assert_eq!(members.len(), 1, "the member is removed");
+        assert_eq!(members[0]["doc_key_enc"], new_key, "and the key rotated");
+    }
+
+    /// Holds `SRV-339`. A continuation that is not a cap-only revoke of the
+    /// same member by the caller at the next place refuses the whole
+    /// removal. The log keeps no entry of it and the member keeps the row,
+    /// with a rotation and without.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removal_with_a_stray_continuation_stores_nothing(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@stray.test", 65).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@stray.test", 66).await;
+        let (_carol, carol_key, carol_id) =
+            setup_signed(&app, &state, "carol@stray.test", 67).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let bob = (bob_id, &bob_key);
+        let logged = logged_share(
+            &app,
+            (&owner, owner_id, &owner_key),
+            bob,
+            "bob@stray.test",
+            doc,
+        )
+        .await;
+        let revoke = sealed(
+            entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor),
+            &owner_key,
+        );
+        let next = || continuation_at(doc, 3, owner_id, bob, Role::Editor);
+        let keyed = {
+            let mut entry = next();
+            entry.key = Some(ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(
+                [1; 16],
+            ));
+            entry
+        };
+        let uncapped = {
+            let mut entry = next();
+            entry.document_caps.clear();
+            entry
+        };
+        let own_cap = {
+            let mut entry = next();
+            entry.cap = Some(ambre_core::Seq::<ambre_protocol::messages::DeltaAuthor>::new(7));
+            entry
+        };
+        let refused = [
+            (
+                "a wrong place",
+                sealed(
+                    continuation_at(doc, 4, owner_id, bob, Role::Editor),
+                    &owner_key,
+                ),
+                StatusCode::BAD_REQUEST,
+            ),
+            ("a key", sealed(keyed, &owner_key), StatusCode::BAD_REQUEST),
+            (
+                "no document cap",
+                sealed(uncapped, &owner_key),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "an own cap",
+                sealed(own_cap, &owner_key),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "another role",
+                sealed(
+                    continuation_at(doc, 3, owner_id, bob, Role::Viewer),
+                    &owner_key,
+                ),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "another member",
+                sealed(
+                    continuation_at(doc, 3, owner_id, (carol_id, &carol_key), Role::Editor),
+                    &owner_key,
+                ),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "another signer",
+                sealed(next(), &bob_key),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            ),
+        ];
+        let removal = format!("/api/documents/{doc_id}/share/{bob_id}");
+        for (case, stray, expected) in &refused {
+            let body = serde_json::json!({ "entry": revoke, "continued": [stray] });
+            let (status, _) =
+                status_and_code(&app, json_request("DELETE", &removal, &owner, &body)).await;
+            assert_eq!(status, *expected, "{case}");
+            assert_eq!(served_log(&app, &owner, &doc_id).await, logged, "{case}");
+            assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 2, "{case}");
+        }
+        let body = serde_json::json!({ "continued": [sealed(next(), &owner_key)] });
+        let (status, _) =
+            status_and_code(&app, json_request("DELETE", &removal, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "no entry");
+        assert_eq!(served_log(&app, &owner, &doc_id).await, logged, "no entry");
+
+        let mut rotated = entry_at(doc, 2, owner_id, bob, MembershipAct::Revoke, Role::Editor);
+        rotated.key = Some(ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(
+            [2; 16],
+        ));
+        let body = serde_json::json!({
+            "user_id": bob_id.to_string(),
+            "keys": [ { "user_id": owner_id.to_string(), "doc_key_enc": base64_encode(&[7u8; 73]) } ],
+            "members": [ owner_id.to_string() ],
+            "link": link_text(&doc_id, 2, 1),
+            "entry": sealed(rotated, &owner_key),
+            "continued": [refused[0].1],
+        });
+        let path = format!("/api/documents/{doc_id}/revoke");
+        let (status, _) = status_and_code(&app, json_request("POST", &path, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "the revoke");
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            logged,
+            "the revoke"
+        );
+        assert_eq!(
+            list_members(&app, &owner, &doc_id).await.len(),
+            2,
+            "the revoke"
+        );
+        assert!(
+            key_links(&app, &owner, &doc_id).await.is_empty(),
+            "the revoke"
+        );
+    }
+
     /// An owner can change a member's role; an unknown role string is rejected.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -2079,6 +2419,60 @@ mod handler_tests {
         assert_eq!(rows, 1, "the refused name wrote no row");
     }
 
+    /// `SRV-337`: a development sign-in keeps the keys an account holds.
+    /// Another signing key or another exchange key is refused and writes
+    /// nothing. The same keys, and no key, sign in and keep them.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_dev_sign_in_keeps_the_keys_it_finds_and_refuses_others(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool.clone()).await;
+        let app = build_test_router(state);
+        let login = |body: serde_json::Value| {
+            Request::post("/api/auth/dev/login")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        };
+        let stored = || async {
+            sqlx::query_as::<_, (Vec<u8>, Vec<u8>)>(
+                "SELECT signing_pubkey, exchange_pubkey FROM users WHERE oidc_subject = 'alice'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        };
+        let held = (vec![7u8; 32], vec![8u8; 32]);
+        let first = app
+            .clone()
+            .oneshot(login(dev_login_body("alice")))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(stored().await, held);
+
+        let mut other_signing = dev_login_body("alice");
+        other_signing["signing_pub_key"] = hex::encode([9u8; 32]).into();
+        let mut other_exchange = dev_login_body("alice");
+        other_exchange["exchange_pub_key"] = hex::encode([9u8; 32]).into();
+        for (body, case) in [
+            (other_signing, "another signing key"),
+            (other_exchange, "another exchange key"),
+        ] {
+            let resp = app.clone().oneshot(login(body)).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::CONFLICT, "{case}");
+            assert_eq!(stored().await, held, "{case} wrote nothing");
+        }
+
+        for (body, case) in [
+            (dev_login_body("alice"), "the same keys"),
+            (serde_json::json!({ "username": "alice" }), "no key"),
+        ] {
+            let resp = app.clone().oneshot(login(body)).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "{case}");
+            assert_eq!(stored().await, held, "{case} keeps the keys");
+        }
+    }
+
     /// The signing key of the first key stores of these tests.
     fn store_key() -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(&[3u8; 32])
@@ -2353,6 +2747,7 @@ mod handler_tests {
         let signed_in = crate::db::sign_in_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
+            &crate::oidc::provider_issuer(ambre_core::OidcProvider::Google, None).unwrap(),
             &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
             &ambre_core::Email::from(squatter_email),
             &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
@@ -2392,6 +2787,7 @@ mod handler_tests {
         let again = crate::db::sign_in_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
+            &crate::oidc::provider_issuer(ambre_core::OidcProvider::Google, None).unwrap(),
             &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
             &ambre_core::Email::from(squatter_email),
             &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
@@ -2428,6 +2824,7 @@ mod handler_tests {
         crate::db::sign_in_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
+            &crate::oidc::provider_issuer(ambre_core::OidcProvider::Google, None).unwrap(),
             &openidconnect::SubjectIdentifier::new("sub-victim".to_owned()),
             &ambre_core::Email::from(squatter_email),
             &ambre_core::Validated::<ambre_core::DisplayName>::parse("Victim").unwrap(),
@@ -4036,6 +4433,147 @@ mod handler_tests {
         );
     }
 
+    // `SRV-315`, `SRV-334`, audit `P40`: the probe reads a store that takes any body
+    // through a link, as the stub does. The record then copies the object to
+    // a key no link names. A later put through the link changes the uploaded
+    // object alone, and the snapshot serves the bytes recorded. A second
+    // record of the id copies nothing over them.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_snapshot_record_keeps_its_object_out_of_the_reach_of_its_link(pool: sqlx::PgPool) {
+        use base64::Engine as _;
+        use sha2::Digest as _;
+        let stub = crate::test_helpers::S3Stub::spawn([]).await;
+        let s3 = crate::test_helpers::offline_s3(Some(&stub.endpoint));
+        let base = test_app_state(pool).await;
+        let custody =
+            crate::s3::read_snapshot_custody(&s3, &base.s3_bucket, &base.config.s3_env_prefix)
+                .await;
+        assert_eq!(custody, crate::s3::SnapshotCustody::RelayCopies);
+        assert!(stub.keys().is_empty(), "the probe leaves no object");
+        let mut state = crate::test_helpers::with_s3(&base, s3);
+        let mut config = (*state.config).clone();
+        config.snapshot_custody = custody;
+        Arc::get_mut(&mut state).unwrap().config = Arc::new(config);
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc = create_test_doc(&setup, &owner).await;
+        let blob: Vec<u8> = (0..=255u8).cycle().take(1031).collect();
+        let forged: Vec<u8> = blob.iter().map(|b| b ^ 0x5a).collect();
+        let digest = sha2::Sha256::digest(&blob);
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+
+        let id = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/upload-id"),
+            serde_json::json!({ "size_bytes": blob.len() }),
+        )
+        .await;
+        let minted = id["snapshot_id"].as_str().unwrap().to_owned();
+        let link = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/upload-url"),
+            serde_json::json!({
+                "size_bytes": blob.len(),
+                "snapshot_id": minted,
+                "sha256": hex::encode(digest),
+            }),
+        )
+        .await;
+        let url = link["upload_url"].as_str().unwrap();
+        let header = base64::engine::general_purpose::STANDARD.encode(digest);
+        let put = |body: Vec<u8>| {
+            http.put(url)
+                .header("x-amz-checksum-sha256", header.clone())
+                .body(body)
+                .send()
+        };
+        let first = put(blob.clone()).await.unwrap();
+        assert!(first.status().is_success(), "upload: {}", first.status());
+
+        let s3_key = link["s3_key"].as_str().unwrap().to_owned();
+        let record = serde_json::json!({
+            "author_pubkey": hex::encode([3u8; 32]),
+            "s3_key": s3_key,
+            "covered_seq": 0,
+        });
+        post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot"),
+            record.clone(),
+        )
+        .await;
+        let kept = stub
+            .keys()
+            .into_iter()
+            .find(|k| k.contains("/kept/"))
+            .expect("the record copies the object");
+        assert!(kept.ends_with(&minted), "the copy keeps the id: {kept}");
+        assert_eq!(stub.object(&s3_key), None, "the uploaded object goes");
+
+        let second = put(forged.clone()).await.unwrap();
+        assert!(second.status().is_success(), "the stub takes other bytes");
+        assert_eq!(stub.object(&s3_key), Some(forged));
+        let download = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot/download-url"),
+            serde_json::json!({ "snapshot_id": minted }),
+        )
+        .await;
+        let get = http
+            .get(download["download_url"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert!(get.status().is_success(), "download: {}", get.status());
+        assert_eq!(get.bytes().await.unwrap().as_ref(), blob.as_slice());
+
+        let again = post_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/snapshot"),
+            record,
+        )
+        .await;
+        assert_eq!(again, StatusCode::CONFLICT);
+        assert_eq!(stub.object(&kept), Some(blob), "the copy stays whole");
+    }
+
+    // `SRV-334`: the pinned Garage refuses a body under the digest of other
+    // bytes. So the probe reads it as a store that verifies, and a record
+    // copies nothing. The probe leaves no object behind.
+    #[tokio::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs object storage; run with --features db"
+    )]
+    async fn the_pinned_store_reads_as_one_that_verifies_a_signed_digest() {
+        let (s3, bucket) = crate::test_helpers::storage_service().await;
+        let prefix = crate::s3::StoreText::<crate::s3::EnvPrefix>::new(format!(
+            "probe-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let custody = crate::s3::read_snapshot_custody(&s3, &bucket, &prefix).await;
+        assert_eq!(custody, crate::s3::SnapshotCustody::StoreVerifies);
+        let left = s3
+            .list_objects_v2()
+            .bucket(bucket.as_str())
+            .prefix(prefix.as_str())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            left.key_count().unwrap_or(0),
+            0,
+            "the probe leaves no object"
+        );
+    }
+
     // `ZK-008`: no presigned URL is signed before the document's access check.
     // An outsider gets none of the four (`SRV-002`), a viewer gets neither
     // upload URL (`SRV-056`).
@@ -4474,6 +5012,18 @@ mod handler_tests {
         covered: u64,
         author: [u8; 32],
     ) -> serde_json::Value {
+        confirm_body_under(key, (doc_id, snap), covered, author, None)
+    }
+
+    /// The body of a confirmation `key` signs as [`confirm_body`] does, under
+    /// the log head `head` when one is named (`AUTHOR-038`).
+    fn confirm_body_under(
+        key: &ed25519_dalek::SigningKey,
+        (doc_id, snap): (&str, &str),
+        covered: u64,
+        author: [u8; 32],
+        head: Option<ambre_protocol::LogHead>,
+    ) -> serde_json::Value {
         let blob = ambre_core::FixedBytes::<ambre_core::SnapshotDigest>::from_array([6; 32]);
         let transcript = ambre_protocol::snapshot_confirm::confirm_transcript(
             ambre_protocol::snapshot_confirm::Confirmed {
@@ -4482,13 +5032,18 @@ mod handler_tests {
                 covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(covered),
                 author: &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 blob: &blob,
+                head,
             },
         );
         let signature = ed25519_dalek::Signer::sign(key, transcript.as_bytes());
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "signature": hex::encode(signature.to_bytes()),
             "blob": hex::encode(blob.as_array()),
-        })
+        });
+        if let Some(head) = head {
+            body["head"] = serde_json::to_value(head).unwrap();
+        }
+        body
     }
 
     /// The member behind `auth`, whose signing key is `author`, uploads a
@@ -4716,6 +5271,47 @@ mod handler_tests {
         assert_eq!(served["reference"]["snapshot_id"], snap.as_str());
         assert_eq!(served["reference"]["author_pubkey"], hex::encode(author));
         assert_eq!(served["reference"]["confirmation"], *confirmation);
+    }
+
+    /// `AUTHOR-038`: a confirmation that names its confirmer's log head
+    /// stands only when the signature covers that head. The relay keeps the
+    /// head and serves it with the signature, so an open can check both.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_confirmation_keeps_the_log_head_its_confirmer_signed(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner_key = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
+        let author = owner_key.verifying_key().to_bytes();
+        let owner = setup_signing(&app, "user@ambre.app", &owner_key).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let checker_key = ed25519_dalek::SigningKey::from_bytes(&[6u8; 32]);
+        let checker = setup_signing(&app, "checker@ambre.app", &checker_key).await;
+        invite(&app, &owner, &doc_id, "checker@ambre.app", "viewer").await;
+        let snap = upload_snapshot_by(&app, &owner, &doc_id, 0, author).await;
+        let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
+        let head = ambre_protocol::LogHead {
+            position: ambre_core::Seq::new(3),
+            previous: Some(ambre_core::FixedBytes::from_array([8; 32])),
+        };
+
+        // A head the signature does not cover is refused.
+        let mut forged = confirm_body_under(&checker_key, (&doc_id, &snap), 0, author, Some(head));
+        forged["head"]["position"] = serde_json::json!(4);
+        let status = post_json(&app, &checker, confirm.clone(), forged).await;
+        assert!(status.is_client_error(), "{status}");
+        assert!(served_snapshot(&app, &checker, &doc_id).await.is_none());
+
+        let signed = confirm_body_under(&checker_key, (&doc_id, &snap), 0, author, Some(head));
+        assert_eq!(
+            post_json(&app, &checker, confirm, signed.clone()).await,
+            StatusCode::OK
+        );
+        let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
+        let confirmation: ambre_protocol::snapshot_confirm::SignedConfirmation =
+            serde_json::from_value(served["confirmation"].clone()).unwrap();
+        assert_eq!(confirmation.head, Some(head));
+        assert_eq!(served["confirmation"]["signature"], signed["signature"]);
     }
 
     /// `SRV-133`, `SRV-134`, `SRV-135`, `AUTHOR-023`: a report signed by its
