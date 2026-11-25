@@ -37,11 +37,11 @@
 | `prose-clipboard` | Copy, cut and paste. | partial | 30 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 45 |  |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 31 |  |
-| `prose-page-rendering` | What a page looks like on the canvas. | partial | 26 |  |
+| `prose-page-rendering` | What a page looks like on the canvas. | partial | 27 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | partial | 20 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | partial | 20 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 36 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 45 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 
-**28 features: 19 implemented, 8 partial, 1 design-only. 839 contract rows, 0 loose.**
+**28 features: 19 implemented, 8 partial, 1 design-only. 840 contract rows, 0 loose.**
