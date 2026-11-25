@@ -569,7 +569,7 @@ impl FrameHost {
         let mut plan = self.view.plan_repaint(raf_timestamp, hud_tick);
         // The mini video of the call bubble draws over the overlay of any application. So the
         // overlay repaints at each frame it shows a picture (`CALL-015`).
-        if crate::call_stage::mini_repaints() {
+        if crate::call_stage::mini_overlay() == LayerRepaint::Redraw {
             plan.overlay = LayerRepaint::Redraw;
         }
         // Reconcile + pump the nested child views AFTER the parent's plan_repaint

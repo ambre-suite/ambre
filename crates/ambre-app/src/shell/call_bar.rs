@@ -868,7 +868,9 @@ pub(super) fn CallFloat(
                         Mini::Folded => "Show the video of the call",
                         Mini::Open => "Hide the video of the call",
                     }
-                    aria-pressed=move || mini.get().pressed()
+                    aria-pressed=move || {
+                        ambre_chrome::Pressed::from_bool(mini.get() == Mini::Open).aria()
+                    }
                     on:click=move |_| mini.update(|m| *m = m.toggled())
                 >
                     {move || {

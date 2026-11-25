@@ -140,10 +140,10 @@ fn mini_picture() -> Option<Picture> {
     })
 }
 
-/// Whether the overlay of the frame repaints for the mini video of the bubble. The overlay then
-/// repaints at each frame while the mini video shows a picture, and once more to erase it. The
-/// content layer keeps its paint (the call video paint row of `ambre-spec-budgets.md`).
-pub(crate) fn mini_repaints() -> bool {
+/// What the mini video of the bubble asks of the overlay of the frame. The overlay repaints at
+/// each frame while the mini video shows a picture, and once more to erase it. The content layer
+/// keeps its paint (the call video paint row of `ambre-spec-budgets.md`).
+pub(crate) fn mini_overlay() -> ambre_canvas::LayerRepaint {
     let now = mini_picture();
     let before = MINI_DRAWN.with(|drawn| drawn.replace(now));
     let shows = if now.is_some() {
@@ -156,7 +156,11 @@ pub(crate) fn mini_repaints() -> bool {
             signal.set(shows);
         }
     });
-    now.is_some() || before.is_some()
+    if now.is_some() || before.is_some() {
+        ambre_canvas::LayerRepaint::Redraw
+    } else {
+        ambre_canvas::LayerRepaint::Reuse
+    }
 }
 
 /// Paints the mini video of the bubble over the overlay of any application: its backdrop, then

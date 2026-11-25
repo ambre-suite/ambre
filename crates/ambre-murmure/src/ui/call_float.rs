@@ -99,15 +99,6 @@ impl Mini {
             Self::Open => Self::Folded,
         }
     }
-
-    /// The pressed state of the faces button, as `aria-pressed` reads it.
-    #[must_use]
-    pub const fn pressed(self) -> &'static str {
-        match self {
-            Self::Folded => "false",
-            Self::Open => "true",
-        }
-    }
 }
 
 /// What the bubble covers of the page, as the bubble last measured it, in CSS pixels of the
@@ -226,7 +217,7 @@ mod tests {
         assert_eq!(Received::default().mini(), None);
         assert_eq!(Mini::default(), Mini::Folded);
         assert_eq!(Mini::Folded.toggled(), Mini::Open);
-        assert_eq!(Mini::Open.toggled().pressed(), "false");
+        assert_eq!(Mini::Open.toggled(), Mini::Folded);
     }
 
     /// `MURMURE-698`: the mini video lands on the canvas at its box on the page, less the corner
