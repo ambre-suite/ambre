@@ -142,6 +142,21 @@ pub struct Replied {
     pub copy: Option<Sent>,
     /// The root's segment, whose thread head moved (`MURMURE-106`).
     pub head: MurmureEvent,
+    /// The receipts the root holds for its thread, once the root names it.
+    /// The Sync worker asks the relay for a fresh one when none of them
+    /// counts (`MURMURE-762`).
+    pub proof: Option<RootProof>,
+}
+
+/// The link receipts a root holds for the thread it names (`MURMURE-762`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RootProof {
+    pub segment: Id<Segment>,
+    pub root: Id<Message>,
+    pub thread: Id<Document>,
+    /// Its first receipt, and each fresh one of the segment and of its
+    /// amendments, in no order.
+    pub receipts: Vec<ambre_core::FixedBytes<ambre_core::Signature>>,
 }
 
 impl ChannelState {
@@ -703,11 +718,105 @@ impl ChannelState {
             None
         };
         let messages = self.read_segment(segment).unwrap_or_default();
+        let proof = self.root_proof(segment, root, document);
         Ok(Replied {
             reply,
             copy,
             head: MurmureEvent::Messages { segment, messages },
+            proof,
         })
+    }
+
+    /// The receipts `root`, a message of `segment`, holds for `thread`, or
+    /// `None` while neither the root nor the amendments name that thread
+    /// (`MURMURE-762`).
+    fn root_proof(
+        &self,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+    ) -> Option<RootProof> {
+        let doc = self.doc(segment.document_id())?;
+        let wanted = thread.to_string();
+        let in_root = message_map(doc, root)
+            .and_then(|map| schema::string(&map, MessageKey::Thread))
+            .is_some_and(|named| named == wanted);
+        let amendments = self.amendments.get(&segment).map(|held| &held.doc);
+        let recorded = amendments.is_some_and(|doc| {
+            schema::string_value(
+                crate::logic::schema::root_map(doc, Root::Threads).get(&root.to_string()),
+            )
+            .is_some_and(|named| named == wanted)
+        });
+        if !in_root && !recorded {
+            return None;
+        }
+        let receipts = named_receipts(doc)
+            .into_iter()
+            .chain(
+                amendments
+                    .map(amending::recorded_receipts)
+                    .unwrap_or_default(),
+            )
+            .filter(|receipt| receipt.thread == thread)
+            .map(|receipt| receipt.signature)
+            .collect();
+        Some(RootProof {
+            segment,
+            root,
+            thread,
+            receipts,
+        })
+    }
+
+    /// Write the relay's fresh `receipt` of `thread` under the key of `by`
+    /// (`MURMURE-762`). It goes into the `thread_receipts` root of `segment`,
+    /// or of its amendments once it is locked. `None` when the entry holds it already,
+    /// or when a locked segment has no amendments yet.
+    ///
+    /// # Errors
+    /// [`MurmureError::NoSession`] before the PeerID of the document landed,
+    /// and [`MurmureError::Crdt`] when Loro refuses a write or the export.
+    pub fn write_fresh_receipt(
+        &mut self,
+        segment: Id<Segment>,
+        thread: Id<Document>,
+        receipt: ambre_core::FixedBytes<ambre_core::Signature>,
+        by: Id<User>,
+    ) -> Result<Option<Sent>, MurmureError> {
+        let key = schema::FreshKey { thread, by }.spell();
+        let hex = receipt.to_hex();
+        let write = |doc: &LoroDoc| -> Result<bool, MurmureError> {
+            let fresh = crate::logic::schema::root_map(doc, Root::ThreadReceipts);
+            if schema::string_value(fresh.get(&key)).as_deref() == Some(hex.as_str()) {
+                return Ok(false);
+            }
+            fresh.insert(&key, hex.clone())?;
+            Ok(true)
+        };
+        if self.amendable(segment) {
+            let Some(amendments) = self.amendments.get_mut(&segment) else {
+                return Ok(None);
+            };
+            let document = amendments.id;
+            let (doc, session) = amendments.session()?;
+            if !write(doc)? {
+                return Ok(None);
+            }
+            let delta = session.export_json(doc)?;
+            let mut sent = self.changed(segment, delta);
+            sent.document = document;
+            return Ok(Some(sent));
+        }
+        let Some(held) = self.held_mut(segment.document_id()) else {
+            return Ok(None);
+        };
+        let (doc, session) = held.session()?;
+        if !write(doc)? {
+            return Ok(None);
+        }
+        let delta = session.export_json(doc)?;
+        Ok(Some(self.changed(segment, delta)))
     }
 
     /// The copy in the channel of `reply`, a reply to `root`, with the held
@@ -788,8 +897,9 @@ pub(super) struct Scanned {
     amendments: Option<loro::VersionVector>,
 }
 
-/// The link receipt each root of the segment `doc` holds beside the thread
-/// its `thread` field names (`MURMURE-734`).
+/// The link receipt each root of the segment `doc` holds beside its thread
+/// (`MURMURE-734`). Then each fresh receipt of its `thread_receipts` root
+/// (`MURMURE-760`).
 pub(crate) fn named_receipts(doc: &LoroDoc) -> Vec<ambre_bus::LinkReceipt> {
     let mut named = Vec::new();
     crate::logic::schema::root_list(doc, Root::Messages).for_each(|item| {
@@ -806,6 +916,7 @@ pub(crate) fn named_receipts(doc: &LoroDoc) -> Vec<ambre_bus::LinkReceipt> {
         };
         named.push(ambre_bus::LinkReceipt { thread, signature });
     });
+    named.extend(crate::logic::schema::fresh_receipts(doc));
     named
 }
 

@@ -20,7 +20,12 @@ impl<D> Runtime<D> {
         replied: Replied,
         now: Instant<Authored>,
     ) {
-        let Replied { reply, copy, head } = replied;
+        let Replied {
+            reply,
+            copy,
+            head,
+            proof,
+        } = replied;
         self.ask(SyncCommand::SendUpdate {
             document_id: reply.document,
             payload: reply.delta,
@@ -45,7 +50,46 @@ impl<D> Runtime<D> {
             channel_id,
             event: head,
         });
+        // A rotation of the link key leaves the root's receipts counting as
+        // none. The Sync worker reads them under its key, and asks the relay
+        // for a fresh one only then (`MURMURE-762`).
+        if let Some(proof) = proof {
+            self.ask(SyncCommand::FreshenReceipt {
+                channel_id,
+                segment: proof.segment,
+                root: proof.root,
+                thread: proof.thread,
+                receipts: proof.receipts,
+            });
+        }
         self.close_if_full(channel_id, now);
+    }
+
+    /// The relay answered a fresh `receipt` of the link of `thread`, which
+    /// counts under the link key of this client. The segment of the root, or
+    /// its amendments, keep it under this member's key (`MURMURE-762`).
+    pub fn fresh_receipt(
+        &mut self,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        thread: Id<Document>,
+        receipt: ambre_core::FixedBytes<ambre_core::Signature>,
+    ) {
+        let Some(by) = self.my_user_id else {
+            return;
+        };
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        match channel.write_fresh_receipt(segment, thread, receipt, by) {
+            Ok(Some(written)) => self.ask(SyncCommand::SendUpdate {
+                document_id: written.document,
+                payload: written.delta,
+                summary: None,
+            }),
+            Ok(None) => {}
+            Err(error) => tracing::warn!("Logic: fresh receipt of {thread} not written: {error}"),
+        }
     }
 
     /// The relay linked `thread` to `root` (`SRV-213`). The root names it,

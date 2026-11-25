@@ -356,6 +356,18 @@ pub enum LogicEvent {
         thread: Id<Document>,
         receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
     },
+    /// The relay's fresh receipt of the link of `thread` to `root`, a message
+    /// of `segment`, answering
+    /// [`SyncCommand::FreshenReceipt`](crate::SyncCommand::FreshenReceipt).
+    /// It counts under the link key of this client (`SYNC-350`), and the
+    /// root's segment keeps it.
+    FreshReceipt {
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+        receipt: ambre_core::FixedBytes<ambre_core::Signature>,
+    },
     /// The relay refused the creation or the registration of `thread` for
     /// `root`, or never answered it.
     ThreadLinkFailed {

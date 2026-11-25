@@ -780,6 +780,41 @@ impl SyncState {
         });
     }
 
+    /// Ask the relay for a fresh receipt of the link of `thread`, when none
+    /// of the `receipts` its root holds counts (`SYNC-350`). A failure tells
+    /// the Logic thread nothing: the next reply asks again.
+    pub(crate) fn handle_freshen_receipt(
+        &self,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+        receipts: Vec<ambre_core::FixedBytes<ambre_core::Signature>>,
+    ) {
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        let params = crate::sharing::ReceiptParams {
+            channel_id,
+            thread,
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+        };
+        let http = crate::sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        crate::spawn(async move {
+            let result = crate::sharing::receipt_task(&http, params, &receipts).await;
+            let _ = tx.send(SyncEvent::FreshReceipt {
+                channel_id,
+                segment,
+                root,
+                thread,
+                result,
+            });
+        });
+    }
+
     /// Ask the relay to delete a channel with every document it groups
     /// (`SRV-142`). The documents stay open here until the Logic thread hears
     /// the answer and closes them, so a refusal leaves the channel whole.

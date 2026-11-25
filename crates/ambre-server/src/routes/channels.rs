@@ -748,6 +748,41 @@ pub async fn register_thread(
     }))
 }
 
+/// The relay's receipt of a link it holds, signed at the answer. A relay
+/// with no link key answers none.
+#[derive(serde::Serialize)]
+pub struct LinkReceiptJson {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
+}
+
+/// `GET /api/channels/{id}/threads/{thread}/receipt`: the receipt of a link
+/// the relay holds, under its current link seed, to any member of the channel
+/// (`SRV-390`).
+///
+/// A member writes it beside the `thread` field of the root once a rotation
+/// left no receipt there that counts (the Murmure threads spec). The route writes
+/// nothing, and signs the channel and the thread, which the relay already
+/// stores. It learns only that this member asked. A thread of another channel
+/// and a document of no channel answer the same 404, and a stranger gets 403.
+pub async fn thread_receipt(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    ids: OpaquePathId<(Id<id::Channel>, Id<Document>)>,
+) -> Result<axum::Json<LinkReceiptJson>, AppError> {
+    let (channel_id, thread) = ids.into_inner();
+    meta_role(&state, &channel_id, &auth.user_id).await?;
+    let held = db::channel_place(&state.db, &thread).await?;
+    if held != Some((channel_id, ambre_core::ChannelDocumentKind::Thread)) {
+        return Err(AppError::NotFound {
+            resource: crate::error::Resource::Document,
+        });
+    }
+    Ok(axum::Json(LinkReceiptJson {
+        receipt: state.jwt.sign_link(channel_id, thread),
+    }))
+}
+
 /// The body of an erasure: the thread name no document of the channel
 /// answers, and the owner's signature over
 /// [`ambre_protocol::thread_erasure::erasure_transcript`].
@@ -4345,6 +4380,107 @@ mod tests {
         assert!(
             !under(*DEV_LINK_KEY.as_array(), &after),
             "no receipt under the retired key"
+        );
+    }
+
+    /// `who` asks the receipt of `thread` in `channel`.
+    async fn receipt_of(
+        state: &Arc<AppState>,
+        who: Id<User>,
+        channel: &Channel,
+        thread: Id<Document>,
+    ) -> Result<LinkReceiptJson, StatusCode> {
+        thread_receipt(
+            State(state.clone()),
+            session(who),
+            OpaquePathId::new((channel.id, thread)),
+        )
+        .await
+        .map(|axum::Json(answer)| answer)
+        .map_err(|e| e.into_response().status())
+    }
+
+    /// `SRV-390`, `SRV-391`: any member of the channel, a viewer too, gets
+    /// the receipt of a link the relay holds, under its current link key.
+    /// A stranger gets none. A thread not yet linked, a thread of another
+    /// channel and a segment get none either. The ask links nothing: a later
+    /// registration still creates.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_member_gets_the_receipt_of_a_held_link_and_the_ask_writes_nothing(
+        pool: sqlx::PgPool,
+    ) {
+        use ambre_protocol::thread_erasure::link_transcript;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let eve = user(&state, "eve@test.dev").await;
+        let space = space(&state, alice, &[(vera, Role::Viewer)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let other = public_channel(&state, alice, space).await;
+        grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
+        let root = Id::<Message>::mint();
+        let mine = document(&state, alice).await;
+
+        assert_eq!(
+            receipt_of(&state, vera, &channel, mine).await.err(),
+            Some(StatusCode::NOT_FOUND),
+            "no link held yet"
+        );
+        let linked = thread(&state, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+        assert_eq!(linked.created, Creation::Created, "the ask linked nothing");
+
+        let new_seed = crate::jwt::JwtSeed::from_array([0x6b; 32]);
+        let new_key = new_seed.verifying_key_bytes();
+        let rotated = Arc::new(AppState {
+            jwt: Arc::new(
+                crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
+                    crate::test_helpers::TEST_JWT_SEED,
+                ))
+                .with_link(&new_seed),
+            ),
+            ..(*state).clone()
+        });
+        let answer = receipt_of(&rotated, vera, &channel, mine)
+            .await
+            .expect("a member gets the receipt");
+        let receipt = answer.receipt.expect("a receipt");
+        let verifies = |channel_id, thread| {
+            ed25519_dalek::VerifyingKey::from_bytes(&new_key)
+                .and_then(|key| {
+                    key.verify_strict(
+                        link_transcript(channel_id, thread).as_bytes(),
+                        &ed25519_dalek::Signature::from_bytes(receipt.as_array()),
+                    )
+                })
+                .is_ok()
+        };
+        assert!(verifies(channel.id, mine), "under the current link key");
+        assert!(!verifies(other.id, mine), "over that channel alone");
+
+        assert_eq!(
+            receipt_of(&rotated, eve, &channel, mine).await.err(),
+            Some(StatusCode::FORBIDDEN),
+            "a stranger"
+        );
+        assert_eq!(
+            receipt_of(&rotated, alice, &other, mine).await.err(),
+            Some(StatusCode::NOT_FOUND),
+            "a thread of another channel"
+        );
+        assert_eq!(
+            receipt_of(&rotated, alice, &channel, channel.segment.document_id())
+                .await
+                .err(),
+            Some(StatusCode::NOT_FOUND),
+            "a segment is no thread"
+        );
+        assert_eq!(
+            db::channel_place(&state.db, &mine).await.expect("query"),
+            Some((channel.id, ambre_core::ChannelDocumentKind::Thread)),
+            "the asks moved no link"
         );
     }
 

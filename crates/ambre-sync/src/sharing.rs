@@ -1521,6 +1521,55 @@ pub(crate) async fn thread_task<H: ShareHttp>(
     Ok((linked.thread, Some(receipt)))
 }
 
+/// Inputs for [`receipt_task`].
+pub(crate) struct ReceiptParams {
+    pub channel_id: Id<Channel>,
+    pub thread: Id<Document>,
+    pub url_scheme: crate::http::UrlScheme,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
+}
+
+/// The relay's fresh receipt of the link of `p.thread`, whose root holds
+/// `receipts` (`SYNC-350`).
+///
+/// `None` when a receipt of `receipts` counts under the pinned link key
+/// already: the relay is asked nothing. `None` too when the answer carries no
+/// receipt that counts (`SYNC-331`), so the root takes nothing a census would
+/// count as no receipt.
+///
+/// # Errors
+/// The error of the request.
+pub(crate) async fn receipt_task<H: ShareHttp>(
+    http: &H,
+    p: ReceiptParams,
+    receipts: &[FixedBytes<Signature>],
+) -> Result<Option<FixedBytes<Signature>>, http::HttpError> {
+    let counts = |signatures: &[FixedBytes<Signature>]| {
+        let held: Vec<ambre_bus::LinkReceipt> = signatures
+            .iter()
+            .map(|signature| ambre_bus::LinkReceipt {
+                thread: p.thread,
+                signature: *signature,
+            })
+            .collect();
+        crate::erasure::linked(p.channel_id, p.thread, &held)
+    };
+    if counts(receipts) {
+        return Ok(None);
+    }
+    let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
+    let url = base.route(format!(
+        "/channels/{}/threads/{}/receipt",
+        p.channel_id, p.thread
+    ));
+    let answer = http.get_json::<http::LinkReceiptResponse>(&url).await?;
+    let fresh = answer.receipt.filter(|signature| counts(&[*signature]));
+    if fresh.is_none() {
+        crate::log::warning!("[Sync] the relay answered no fresh receipt that counts");
+    }
+    Ok(fresh)
+}
+
 /// Inputs for [`settle_task`].
 pub(crate) struct SettleParams {
     pub document_id: Id<Document>,
@@ -4023,6 +4072,72 @@ mod tests {
             matches!(http.calls().last(), Some(Call::Delete(url, _)) if url.ends_with(&format!("/documents/{mine}"))),
             "the loser deletes its own document before it fails"
         );
+    }
+
+    /// Holds `SYNC-350`. A root under a receipt that counts asks the relay
+    /// nothing, whatever else it holds. A root under none asks the receipt of
+    /// its link, and takes it only when it counts. A receipt over another
+    /// thread, over another channel or by another key gives nothing.
+    #[tokio::test]
+    async fn a_root_under_no_receipt_that_counts_asks_a_fresh_one() {
+        let (channel, thread) = (Id::<Channel>::mint(), Id::<Document>::mint());
+        let params = || ReceiptParams {
+            channel_id: channel,
+            thread,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+        };
+        let garbage = FixedBytes::<Signature>::from_array([7; 64]);
+        let valid = dev_receipt(channel, thread);
+
+        let http = FakeHttp::new(Vec::new());
+        assert_eq!(
+            receipt_task(&http, params(), &[garbage, valid]).await,
+            Ok(None)
+        );
+        assert!(
+            http.calls().is_empty(),
+            "a receipt that counts asks nothing"
+        );
+
+        let answer = |receipt: Option<FixedBytes<Signature>>| {
+            receipt.map_or_else(
+                || serde_json::json!({}),
+                |receipt| serde_json::json!({ "receipt": receipt }),
+            )
+        };
+        let http = FakeHttp::new(vec![Ok(answer(Some(valid)))]);
+        assert_eq!(
+            receipt_task(&http, params(), &[garbage]).await,
+            Ok(Some(valid)),
+            "the relay's fresh receipt passes through"
+        );
+        assert!(
+            matches!(http.calls().as_slice(), [Call::Get(url)] if url.ends_with(&format!("/api/channels/{channel}/threads/{thread}/receipt"))),
+            "one ask, of that link"
+        );
+
+        let unproven = [
+            None,
+            Some(garbage),
+            Some(dev_receipt(channel, Id::<Document>::mint())),
+            Some(dev_receipt(Id::<Channel>::mint(), thread)),
+            Some(FixedBytes::from_array(
+                ed25519_dalek::Signer::sign(
+                    &author().signing_key,
+                    ambre_protocol::thread_erasure::link_transcript(channel, thread).as_bytes(),
+                )
+                .to_bytes(),
+            )),
+        ];
+        for receipt in unproven {
+            let http = FakeHttp::new(vec![Ok(answer(receipt))]);
+            assert_eq!(
+                receipt_task(&http, params(), &[]).await,
+                Ok(None),
+                "{receipt:?} is no fresh receipt"
+            );
+        }
     }
 
     fn thread_params(thread: Id<Document>) -> ThreadParams {

@@ -121,6 +121,11 @@ pub enum Refusal {
     /// kind of the document does not hold never opens (`MURMURE-679`).
     #[error("a write to a root container its signer may not write")]
     ForeignRoot,
+    /// A fresh link receipt under another member's key, of a thread the
+    /// document names nowhere, that is no signature, or removed
+    /// (`MURMURE-760`).
+    #[error("a fresh link receipt its signer may not write")]
+    ForeignReceipt,
 }
 
 impl Refusal {
@@ -372,6 +377,9 @@ pub(crate) fn check(
             root if is_root(root, FoundationRoot::Peers, ContainerType::Map) => {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
+            root if is_root(root, Root::ThreadReceipts, ContainerType::Map) => {
+                fresh_allowed(&op.content, user, held.named)?;
+            }
             // The header and the version register are the creating delta's
             // alone, and no other root is a segment's (`MURMURE-679`).
             root => founding_allowed(root, op, signer.peer, held)?,
@@ -488,6 +496,9 @@ pub(crate) fn check_amendments(
             root if is_root(root, FoundationRoot::Peers, ContainerType::Map) => {
                 entry_allowed(&op.content, signer.peer, user)?;
             }
+            root if is_root(root, Root::ThreadReceipts, ContainerType::Map) => {
+                fresh_allowed(&op.content, user, held.named)?;
+            }
             // The header and the version register are the creating delta's
             // alone, and no other root is an amendments document's
             // (`MURMURE-679`).
@@ -543,6 +554,35 @@ pub(crate) struct Held<'a> {
     /// Whether a message map other than the given container holds the
     /// identifier.
     elsewhere: &'a dyn Fn(Id<Message>, &ContainerID) -> bool,
+    /// Whether a root the document holds names the thread, or records it.
+    /// A fresh link receipt of any other thread is refused (`MURMURE-760`).
+    named: &'a dyn Fn(Id<Document>) -> bool,
+}
+
+/// Whether `content` adds a fresh link receipt that `user` may write
+/// (`MURMURE-760`). The key names a thread the document names and `user`
+/// alone, and the value reads as a signature. A member thus rewrites only
+/// their own entry, and erases or shadows no other member's. A receipt that
+/// counts stays beside every one that does not. No entry is removed.
+fn fresh_allowed(
+    content: &JsonOpContent,
+    user: Id<User>,
+    named: &dyn Fn(Id<Document>) -> bool,
+) -> Result<(), Refusal> {
+    let JsonOpContent::Map(MapOp::Insert {
+        key,
+        value: LoroValue::String(value),
+    }) = content
+    else {
+        return Err(Refusal::ForeignReceipt);
+    };
+    let takes = schema::FreshKey::parse(key).is_some_and(|key| key.by == user && named(key.thread))
+        && ambre_core::FixedBytes::<ambre_core::Signature>::from_hex(value).is_ok();
+    if takes {
+        Ok(())
+    } else {
+        Err(Refusal::ForeignReceipt)
+    }
 }
 
 /// Whether `container` is the one the operation `op` creates. Loro names a
@@ -658,6 +698,22 @@ fn thread_in(segment: &LoroDoc, key: Id<Message>) -> ThreadField {
     ThreadField::read(
         sole_message(segment, key).and_then(|map| schema::string(&map, MessageKey::Thread)),
     )
+}
+
+/// Whether a message of the segment `doc` names `thread` in its `thread`
+/// field.
+fn names_thread(doc: &LoroDoc, thread: Id<Document>) -> bool {
+    let Some(list) = schema::held_root_list(doc, Root::Messages) else {
+        return false;
+    };
+    let wanted = thread.to_string();
+    (0..list.len()).any(|index| match list.get(index) {
+        Some(ValueOrContainer::Container(Container::Map(map))) => {
+            schema::string(&Fields::<MessageKey>::new(map), MessageKey::Thread).as_deref()
+                == Some(wanted.as_str())
+        }
+        _ => false,
+    })
 }
 
 /// Whether a write to another author's message sets its `thread` field to a
@@ -948,10 +1004,29 @@ pub(crate) fn verdict(
     }
     let version = doc.oplog_vv();
     let elsewhere = |key: Id<Message>, container: &ContainerID| held_elsewhere(doc, key, container);
+    let named = |thread: Id<Document>| match rules {
+        Rules::Segment => names_thread(doc, thread),
+        Rules::Thread => false,
+        Rules::Amendments { segment } => {
+            names_thread(segment, thread)
+                || schema::held_root_map(doc, Root::Threads.as_str()).is_some_and(|threads| {
+                    let wanted = thread.to_string();
+                    let mut found = false;
+                    threads.for_each(|_, value| {
+                        found |= matches!(
+                            value,
+                            ValueOrContainer::Value(LoroValue::String(held)) if *held == *wanted
+                        );
+                    });
+                    found
+                })
+        }
+    };
     let held = Held {
         founding: Founding::of(doc),
         version: &version,
         elsewhere: &elsewhere,
+        named: &named,
     };
     match rules {
         Rules::Segment => check(

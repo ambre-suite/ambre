@@ -642,6 +642,16 @@ enum SyncEvent {
             http::HttpError,
         >,
     },
+    /// The answer to a fresh receipt request (`SyncCommand::FreshenReceipt`):
+    /// the relay's receipt of the link, when it counts and the root held none
+    /// that does.
+    FreshReceipt {
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+        result: Result<Option<ambre_core::FixedBytes<ambre_core::Signature>>, http::HttpError>,
+    },
     /// The answer to a finalize lease request
     /// (`SyncCommand::TakeFinalizeLease`).
     FinalizeLeaseAnswered {
@@ -2404,6 +2414,13 @@ impl SyncState {
                 root,
                 thread,
             } => self.handle_create_thread(channel_id, meta, segment, root, thread),
+            SyncCommand::FreshenReceipt {
+                channel_id,
+                segment,
+                root,
+                thread,
+                receipts,
+            } => self.handle_freshen_receipt(channel_id, segment, root, thread, receipts),
             SyncCommand::TakeFinalizeLease {
                 channel_id,
                 segment,

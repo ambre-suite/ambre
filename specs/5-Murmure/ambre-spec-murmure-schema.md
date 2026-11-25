@@ -146,7 +146,9 @@ names the unit two concurrent writers race for. Every document also carries the 
 | amendments | `amendments` | Map | an `Id<Message>` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | built |
 | amendments | `amendments/{id}/content` | Text | -- | the edited body, with the `mention` mark and the style marks | none: char-CRDT | messages | built |
 | amendments | `threads` | Map | an `Id<Message>` | `Id<Document>`, the thread of a locked root | the entry | threads | built |
+| segment | `thread_receipts` | Map | the thread, `:`, then the `Id<User>` who wrote it | a fresh link receipt in hex, added after a rotation of the link key (`MURMURE-760`) | the entry | threads | built |
 | amendments | `receipts` | Map | an `Id<Message>` | the link receipt in hex of the thread `threads` records | the entry | threads | built |
+| amendments | `thread_receipts` | Map | the thread, `:`, then the `Id<User>` who wrote it | a fresh link receipt in hex of a thread a locked root names | the entry | threads | built |
 | settings | `murmure/layout` | Map | an `Id<Channel>` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
 | settings | `murmure/notify` | Map | an `Id<Channel>` | `NotifyLevel` | the entry | notifications | design |
@@ -182,10 +184,12 @@ nothing in.
 * a segment document, one per time slice of a channel
   * `header`, and `messages`, per message: its fields, `content`, `attachments`, `reactions` and
     `tags`
+  * `thread_receipts`, per thread and member: a fresh link receipt
 * an amendments document, one per amended locked segment
   * `header`, and `amendments`, per message: `content`, or the delete
   * `threads`, per locked root: the thread document its first reply created
   * `receipts`, per locked root: the link receipt of that thread
+  * `thread_receipts`, per thread and member: a fresh link receipt
 * a thread document, one per message with a reply
   * `header`, and `messages`, the same message shape
 * the `murmure` section of the user settings (`ambre-spec-user-settings.md`), one per user
@@ -226,6 +230,7 @@ nothing in.
 | One `header` per document | inferring the kind from the containers present | a reader would guess before it can check, and a document of another channel would read as a valid one |
 | Messages in a List | a MovableList | nothing moves a message, and a MovableList costs more to merge for an operation nobody performs |
 | One flat map keyed by emoji and user | a map per emoji, holding a map per user | two members first reacting with one emoji create two child containers under one key, and one of the two reactions is lost |
+| One root map of fresh receipts, keyed by thread and member | a map of receipts inside each message map | two members first adding a receipt to one root create two child containers under one key, and one of the two receipts is lost |
 
 ---
 
@@ -235,7 +240,7 @@ nothing in.
 |---|---|
 | Version | `meta.schema_version` on every document, the foundation's register (`SCHEMA-004`) |
 | Read | a version past the compiled one is refused whole (`MURMURE-019`) |
-| Migration | the walk of `ambre-spec-schema-version.md`, per document kind. A step writes nothing (`MURMURE-566`). Version 1 is the first layout, so the registry is empty |
+| Migration | the walk of `ambre-spec-schema-version.md`, per document kind. A step writes nothing (`MURMURE-566`). Version 1 is the first layout. Version 2 adds the `thread_receipts` root, and its step from 1 writes nothing: a version 1 root reads its one `thread_receipt` as a set of one |
 | Bump | `MURMURE-020` |
 | Freeze | the key set and the value types of each version, frozen as in the other applications and read by `scripts/schema_freeze.py` (`MURMURE-437`) |
 | Unknown field | a map key no build knows is ignored on read, so a key a newer client wrote is dropped rather than refused |

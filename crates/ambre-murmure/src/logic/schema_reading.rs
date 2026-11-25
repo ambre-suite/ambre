@@ -348,6 +348,14 @@ fn root_reading(
             let receipts = recorded_receipts(reader.doc(stored.kind));
             receipt_reading(&receipts, stored).map(|r| format!("{r}, by amendment"))
         }
+        (Root::ThreadReceipts, DocumentKind::Segment) => {
+            let receipts = named_receipts(reader.doc(stored.kind));
+            receipt_reading(&receipts, stored).map(|r| format!("{r}, fresh"))
+        }
+        (Root::ThreadReceipts, DocumentKind::Amendments) => {
+            let receipts = recorded_receipts(reader.doc(stored.kind));
+            receipt_reading(&receipts, stored).map(|r| format!("{r}, fresh by amendment"))
+        }
         (Root::Space, DocumentKind::Space)
             if key.and_then(SpaceKey::parse) == Some(SpaceKey::Name) =>
         {
