@@ -197,6 +197,40 @@ impl<R: FixedRole> FixedBytes<R> {
     }
 }
 
+impl<R: FixedRole<Array = [u8; 32]>> FixedBytes<R> {
+    /// Reads a value of 32 bytes from its 64 hexadecimal digits, in a const
+    /// context too. A build names a key this way, so a name that spells no
+    /// key fails the build (`ZK-057`). `None` on a non-hexadecimal digit or on
+    /// any other count of digits.
+    #[must_use]
+    pub const fn from_hex_const(text: &str) -> Option<Self> {
+        // A macro and not a helper: a const fn over a bare byte would be one
+        // more primitive site for one match.
+        macro_rules! nibble {
+            ($digit:expr) => {
+                match $digit {
+                    b'0'..=b'9' => $digit - b'0',
+                    b'a'..=b'f' => $digit - b'a' + 10,
+                    b'A'..=b'F' => $digit - b'A' + 10,
+                    _ => return None,
+                }
+            };
+        }
+        let mut digits = text.as_bytes();
+        if digits.len() != 64 {
+            return None;
+        }
+        let mut bytes = [0u8; 32];
+        let mut out: &mut [u8] = &mut bytes;
+        while let ([high, low, rest @ ..], [slot, tail @ ..]) = (digits, out) {
+            *slot = (nibble!(*high) << 4) | nibble!(*low);
+            digits = rest;
+            out = tail;
+        }
+        Some(Self::from_array(bytes))
+    }
+}
+
 impl<R: FixedRole> Clone for FixedBytes<R> {
     fn clone(&self) -> Self {
         *self
@@ -381,6 +415,34 @@ impl<'de, R: FixedRole> Deserialize<'de> for FixedBytes<R> {
 mod tests {
     use super::{DebugForm, FixedBytes, FixedRole};
     use crate::{Count, Octets};
+
+    /// `ZK-057`: the const read of a build constant agrees with the runtime
+    /// read, in either case. It refuses a short text and a non-hex digit.
+    #[test]
+    fn the_const_hex_read_agrees_with_the_runtime_read() {
+        let text = "927308f53d6765503d2b64c103ab5aa47206ab39502cfe8f98442fdb543100b7";
+        let runtime = FixedBytes::<crate::PublicKey>::from_hex(text).expect("hex");
+        assert_eq!(
+            FixedBytes::<crate::PublicKey>::from_hex_const(text),
+            Some(runtime)
+        );
+        assert_eq!(
+            FixedBytes::<crate::PublicKey>::from_hex_const(&text.to_uppercase()),
+            Some(runtime)
+        );
+        assert_eq!(
+            FixedBytes::<crate::PublicKey>::from_hex_const(&text[2..]),
+            None
+        );
+        assert_eq!(
+            FixedBytes::<crate::PublicKey>::from_hex_const(&format!("{text}00")),
+            None
+        );
+        assert_eq!(
+            FixedBytes::<crate::PublicKey>::from_hex_const(&text.replacen('9', "g", 1)),
+            None
+        );
+    }
 
     /// A role wider than the 32 bytes serde derives an array for.
     enum Wide {}

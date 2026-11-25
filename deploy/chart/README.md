@@ -95,6 +95,20 @@ networkPolicy:
 
 A scraper of the metrics of the relay needs its peer in `networkPolicy.metricsFrom` (`SRV-257`).
 
+## The link key of a thread
+
+The relay signs a receipt of each thread link under the seed `thread-link-seed`, and the client
+refuses to erase a thread under a receipt its pinned key verifies (`SYNC-330`). The client pins the
+key when it is built (`ZK-057`), so the published web image counts the receipts of the deployment
+whose seed matches the key its release names. That key is `THREAD_LINK_KEY` in the release notes.
+
+A deployment with a seed of its own must build its own client, under `images.web`. `secret.sh`
+draws the seed and prints its public half, `thread-link-key`. Build the web target of
+`deploy/Dockerfile` with `--build-arg AMBRE_THREAD_LINK_KEY=<that key>`. A release build fails
+without the key, or with the development key. The relay checks its seed against
+`thread-link-key` and refuses to start under another key (`SRV-364`). It cannot see the key that
+the client it serves pins: a published client under a seed of its own names no thread.
+
 ## Sign-in
 
 The Secret takes the keys of an identity provider, as `deploy/README.md` describes them:

@@ -95,6 +95,18 @@ would read what the client keeps on the device, and a second origin needs its ow
 certificate. An organization that leaves a provider outside the European Union already runs its
 directory: name it here.
 
+## The link key of a thread
+
+The relay signs a receipt of each thread link under `THREAD_LINK_SEED`, and the client refuses to
+erase a thread under a receipt that its pinned key verifies (`SYNC-330`). `setup.sh` draws the seed
+and writes its public half as `THREAD_LINK_KEY`. The client of `web` pins that key when it is built,
+and the relay refuses to start under a seed of another key (`SRV-364`). A client that pins no key
+names no thread, so keep the pair together.
+
+An `.env` written before the link key lacks both values, and `docker compose` then stops. Draw a
+pair as `setup.sh` does, add both lines, and run `docker compose up -d --build`: the client must be
+built again for the new key.
+
 ## Web embeds
 
 A Toile web embed loads a page of another site only when the deployment names that site. Set

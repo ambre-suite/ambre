@@ -83,6 +83,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
 # writes them into the page policy, and no frame loads without one (`SRV-312`).
 # `AMBRE_OIDC_ISSUER` names the OpenID Connect issuer the client offers in place
 # of Google, and the one host it follows a sign-in to (`CHROME-139`).
+# `AMBRE_THREAD_LINK_KEY` names the public link key of the relay that serves
+# this client, in hex. A release refuses to build without one, or with the
+# development key (`ZK-057`, `scripts/link_key.py`). A `DEV_LOGIN` build pins
+# the development key when it names none.
 FROM toolchain AS web-build
 # The trunk that `scripts/client_digest.py` pins: another trunk writes another page.
 ARG TRUNK_VERSION=0.22.1
@@ -94,12 +98,14 @@ COPY . .
 ARG DEV_LOGIN=
 ARG AMBRE_EMBED_SITES=
 ARG AMBRE_OIDC_ISSUER=
+ARG AMBRE_THREAD_LINK_KEY=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
     --mount=type=cache,target=/src/target,id=target-web,sharing=locked \
     set -eu; \
     if [ -n "${DEV_LOGIN}" ]; then \
         trunk build --cargo-profile=wasm-release --features dev-login --dist /out/dist; \
     else \
+        python3 scripts/link_key.py check; \
         trunk build --release --dist /out/dist; \
     fi; \
     python3 deploy/compose/caddy_headers.py /out/dist/_headers > /out/headers.caddy

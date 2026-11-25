@@ -74,9 +74,11 @@ spec:
             {{- include "ambre.secretEnv" (dict "root" . "name" "AWS_SECRET_ACCESS_KEY" "key" "s3-secret-access-key") | nindent 12 }}
             {{- include "ambre.secretEnv" (dict "root" . "name" "JWT_SIGNING_SEED" "key" "jwt-signing-seed") | nindent 12 }}
             {{- include "ambre.secretEnv" (dict "root" . "name" "CALL_ADMISSION_SEED" "key" "call-admission-seed") | nindent 12 }}
-            # The seed of the thread link receipts (`SRV-363`), apart from
-            # every other key of the relay.
+            # The relay signs each thread link under the seed, and refuses to
+            # start under a seed of another key than the one the client pins
+            # (`SRV-364`).
             {{- include "ambre.secretEnv" (dict "root" . "name" "THREAD_LINK_SEED" "key" "thread-link-seed") | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "THREAD_LINK_KEY" "key" "thread-link-key") | nindent 12 }}
             # The metrics listen off the loopback of the pod, so the relay
             # starts only with a scrape token (`SRV-318`). No route of the web
             # server reaches them (`SRV-257`).

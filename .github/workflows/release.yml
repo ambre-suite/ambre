@@ -42,6 +42,10 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write
+    # The public link key of the relay this release serves, a repository
+    # variable and no secret: the seed stays with the deployment (`ZK-057`).
+    env:
+      AMBRE_THREAD_LINK_KEY: ${{ vars.THREAD_LINK_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,6 +58,8 @@ jobs:
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,trunk@0.22.1
+      # A release pins a link key, and never the development one (`ZK-057`).
+      - run: python3 scripts/link_key.py check
       - run: just reproducible
       - name: Publish the release
         env:
@@ -61,7 +67,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           digest=$(cat target/client-digest/ambre-client.digest)
-          printf 'Client digest (BLAKE2b-256 of the manifest): `%s`\n\nRebuild: `just reproducible %s`. Check a deployment: `b2sum -l 256 -c ambre-client.manifest` in a copy of the files it serves.\n' "$digest" "$TAG" > notes.md
+          printf 'Client digest (BLAKE2b-256 of the manifest): `%s`\n\nRebuild: `AMBRE_THREAD_LINK_KEY=%s just reproducible %s`. Check a deployment: `b2sum -l 256 -c ambre-client.manifest` in a copy of the files it serves.\n' "$digest" "$AMBRE_THREAD_LINK_KEY" "$TAG" > notes.md
           gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md \
             target/client-digest/ambre-client.manifest target/client-digest/ambre-client.digest
 
@@ -97,6 +103,8 @@ jobs:
           target: ${{ matrix.target }}
           push: true
           provenance: mode=max
+          # The client pins the link key the client digest pins (`ZK-057`).
+          build-args: AMBRE_THREAD_LINK_KEY=${{ vars.THREAD_LINK_KEY }}
           tags: ghcr.io/${{ github.repository }}/${{ matrix.target }}:${{ github.ref_name }}
       - name: Record the digest
         env:
