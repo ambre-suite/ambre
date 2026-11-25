@@ -71,4 +71,9 @@ pub enum SyncWarningCode {
     /// that removal from the member, or the member has not read it yet. The
     /// member who left may read that delta (`SYNC-298`).
     WriterBehindLog = 11,
+    /// Raised by Logic. The relay named a settings document other than the
+    /// one this device opened. The device refused it and keeps its own: a
+    /// relay that swaps the settings of a user is a sign of attack
+    /// (`SETTINGS-040`, `SETTINGS-050`).
+    SettingsRefused = 12,
 }
