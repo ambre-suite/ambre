@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-207` | `OBS` | A bold or italic mark MUST reach the glyphs of the text it covers. | this spec section 2 | `ambre_prose::logic::marks::tests::a_bold_or_italic_mark_reaches_the_glyphs` | none | verified |
 | `PROSE-UI-209` | `OBS` | An underline or strike-through mark MUST be drawn across the text it covers. | this spec section 2 | `ambre_prose::view::paint::tests::an_underline_and_a_strike_through_are_drawn_across_their_text` | none | verified |
 | `PROSE-UI-210` | `OBS` | A size, font or colour mark MUST reach the glyphs of the text it covers. | this spec section 2 | `ambre_prose::logic::marks::tests::a_size_or_font_mark_reaches_the_glyphs`; `ambre_prose::view::paint::tests::a_colour_mark_draws_its_glyphs_and_their_line_in_its_colour` | none | verified |
-| `PROSE-UI-267` | `OBS` | A highlight mark MUST be drawn under the glyphs of the text it covers, and on screen under the local selection too. | this spec section 2 | `ambre_prose::view::paint::tests::a_highlight_mark_goes_under_the_selection_and_the_glyphs` | none | verified |
+| `PROSE-UI-267` | `OBS` | A highlight mark MUST be drawn under the glyphs of the text it covers, and on screen under the local selection too. | this spec section 2 | `ambre_prose::view::paint::tests::a_highlight_mark_goes_under_the_selection_and_the_glyphs`; `ambre_belt::prose::tests::a_highlight_picked_in_the_panel_reaches_the_screen` -- a green picked in the panel shows left of the caret | none | verified |
 
 ### 1.2 Paint a page
 
