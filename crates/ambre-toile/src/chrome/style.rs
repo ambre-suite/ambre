@@ -26,9 +26,9 @@ use std::time::Duration;
 use crate::message::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
-    ColourField, ColourLayout, CommandButton, Debouncer, Field, FontField, FontSizeSelect,
-    IconButton, Labelled, LengthField, PanelContent, PanelSection, Pressed, PropertyToggle, Row,
-    Slider,
+    ChoiceRow, ChoiceView, ColourField, ColourLayout, CommandButton, Debouncer, Field, FontField,
+    FontSizeSelect, IconButton, Labelled, LengthField, PanelContent, PanelSection, Pressed,
+    PropertyToggle, Row, Select, Slider,
 };
 use ambre_core::Flag as _;
 use ambre_core::{
@@ -68,6 +68,9 @@ pub struct ToilePanelSignals {
     /// The write of the position section the view turns into its one
     /// command (`CHROME-248`).
     pub place: RwSignal<Option<PlaceEdit>>,
+    /// The snap and the ground of the board, which the board section shows,
+    /// and the write the view turns into its command.
+    pub board: RwSignal<crate::ui::grid::BoardLook>,
     /// The board's frames, which the frames section lists, and the intent
     /// that selects one (`CHROME-251`).
     pub deck: DeckSignals,
@@ -101,6 +104,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         on_command,
         restyle,
         place,
+        board: look,
         deck,
         stats,
     } = signals;
@@ -256,13 +260,32 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     };
 
     // Find has no control here: the palette and its chord reach it.
+    // The snap of the board is document state, so it lives here and never
+    // in the status bar (`CHROME-163`, `TOILE-UI-429`).
     let board = move || {
+        let snapped = move || look.with(|l| l.snap == crate::message::GridSnap::Snapped);
         view! {
             <Row>
                 {labelled(menu::SELECT_ALL)}
                 {labelled(crate::ui::menu_bar::COMMENTS)}
                 {labelled(crate::ui::menu_bar::DECK)}
             </Row>
+            <Field label="Grid">
+                <PropertyToggle
+                    property=prop(panel::SNAP)
+                    icon=icondata::MdiMagnet
+                    pressed=Signal::derive(move || Pressed::from_bool(snapped()))
+                    on_toggle=Callback::new(move |()| {
+                        let snap = if snapped() {
+                            crate::message::GridSnap::Free
+                        } else {
+                            crate::message::GridSnap::Snapped
+                        };
+                        ask(look, crate::message::BoardEdit::Snap(snap));
+                    })
+                />
+            </Field>
+            <Field label="Background">{grounds(look)}</Field>
         }
         .into_any()
     };
@@ -476,6 +499,45 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         subtitle: Signal::derive(move || kind.get().subtitle(stats.with(|s| s.map(|s| s.count)))),
         sections,
     }
+}
+
+/// Ask the view for one write of the board section.
+fn ask(look: RwSignal<crate::ui::grid::BoardLook>, edit: crate::message::BoardEdit) {
+    look.update(|l| l.asked = Some(edit));
+}
+
+/// The grounds a board lies on: the ground of the theme, then each light
+/// tint, in the shared list control. The list shows the ground the board
+/// lies on, and a pick writes another (`TOILE-UI-430`). Main already holds the
+/// list, so the section adds no view of its own.
+fn grounds(look: RwSignal<crate::ui::grid::BoardLook>) -> AnyView {
+    use crate::message::BoardGround;
+    use ambre_core::index::Pos;
+    let ground_at = |p: Pos<ChoiceRow>| {
+        p.to_usize()
+            .checked_sub(1)
+            .and_then(|i| crate::ui::grid::TINTS.get(i))
+            .map_or(BoardGround::Theme, |&(_, c)| BoardGround::Tint(c))
+    };
+    let choices = std::iter::once("Default")
+        .chain(crate::ui::grid::TINTS.iter().map(|&(name, _)| name))
+        .map(ChoiceView::text)
+        .collect();
+    view! {
+        <Select
+            label=(prop(panel::BACKGROUND).title)(&ambre_chrome::commands::Locale::En).into_string()
+            choices=choices
+            selected=Signal::derive(move || {
+                let ground = look.with(|l| l.ground);
+                (0..=crate::ui::grid::TINTS.len())
+                    .map(Pos::<ChoiceRow>::from_usize)
+                    .find(|&p| ground_at(p) == ground)
+            })
+            on_pick=Callback::new(move |p| ask(look, crate::message::BoardEdit::Ground(ground_at(p))))
+            reach=ambre_chrome::commands::Reach::Property(panel::BACKGROUND)
+        />
+    }
+    .into_any()
 }
 
 /// The stroke colour, the stroke width and the opacity, which a shape and a

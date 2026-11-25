@@ -29,7 +29,25 @@ pub fn StatusBar(
     stats: RwSignal<Option<SelStats>>,
     perf: RwSignal<PerfSnapshot>,
     zoom: RwSignal<Scale<Board, View>>,
+    board: RwSignal<crate::ui::grid::BoardLook>,
+    on_command: Callback<ambre_core::StaticKey<ambre_core::Commands>>,
 ) -> impl IntoView {
+    // The grid of this user, view state alone: the toggle writes nothing
+    // (`CHROME-149`). Its title is the one the command table gives it.
+    let grid = view! {
+        <ambre_chrome::IconButton
+            icon=icondata::MdiDotsGrid
+            label="Show grid"
+            pressed=Some(Signal::derive(move || {
+                ambre_chrome::Pressed::from_bool(
+                    board.with(|b| b.grid == crate::ui::grid::GridShown::Shown),
+                )
+            }))
+            reach=ambre_chrome::commands::Reach::Command(crate::ui::menu_bar::GRID)
+            on_press=Callback::new(move |()| on_command.run(crate::ui::menu_bar::GRID))
+        />
+    }
+    .into_any();
     // The aggregates line, recomputed whenever the selection stats change. An
     // absent/empty selection collapses to nothing (only the zoom chip shows).
     let aggregates = move || {
@@ -67,6 +85,7 @@ pub fn StatusBar(
                 }}
             </PerfDetail>
         </PerfChip>
+        {grid}
         // The zoom closes the band, at its right end, in every application
         // that zooms (`CHROME-206`).
         <ZoomChip zoom=zoom range=crate::message::ZOOM_RANGE title="Board zoom" />

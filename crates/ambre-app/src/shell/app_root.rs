@@ -435,6 +435,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_style_model,
         toile_restyle,
         toile_place,
+        toile_board,
         toile_float_bar,
         toile_quick_style,
         toile_cover,
@@ -853,6 +854,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_command,
             restyle: toile_restyle,
             place: toile_place,
+            board: toile_board,
             deck: toile_deck,
             stats: sel_stats_toile,
         })
@@ -968,6 +970,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             stats=sel_stats_toile
                             perf=perf_snap
                             zoom=board_zoom
+                            board=toile_board
+                            on_command=on_command
                         />
                     }
                     .into_any()

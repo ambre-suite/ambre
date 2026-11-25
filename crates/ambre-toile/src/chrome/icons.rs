@@ -51,6 +51,7 @@ pub fn resolve(id: StaticKey<Icons>) -> Option<icondata::Icon> {
         "minus" => icondata::MdiMinus,
         "fit-to-screen-outline" => icondata::MdiFitToScreenOutline,
         "selection-search" => icondata::MdiSelectionSearch,
+        "dots-grid" => icondata::MdiDotsGrid,
         "cursor-default" => icondata::MdiCursorDefault,
         "vector-polyline" => icondata::MdiVectorPolyline,
         "shape-outline" => icondata::MdiShapeOutline,

@@ -103,8 +103,106 @@ fn mount_bar(
         fps,
         ..PerfSnapshot::default()
     });
-    let root = mount_in_container(move || view! { <StatusBar stats=stats perf=perf zoom=zoom /> });
+    let board = RwSignal::new(ambre_toile::ui::grid::BoardLook::default());
+    let root = mount_in_container(move || {
+        view! { <StatusBar stats=stats perf=perf zoom=zoom board=board on_command=Callback::new(|_| {}) /> }
+    });
     (root, zoom)
+}
+
+/// `TOILE-UI-428`, `TOILE-UI-429`: the grid toggle of the status bar shows
+/// the grid of this user and runs its command. The board section of the
+/// panel shows the snap of the board and writes the other value.
+#[wasm_bindgen_test]
+async fn the_grid_toggle_and_the_snap_show_their_state_and_act() {
+    use ambre_toile::message::{BoardEdit, GridSnap};
+    use ambre_toile::ui::grid::{BoardLook, GridShown};
+    let owner = Owner::new();
+    owner.set();
+    let board = RwSignal::new(BoardLook::default());
+    let ran = RwSignal::new(None);
+    let root = mount_in_container(move || {
+        view! {
+            <StatusBar
+                stats=RwSignal::new(None)
+                perf=RwSignal::new(PerfSnapshot::default())
+                zoom=RwSignal::new(Scale::<Board, View>::within(1.0, 0.1, 10.0))
+                board=board
+                on_command=Callback::new(move |id| ran.set(Some(id)))
+            />
+        }
+    });
+    let grid = root
+        .query_selector("[aria-label=\"Show grid\"]")
+        .unwrap()
+        .expect("the status bar shows the grid toggle");
+    assert_eq!(grid.get_attribute("aria-pressed").as_deref(), Some("true"));
+    leptos::wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&grid)
+        .unwrap()
+        .click();
+    assert_eq!(ran.get_untracked(), Some(ambre_toile::ui::menu_bar::GRID));
+    board.set(BoardLook {
+        grid: GridShown::Hidden,
+        ..BoardLook::default()
+    });
+    leptos::task::tick().await;
+    assert_eq!(grid.get_attribute("aria-pressed").as_deref(), Some("false"));
+    root.remove();
+
+    let panel = mount_toile_panel_full(
+        None,
+        CtxScope::default(),
+        panel_deck(),
+        RwSignal::new(None),
+        board,
+    );
+    leptos::task::tick().await;
+    let snap = panel
+        .query_selector("[aria-label=\"Snap to grid\"]")
+        .unwrap()
+        .expect("the board section shows the snap");
+    assert_eq!(snap.get_attribute("aria-pressed").as_deref(), Some("false"));
+    leptos::wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&snap)
+        .unwrap()
+        .click();
+    assert_eq!(
+        board.get_untracked().asked,
+        Some(BoardEdit::Snap(GridSnap::Snapped))
+    );
+    board.set(BoardLook {
+        snap: GridSnap::Snapped,
+        ..BoardLook::default()
+    });
+    leptos::task::tick().await;
+    assert_eq!(snap.get_attribute("aria-pressed").as_deref(), Some("true"));
+    // `TOILE-UI-430`: the ground of the theme, then the six tints, in the
+    // shared list. The board's own is selected, and a pick writes another.
+    let rows = panel.query_selector_all(".ambre-select-option").unwrap();
+    assert_eq!(rows.length(), 7);
+    let selected = |i| {
+        rows.item(i)
+            .and_then(|n| leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(n).ok())
+            .and_then(|e| e.get_attribute("aria-selected"))
+    };
+    assert_eq!(
+        selected(0).as_deref(),
+        Some("true"),
+        "a new board lies on the theme"
+    );
+    leptos::wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&rows.item(3).unwrap())
+        .unwrap()
+        .click();
+    let (_, tint) = ambre_toile::ui::grid::TINTS[2];
+    let ground = ambre_toile::message::BoardGround::Tint(tint);
+    assert_eq!(board.get_untracked().asked, Some(BoardEdit::Ground(ground)));
+    board.set(BoardLook {
+        ground,
+        ..BoardLook::default()
+    });
+    leptos::task::tick().await;
+    assert_eq!(selected(0).as_deref(), Some("false"));
+    assert_eq!(selected(3).as_deref(), Some("true"));
+    panel.remove();
 }
 
 /// `CHROME-206`: the zoom chip closes the status bar, at its right end.
@@ -1509,6 +1607,23 @@ fn mount_toile_panel_with(
     deck: ambre_toile::chrome::DeckSignals,
     place: RwSignal<Option<ambre_toile::ui::panel::PlaceEdit>>,
 ) -> web_sys::Element {
+    mount_toile_panel_full(
+        model,
+        scope,
+        deck,
+        place,
+        RwSignal::new(ambre_toile::ui::grid::BoardLook::default()),
+    )
+}
+
+/// Mount the board's context panel over every signal it reads and writes.
+fn mount_toile_panel_full(
+    model: Option<StyleModel>,
+    scope: CtxScope,
+    deck: ambre_toile::chrome::DeckSignals,
+    place: RwSignal<Option<ambre_toile::ui::panel::PlaceEdit>>,
+    board: RwSignal<ambre_toile::ui::grid::BoardLook>,
+) -> web_sys::Element {
     use ambre_chrome::{ContextPanel, DockSide, Fold, PanelPrefs, PanelWidth};
     let model = RwSignal::new(model);
     let scope = RwSignal::new(scope);
@@ -1518,6 +1633,7 @@ fn mount_toile_panel_with(
         on_command: Callback::new(|_| {}),
         restyle: RwSignal::new(None),
         place,
+        board,
         deck,
         stats: RwSignal::new(Some(ambre_toile::ui::status::SelStats::from_reply(
             ambre_core::Count::new(3),
