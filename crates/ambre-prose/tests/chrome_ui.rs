@@ -466,7 +466,7 @@ async fn the_spelling_popover_lists_the_corrections_and_hands_back_a_pick() {
 /// text to the view.
 #[wasm_bindgen_test]
 async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
-    use ambre_prose::view::panel::{PanelKind, TextWrite};
+    use ambre_prose::view::panel::{PanelKind, TextValue};
     use ambre_prose::view::toolbar::BarPrompt;
     let signals = ProseSignals::new();
     signals.canvas_origin.set(origin());
@@ -521,8 +521,8 @@ async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
     };
     option("Heading 1").click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Kind(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Kind(
             ambre_prose::message::ParagraphKind::Heading(ambre_prose::message::HeadingLevel::H1)
         ))
     );
@@ -560,8 +560,8 @@ async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
     field.set_value("https://example.org");
     field.dispatch_event(&event).unwrap();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Link(Some(ambre_core::LinkUrl::new(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Link(Some(ambre_core::LinkUrl::new(
             "https://example.org".to_owned()
         ))))
     );

@@ -114,6 +114,9 @@ pub struct ProseSignals {
     /// panel asked for, until the view drains it into one command
     /// (`PROSE-UI-098`).
     pub text_write: RwSignal<Option<crate::view::panel::TextWrite>>,
+    /// The selection the view holds, which a pick copies into its write
+    /// (`PROSE-UI-281`). `None` with no text selected.
+    pub selection: RwSignal<Option<crate::view::panel::PickedSelection>>,
     /// The two default fonts the layout was measured with, which the
     /// default styles section shows (`PROSE-UI-261`).
     pub fonts: RwSignal<Option<crate::doc::DocFonts>>,
@@ -163,15 +166,26 @@ impl ProseSignals {
             page_write: RwSignal::new(None),
             mode: RwSignal::new(crate::events::EditMode::Editing),
             text_write: RwSignal::new(None),
+            selection: RwSignal::new(None),
             fonts: RwSignal::new(None),
             prompt: RwSignal::new(None),
             selection_words: RwSignal::new(None),
         }
     }
 
+    /// Hand the view a write of `value` over the selection shown now. The
+    /// write keeps that selection while it waits for the outbox
+    /// (`PROSE-UI-281`).
+    pub fn pick_text_write(&self, value: crate::view::panel::TextValue) {
+        let selection = self.selection.get_untracked();
+        self.text_write
+            .set(Some(crate::view::panel::TextWrite { value, selection }));
+    }
+
     /// The command of the text write the context panel asked for, taken
-    /// out of its signal, over the selection `view` holds. `None` when no
-    /// write waits, or when it needs a selection the view no longer holds.
+    /// out of its signal, over the selection captured at its pick. `None`
+    /// when no write waits, or when the pick held no selection the write
+    /// needs.
     pub fn take_text_write(&self, view: &ProseUiState) -> Option<crate::message::ProseCommand> {
         let write = self.text_write.get_untracked()?;
         self.text_write.set(None);
@@ -539,7 +553,7 @@ fn bar_kind_list(
     signals: ProseSignals,
     kind: ambre_commands::Reading<Option<crate::message::ParagraphKind>>,
 ) -> impl IntoView {
-    use crate::view::panel::{BAR_KINDS, KIND, TextWrite};
+    use crate::view::panel::{BAR_KINDS, KIND, TextValue};
     let choices = BAR_KINDS
         .iter()
         .map(|(_, label)| ambre_chrome::ChoiceView::text(*label))
@@ -553,7 +567,7 @@ fn bar_kind_list(
     };
     let pick = Callback::new(move |p: Pos<ambre_chrome::ChoiceRow>| {
         if let Some((kind, _)) = p.to_index().and_then(|i| BAR_KINDS.get(i)) {
-            signals.text_write.set(Some(TextWrite::Kind(*kind)));
+            signals.pick_text_write(TextValue::Kind(*kind));
         }
     });
     view! {
@@ -624,15 +638,11 @@ fn bar_prompt(
             draft.set(None);
             signals.prompt.set(None);
             match prompt {
-                BarPrompt::Link => {
-                    signals
-                        .text_write
-                        .set(Some(crate::view::panel::TextWrite::Link(
-                            Some(text)
-                                .filter(|t| !t.trim().is_empty())
-                                .map(ambre_core::LinkUrl::new),
-                        )))
-                }
+                BarPrompt::Link => signals.pick_text_write(crate::view::panel::TextValue::Link(
+                    Some(text)
+                        .filter(|t| !t.trim().is_empty())
+                        .map(ambre_core::LinkUrl::new),
+                )),
                 BarPrompt::Comment => signals.intent.set(Some(AnnotationIntent::Comment { text })),
             }
         };
