@@ -703,16 +703,16 @@ pub(crate) async fn invite_task<H: ShareHttp>(
                 ApiFailure::Local(LocalFailure::PinMismatch(p.invitee)),
             );
         }
-        // A present member keeps the keys the log signs for life: they derive
-        // from the Master Seed, and the relay writes them once. Another pair
-        // is a key of the relay's choice, which the next rotation would wrap
-        // for (`SYNC-324`).
+        // A member keeps the keys the log signs for life, after a revoke too.
+        // They derive from the Master Seed, and the relay writes them once.
+        // Another pair is a key of the relay's choice, which the next rotation
+        // would wrap for (`SYNC-324`, `SYNC-326`).
         if log
             .log()
             .holds_other_keys(invitee_id, &invitee_key, &invitee.exchange_pubkey)
         {
             crate::log::warning!(
-                "Sync: the relay served other keys for a present member; invite refused"
+                "Sync: the relay served other keys for a member the log bound; invite refused"
             );
             return api_error(
                 logic_tx,
@@ -5243,6 +5243,52 @@ mod tests {
             } => failure,
             other => panic!("unexpected: {other:?}"),
         }
+    }
+
+    /// Holds `SYNC-326`. Bob was an editor, and the owner revoked him. The
+    /// relay serves another exchange key for him, another signing key, or
+    /// both. The owner's re-invite of Bob reads each as a relay fault and
+    /// posts no share, as for a present member. The re-invite under the pair
+    /// the log last bound to Bob lands, and Bob is present again under it.
+    #[tokio::test]
+    async fn a_re_invite_of_a_revoked_member_under_other_keys_posts_nothing() {
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let relay = Peer::new(40);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Editor);
+        logged.revoke(&owner, &bob);
+        let rule = LogRule::document();
+        let revoked = logged.footing().walk(&logged.log, &rule).unwrap();
+        assert_eq!(
+            revoked.log().standing(bob.author.user_id).0,
+            MemberStanding::Revoked
+        );
+        let bob_pub = own_exchange_key(&bob.xk);
+        let relay_pub = own_exchange_key(&relay.xk);
+        for (case, signing, exchange) in [
+            ("another exchange key", &bob.author.signing_key, relay_pub),
+            ("another signing key", &relay.author.signing_key, bob_pub),
+            ("both keys", &relay.author.signing_key, relay_pub),
+        ] {
+            let failure = refused_invite_by_id(&logged, &owner, &bob, signing, exchange).await;
+            assert!(
+                matches!(failure, LocalFailure::KeyReplaced(user) if user == bob.author.user_id),
+                "{case}: {failure}"
+            );
+        }
+
+        let body = invite_by_id(&logged, &owner, &bob, bob_pub).await;
+        let text = body["entry"].as_str().unwrap();
+        logged
+            .log
+            .push(serde_json::from_value(serde_json::json!(text)).unwrap());
+        let after = logged.footing().walk(&logged.log, &rule).unwrap();
+        assert_eq!(after.log().exchange_key(bob.author.user_id), Some(bob_pub));
+        assert_eq!(
+            after.log().standing(bob.author.user_id),
+            (MemberStanding::Verified, Some(Role::Editor))
+        );
     }
 
     /// Holds `SYNC-324`. Bob is a present editor. The relay serves another
