@@ -380,6 +380,7 @@ read for it.
 
 **How an entry is appended.** The relay checks the signature against the author's registered key.
 It checks that the entry names the two keys its member registered (`SRV-104`, `SRV-311`).
+It refuses a cap, a document cap or a floor on any act but a revoke (`SRV-360`, `SYNC-328`).
 It appends at the entry's position alone, under the document lock. Two writers racing for one
 position cannot fork the log: the loser is answered `LOG_MOVED`, and signs again after the winner.
 
