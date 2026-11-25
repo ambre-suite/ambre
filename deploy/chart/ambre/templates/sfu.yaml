@@ -1,0 +1,80 @@
+{{- $c := dict "root" . "component" "sfu" -}}
+{{- $media := default "$(HOST_IP)" .Values.sfu.publicAddress -}}
+# The SFU runs on the network of its node, and binds and announces the
+# address of that node as the one candidate of its media (`CALL-141`). No
+# Service selects its media port, so no load balancer fronts it. The relay
+# names one SFU, so one pod runs, and a new pod starts once the old one left
+# its ports.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "ambre.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ambre.labels" $c | nindent 8 }}
+    spec:
+      {{- include "ambre.podSecurity" (dict "uid" 999) | nindent 6 }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- with .Values.sfu.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sfu.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: sfu
+          image: {{ include "ambre.image" $c }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          ports:
+            - name: signal
+              containerPort: {{ .Values.sfu.signalPort }}
+              protocol: TCP
+            - name: media
+              containerPort: {{ .Values.sfu.mediaPort }}
+              protocol: UDP
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            # The signalling on the address of the node, for the web server
+            # alone: the firewall of the node opens the media port and no other.
+            - name: SFU_SIGNAL_ADDR
+              value: {{ printf "$(HOST_IP):%v" .Values.sfu.signalPort | quote }}
+            - name: SFU_MEDIA_ADDR
+              value: {{ printf "%s:%v" $media .Values.sfu.mediaPort | quote }}
+            - name: SFU_METRICS_ADDR
+              value: "127.0.0.1:3482"
+            {{- include "ambre.secretEnv" (dict "root" . "name" "SFU_ADMISSION_KEY" "key" "sfu-admission-key") | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: signal
+            periodSeconds: 5
+          {{- with .Values.sfu.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+# The signalling of the SFU, for the route `/sfu/` of the web server. The
+# media port is not a port of this Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "ambre.selector" $c | nindent 4 }}
+  ports:
+    - name: signal
+      port: {{ .Values.sfu.signalPort }}
+      targetPort: signal
+      protocol: TCP

@@ -8,6 +8,12 @@
 # `b2sum -l 256 -c ambre-client.manifest`.
 #
 # No release is published when the two builds differ: the job fails first.
+#
+# The same push publishes the images of the relay, the SFU, the client and the
+# preparation of the object store to the container registry of the repository,
+# then the chart of `deploy/chart/` with the digest of each image pinned in it
+# (`SRV-308`, `scripts/chart.py`). A deployment pulls each image by its digest,
+# so an auditor matches a running image to the commit of its tag.
 
 name: Release
 
@@ -52,3 +58,81 @@ jobs:
           printf 'Client digest (BLAKE2b-256 of the manifest): `%s`\n\nRebuild: `just reproducible %s`. Check a deployment: `b2sum -l 256 -c ambre-client.manifest` in a copy of the files it serves.\n' "$digest" "$TAG" > notes.md
           gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md \
             target/client-digest/ambre-client.manifest target/client-digest/ambre-client.digest
+
+  # The images of the release, one job per target of `deploy/Dockerfile`. The
+  # client is a release build: no sign-in by bare name (`ZK-045`), no embed
+  # site and no issuer of its own, since a published image serves any host.
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        target: [relay, sfu, web, init]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Sign in to the registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and push the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          provenance: mode=max
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.target }}:${{ github.ref_name }}
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p digests
+          printf '%s\n' "$DIGEST" > "digests/${{ matrix.target }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.target }}
+          path: digests/${{ matrix.target }}
+
+  # The chart of the release, with the digest of each image written in. It
+  # waits for the release the client job publishes, and adds the list of the
+  # images to it.
+  chart:
+    needs: [client-digest, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - name: Pin, check and push the chart
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          IMAGES: ghcr.io/${{ github.repository }}
+        run: |
+          version="${TAG#v}"
+          python3 scripts/chart.py pin "$version" \
+            relay="$(cat digests/relay)" sfu="$(cat digests/sfu)" \
+            web="$(cat digests/web)" init="$(cat digests/init)"
+          python3 scripts/chart.py check --release
+          for t in relay sfu web init; do printf '%s/%s@%s\n' "$IMAGES" "$t" "$(cat "digests/$t")"; done > ambre-images.txt
+          helm package deploy/chart/ambre --destination target/chart
+          echo "$GH_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "target/chart/ambre-$version.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
+          gh release upload "$TAG" ambre-images.txt "target/chart/ambre-$version.tgz"

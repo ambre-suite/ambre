@@ -1,0 +1,111 @@
+{{- if .Values.garage.enabled }}
+{{- $c := dict "root" . "component" "garage" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+data:
+  # One Garage node holding one copy of each block. The RPC secret and the
+  # admin token come from the Secret of the deployment, never from this file.
+  garage.toml: |
+    metadata_dir = "/var/lib/garage/meta"
+    data_dir = "/var/lib/garage/data"
+    db_engine = "sqlite"
+    replication_factor = 1
+    rpc_bind_addr = "0.0.0.0:3901"
+    rpc_public_addr = "127.0.0.1:3901"
+
+    [s3_api]
+    s3_region = "{{ .Values.s3.region }}"
+    api_bind_addr = "0.0.0.0:3900"
+    root_domain = ".s3.garage.localhost"
+
+    [admin]
+    api_bind_addr = "0.0.0.0:3903"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  serviceName: {{ include "ambre.name" $c }}
+  replicas: 1
+  selector:
+    matchLabels: {{- include "ambre.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ambre.labels" $c | nindent 8 }}
+    spec:
+      {{- include "ambre.podSecurity" (dict "uid" 1000) | nindent 6 }}
+      containers:
+        - name: garage
+          image: {{ .Values.garage.image }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          env:
+            {{- include "ambre.secretEnv" (dict "root" . "name" "GARAGE_RPC_SECRET" "key" "garage-rpc-secret") | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "GARAGE_ADMIN_TOKEN" "key" "garage-admin-token") | nindent 12 }}
+          ports:
+            - name: s3
+              containerPort: 3900
+            - name: admin
+              containerPort: 3903
+          readinessProbe:
+            tcpSocket:
+              port: s3
+            periodSeconds: 5
+          {{- with .Values.garage.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: meta
+              mountPath: /var/lib/garage/meta
+            - name: data
+              mountPath: /var/lib/garage/data
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "ambre.name" $c }}
+  volumeClaimTemplates:
+    - metadata:
+        name: meta
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.garage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.garage.metaSize }}
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.garage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.garage.dataSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "ambre.selector" $c | nindent 4 }}
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: s3
+    - name: admin
+      port: 3903
+      targetPort: admin
+{{- end }}

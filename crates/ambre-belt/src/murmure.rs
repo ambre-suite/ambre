@@ -615,13 +615,13 @@ pub(crate) mod tests {
                  const pc = pcs[0]; \
                  pc.getStats().then((stats) => { \
                    const out = { pcs: pcs.length, sdp: pc.localDescription && pc.localDescription.sdp, \
-                     state: pc.connectionState, sent: [], received: [], decoded: 0, energy: 0, concealed: 0, remotePort: null, \
+                     state: pc.connectionState, sent: [], received: [], decoded: 0, energy: 0, concealed: 0, remotePort: null, remoteAddress: null, \
                      notes: window.beltNotes, tracks: window.beltTracks, channels: !!window.beltChannels }; \
                    stats.forEach((s) => { \
                      const pair = (s.type === 'transport' && stats.get(s.selectedCandidatePairId)) \
                        || (s.type === 'candidate-pair' && s.nominated && s); \
                      if (pair && pair.state === 'succeeded') { \
-                       const r = stats.get(pair.remoteCandidateId); if (r) out.remotePort = r.port; } \
+                       const r = stats.get(pair.remoteCandidateId); if (r) { out.remotePort = r.port; out.remoteAddress = r.address; } } \
                      if (s.kind !== 'audio') return; \
                      if (s.type === 'outbound-rtp') out.sent.push([s.bytesSent, s.packetsSent, s.timestamp]); \
                      if (s.type === 'inbound-rtp') { \
@@ -4597,6 +4597,13 @@ pub(crate) mod tests {
     /// The media port of the SFU of the self-hosted stack (`deploy/compose/compose.yml`).
     const SELFHOST_MEDIA_PORT: u64 = 3481;
 
+    /// The address the media of the SFU must come from: `SELFHOST_MEDIA_HOST`, or none checked.
+    /// The chart under test names the address of the node, so no load balancer stands between
+    /// (`CALL-141`).
+    fn selfhost_media_host() -> Option<String> {
+        std::env::var("SELFHOST_MEDIA_HOST").ok()
+    }
+
     /// Makes every peer connection the page opens gather relay candidates alone, as a network
     /// that opens TCP on port 443 alone allows. The page then reaches the SFU through TURN.
     const RELAY_ONLY: &str = "const P = window.RTCPeerConnection; \
@@ -4633,9 +4640,9 @@ pub(crate) mod tests {
         (ada_page, bob_page)
     }
 
-    /// `SRV-310`: a call on the self-hosted stack. Ada starts it, Bob joins it from the call
-    /// message, and each decodes a second of the other. The one peer of each page is the media
-    /// port the SFU announces on the address of the host.
+    /// `SRV-310`, `CALL-141`: a call on the self-hosted stack, or on the chart under test. Ada
+    /// starts it, Bob joins it from the call message, and each decodes a second of the other. The
+    /// one peer of each page is the media port the SFU announces on the address of its host.
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "needs the self-hosted stack of deploy/compose; run just selfhost-test"]
     async fn a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp() {
@@ -4653,6 +4660,13 @@ pub(crate) mod tests {
                 Some(SELFHOST_MEDIA_PORT),
                 "the one peer is the SFU: {stats:#}"
             );
+            if let Some(host) = selfhost_media_host() {
+                assert_eq!(
+                    stats["remoteAddress"].as_str(),
+                    Some(host.as_str()),
+                    "the one peer is the address of the node of the SFU: {stats:#}"
+                );
+            }
         }
     }
 

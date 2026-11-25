@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5169 rows: 4764 shipped, of which 14 loose. 405 unbuilt.**
+**5169 rows: 4767 shipped, of which 14 loose. 402 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1774 | 583 | 996 | 835 | 562 | 4750 |
+| `verified` | 1777 | 583 | 996 | 835 | 562 | 4753 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 151 | 42 | 21 | 24 | 167 | 405 |
+| `unimplemented` | 148 | 42 | 21 | 24 | 167 | 402 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,7 +40,7 @@
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-architecture.md` | 132 | 132 | 124 | 8 |  |
 | `ambre-spec-broadcast.md` | 31 | 31 | 31 |  |  |
-| `ambre-spec-call-media.md` | 161 | 160 | 160 |  | 1 |
+| `ambre-spec-call-media.md` | 161 | 161 | 161 |  |  |
 | `ambre-spec-call-proofs.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-chrome.md` | 40 | 39 | 39 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
@@ -74,7 +74,7 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 31 | 31 | 31 |  |  |
 | `ambre-spec-sequencer.md` | 85 | 85 | 85 |  |  |
-| `ambre-spec-server.md` | 136 | 128 | 127 | 1 | 8 |
+| `ambre-spec-server.md` | 136 | 130 | 129 | 1 | 6 |
 | `ambre-spec-session.md` | 54 | 54 | 54 |  |  |
 | `ambre-spec-shell.md` | 98 | 91 | 91 |  | 7 |
 | `ambre-spec-sync.md` | 91 | 90 | 90 |  | 1 |
