@@ -119,3 +119,27 @@ and the metadata service of a cloud stay out of reach.
     - {protocol: UDP, port: 53}
     - {protocol: TCP, port: 53}
 {{- end -}}
+
+{{/*
+The addresses of the nodes, as NetworkPolicy peers (`SRV-410`, `SRV-411`).
+The SFU listens on the address of its node, so these blocks bound the egress
+of the web server to its signalling. An empty list renders nothing, and so
+does a block wider than /8 for IPv4 or /32 for IPv6: no node network of one
+cluster spans more, and a wider block reopens the port on the internet.
+*/}}
+{{- define "ambre.nodeAddresses" -}}
+{{- $cidrs := .Values.networkPolicy.nodeCidrs -}}
+{{- if not $cidrs -}}
+{{- fail "networkPolicy.nodeCidrs: the address blocks of the nodes, where the web server reaches the signalling of the SFU" -}}
+{{- end -}}
+{{- $peers := list -}}
+{{- range $cidrs -}}
+{{- $parts := splitList "/" (toString .) -}}
+{{- $min := ternary 32 8 (contains ":" (toString .)) -}}
+{{- if or (ne (len $parts) 2) (lt (atoi (last $parts)) $min) -}}
+{{- fail (printf "networkPolicy.nodeCidrs: %v is no block of /%d or narrower" . $min) -}}
+{{- end -}}
+{{- $peers = append $peers (dict "ipBlock" (dict "cidr" (toString .))) -}}
+{{- end -}}
+{{- toYaml $peers -}}
+{{- end -}}

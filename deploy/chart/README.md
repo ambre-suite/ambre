@@ -30,7 +30,8 @@ python3 scripts/image_provenance.py verify ambre-images.txt \
 kubectl create namespace ambre
 ./secret.sh ambre | kubectl apply -n ambre -f -
 helm install ambre oci://ghcr.io/ambre-suite/charts/ambre --version <version> -n ambre \
-  --set domain=ambre.example.org,tls=admin@example.org,existingSecret=ambre
+  --set domain=ambre.example.org,tls=admin@example.org,existingSecret=ambre \
+  --set-json 'networkPolicy.nodeCidrs=["10.0.1.0/24"]'
 ```
 
 Keep the Secret. Each value in it guards a store, and a new value locks the deployment out of its
@@ -51,6 +52,11 @@ it renders nothing.
   bind it.
 * **The firewall of that node opens 3481/udp, and not 3480/tcp.** The signalling listens on the
   address of the node for the web server alone.
+* **`networkPolicy.nodeCidrs` names the address blocks of the nodes** (`SRV-410`). The web server
+  reaches 3480/tcp on these blocks alone, since no pod selector names the address of a node. The
+  chart renders nothing without a block, or with a block wider than /8 for IPv4 or /32 for IPv6
+  (`SRV-411`). Name the subnet of the nodes, not the range of the pods. Cilium matches the address
+  of a node against a block only under `policy-cidr-match-mode: nodes`.
 * **The web server holds the certificate.** Caddy obtains it from the ACME account `tls`, or
   `tls=internal` gives a certificate of its own authority. The Service keeps the address of each
   client, which the relay limits by.

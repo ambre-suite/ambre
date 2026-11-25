@@ -3,6 +3,7 @@ The network of the pods (`SRV-351`). The first policy selects every pod of the
 release and admits nothing, in or out. Each policy after it admits one flow
 of the table of `ambre-spec-server.md` section 3, and no other. The SFU runs
 on the network of its node, which no NetworkPolicy governs (`CALL-141`).
+The web server reaches its signalling on the addresses of the nodes alone.
 */ -}}
 {{- $web := dict "root" . "component" "web" -}}
 {{- $relay := dict "root" . "component" "relay" -}}
@@ -51,8 +52,9 @@ spec:
         - {protocol: TCP, port: 3900}
     {{- end }}
     # The SFU listens on the address of its node, which no pod selector
-    # names, so the port alone bounds the rule.
-    - ports:
+    # names. The addresses of the nodes bound the rule (`SRV-410`).
+    - to: {{- include "ambre.nodeAddresses" . | nindent 8 }}
+      ports:
         - {protocol: TCP, port: {{ .Values.sfu.signalPort }}}
     {{- if ne .Values.tls "internal" }}
     - to: {{- include "ambre.publicAddresses" . | nindent 8 }}

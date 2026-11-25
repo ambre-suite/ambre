@@ -24,3 +24,8 @@ postgres:
   size: 1Gi
 garage:
   dataSize: 1Gi
+# The node of kind holds an address of a network of Docker, which the default
+# pools of Docker take in 172.16.0.0/12. `just chart-test` checks that each
+# node holds an address inside these blocks before the install (`SRV-410`).
+networkPolicy:
+  nodeCidrs: [172.16.0.0/12]

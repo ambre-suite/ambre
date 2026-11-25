@@ -113,6 +113,11 @@ networkPolicy:
       podSelector:
         matchLabels:
           k8s-app: kube-dns
+  # The address blocks of the nodes, for example `[10.0.1.0/24]`. The SFU
+  # listens on the address of its node, so the web server reaches its
+  # signalling on these blocks alone (`SRV-410`). Empty, or a block wider
+  # than /8 (IPv4) or /32 (IPv6), renders nothing.
+  nodeCidrs: []
   # The scrapers of the metrics port of the relay, as NetworkPolicy peers
   # (`SRV-257`). Empty: no pod reaches it.
   metricsFrom: []

@@ -949,8 +949,10 @@ chart-check:
 # `just selfhost-up` built, then the browser tier through its web server on
 # port 443 of the host. The media of a call must reach the address of the node.
 # Between the two, two probe pods find each store and the relay refused
-# (`SRV-352`). The cluster is deleted on exit, and its state printed first on a
-# failure.
+# (`SRV-352`). Before the install, each node holds an address inside the
+# blocks of the test values, where the web server reaches the signalling of the
+# SFU (`SRV-410`). The cluster is deleted on exit, and its state printed first
+# on a failure.
 chart-test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -960,6 +962,7 @@ chart-test:
     trap 'status=$?; [ $status -eq 0 ] || { kubectl $kube get pods -o wide; kubectl $kube describe pods | tail -n 80; for p in $(kubectl $kube get pods -o name); do kubectl $kube logs --all-containers "$p" | tail -n 40; done; }; kind delete cluster --name ambre-chart; exit $status' EXIT
     kind load docker-image --name ambre-chart ambre-relay:local ambre-sfu:local ambre-web:local ambre-init:local
     sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
+    python3 scripts/chart.py nodes kubectl $kube
     helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
     for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
     curl -skf -o /dev/null https://localhost/api/auth/config

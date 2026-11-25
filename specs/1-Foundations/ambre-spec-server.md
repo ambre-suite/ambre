@@ -60,6 +60,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-310` | `INV` | The self-hosting compose file of the repository MUST deploy, on one host, a stack against which the browser tier passes. | this spec section 3; `SRV-308` | `ambre_belt::prose::tests::the_self_hosted_stack_serves_two_members_one_document` -- browser tier, through the TLS front on port 443 of the stack that `just selfhost-test` builds and starts, in the CI `selfhost` job: the page is cross-origin isolated, and two members edit one document; `ambre_belt::murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp` -- the same stack: a call between two members decodes on both, and the one peer of each page is the media port of the SFU | none | verified |
 | `SRV-351` | `INV` | Each pod of the chart off the network of its node MUST accept and open only the flows of the table of this spec section 3. | README pillar "Security"; this spec section 3, the network of the chart; `SRV-309` | ci-gate -- `scripts/chart.py`, run by `just chart-check` in the CI `lint` job, renders the chart under three sets of values. It reads each NetworkPolicy, and fails a pod no policy isolates in either direction, a flow the table does not name and a flow of the table the policies refuse. The `NetworkTest` tests of `scripts/test_chart.py` plant each one | none | verified |
 | `SRV-352` | `INV` | On a cluster that enforces NetworkPolicy, a pod the flow table does not name MUST NOT reach a store or the relay of the chart. | this spec section 3, the network of the chart; `SRV-351` | ci-gate -- `scripts/chart.py probe`, run by `just chart-test` in the CI `selfhost` job on the kind cluster of the stack: a pod outside the release and a pod of the release under no component of the table each find every port of the stores and of the relay refused, and the first one reaches the web server. The `ProbeTest` tests of `scripts/test_chart.py` hold the verdict | none | verified |
+| `SRV-410` | `INV` | The web server MUST open the signalling port of the SFU only on the address blocks of the nodes that `networkPolicy.nodeCidrs` names. | README pillar "Security"; this spec section 3, the network of the chart; `SRV-351`; `CALL-141` | ci-gate -- `scripts/chart.py`, run by `just chart-check` in the CI `lint` job, reads the egress of the web server in three renders, and fails a rule on that port with no peer, a public peer or any block other than the blocks of the values. The `SignallingTest` tests of `scripts/test_chart.py` plant each one; ci-gate -- `scripts/chart.py nodes`, run by `just chart-test` in the CI `selfhost` job, fails the install when a node of kind holds no address inside the blocks of the test values. The `NodesTest` tests of `scripts/test_chart.py` hold the verdict | none | verified |
+| `SRV-411` | `INV` | The chart MUST NOT render with no address block of the nodes, or with a block wider than /8 for IPv4 or /32 for IPv6. | this spec section 3, the network of the chart; `SRV-410` | ci-gate -- `scripts/chart.py`, run by `just chart-check` in the CI `lint` job, renders the chart under each set of `NODE_REFUSALS`: an empty list, `0.0.0.0/0`, `::/0`, a /7, a /31 of IPv6 and an address with no prefix. Each render that succeeds is a fault | none | verified |
 | `SRV-354` | `INV` | A release MUST push, beside each image it publishes, a signed provenance attestation of the digest of that image. | this spec section 3; `SRV-308` | ci-gate -- `scripts/image_provenance.py`, run by `just image-provenance` in the CI `lint` job, reads each workflow of `.github/workflows/`. It refuses a job that pushes an image with no `actions/attest-build-provenance` step on the digest of that push, an attestation kept off the registry, an attestation action pinned by no commit, and a push outside `docker/build-push-action`. The tests of `scripts/test_image_provenance.py` plant each one | none | verified |
 | `SRV-355` | `INV` | A job of a workflow that pushes no image MUST NOT hold the right to sign an attestation. | this spec section 3; `SRV-354` | ci-gate -- `scripts/image_provenance.py`, run by `just image-provenance` in the CI `lint` job, refuses a workflow that grants `id-token` or `attestations` write to every job, a job that holds either and pushes no image, and a job that pushes an image without both. The tests of `scripts/test_image_provenance.py` plant each one | none | verified |
 | `SRV-356` | `INV` | The chart test of a release MUST verify the provenance of each image by its digest, against the commit and the workflow of the release, before it pulls any image. | this spec section 3; `SRV-354` | ci-gate -- `scripts/image_provenance.py`, run by `just image-provenance` in the CI `lint` job, refuses a release with no job that runs `just chart-test-release`, a chart pushed before that job, a step of it that loads an image, and a recipe that loads or pulls an image before `scripts/image_provenance.py pull`. The tests of `scripts/test_image_provenance.py` plant each one, and hold that one refusal pulls no image and that a tag with no digest fails before any call | none | verified |
@@ -209,7 +211,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 136 `verified`, 1 `human-review`, 7 `unimplemented`. A request test drives what
+* **Verification.** 138 `verified`, 1 `human-review`, 7 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -500,7 +502,7 @@ component then admits its rows:
 
 | Pod | Accepts | Opens |
 |---|---|---|
-| web server | anyone, on 8080 and 8443 | the resolver; the relay on 3000; Garage on 3900; 3480, the signalling of the SFU, on any address; 443 on a public address, for an ACME authority alone |
+| web server | anyone, on 8080 and 8443 | the resolver; the relay on 3000; Garage on 3900; 3480, the signalling of the SFU, on the blocks of `networkPolicy.nodeCidrs`; 443 on a public address, for an ACME authority alone |
 | relay | the web server on 3000; the scrapers of `networkPolicy.metricsFrom` on 9100 | the resolver; Postgres on 5432; Redis on 6379; Garage on 3900 and 3903; 443 on a public address; the stores outside the cluster that `networkPolicy.externalStores` names |
 | Postgres | the relay on 5432 | nothing |
 | Redis | the relay on 6379 | nothing |
@@ -509,8 +511,12 @@ component then admits its rows:
 A public address is any address outside the private, shared, link-local and loopback ranges. So
 the relay reaches the identity provider and never the metadata service of a cloud. The SFU runs on
 the network of its node, which no NetworkPolicy governs (`CALL-141`). The firewall of the node
-bounds it, and a selector cannot name it: the web server reaches its port on any address. A store
+bounds it, and a selector cannot name it. The web server therefore reaches its signalling on the
+address blocks of the nodes alone, which `networkPolicy.nodeCidrs` names (`SRV-410`). A store
 outside the cluster needs its rule, and the chart renders nothing without one.
+
+The chart renders nothing without a block of the nodes (`SRV-411`). It also refuses a block wider
+than /8 for IPv4 or /32 for IPv6, since such a block opens the port on the internet.
 
 A NetworkPolicy binds only a cluster whose network plugin enforces it. The kind cluster of the
 chart test enforces it, and two probe pods find each store and the relay refused there (`SRV-352`).
