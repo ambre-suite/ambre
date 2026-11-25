@@ -440,7 +440,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
         theme_ctl,
-        account_theme,
+        account_settings,
         toile_toggles,
         style_state,
         toasts,
@@ -531,7 +531,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     {
         let theme_ctl = theme_ctl.clone();
         Effect::new(move |_| {
-            account_theme.track();
+            account_settings.track();
             theme_sig.set(theme_ctl.get());
         });
     }
@@ -904,7 +904,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // The context panel of a document page: one frame for Prose, Trame and
     // Toile, its view state kept on this device (`ambre-spec-shell.md`
     // section 2). Murmure lays out no context panel.
-    let panel_prefs = (!boot_is_murmure).then(|| super::panel::panel_prefs(booted));
+    let panel_prefs = (!boot_is_murmure)
+        .then(|| super::panel::panel_prefs(booted, account_settings, to_logic.clone()));
     let panel_content = if boot_is_toile {
         toile_chrome::toile_panel(toile_chrome::ToilePanelSignals {
             model: toile_style_model,

@@ -36,7 +36,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | `ambre_prose::view::paint::tests::a_remote_caret_is_painted_after_every_glyph_of_its_page` | none | verified |
 | `PROSE-UI-207` | `OBS` | A bold or italic mark MUST reach the glyphs of the text it covers. | this spec section 2 | `ambre_prose::logic::marks::tests::a_bold_or_italic_mark_reaches_the_glyphs` | none | verified |
 | `PROSE-UI-209` | `OBS` | An underline or strike-through mark MUST be drawn across the text it covers. | this spec section 2 | `ambre_prose::view::paint::tests::an_underline_and_a_strike_through_are_drawn_across_their_text` | none | verified |
-| `PROSE-UI-210` | `OBS` | A size, font or colour mark MUST reach the glyphs of the text it covers. | this spec section 2 | not built | unbuilt -- lands with the `The format bar's other controls` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `PROSE-UI-210` | `OBS` | A size, font or colour mark MUST reach the glyphs of the text it covers. | this spec section 2 | `ambre_prose::logic::marks::tests::a_size_or_font_mark_reaches_the_glyphs`; `ambre_prose::view::paint::tests::a_colour_mark_draws_its_glyphs_and_their_line_in_its_colour` | none | verified |
+| `PROSE-UI-280` | `OBS` | A highlight mark MUST be drawn under the glyphs of the text it covers, and on screen under the local selection too. | this spec section 2 | `ambre_prose::view::paint::tests::a_highlight_mark_goes_under_the_selection_and_the_glyphs`; `ambre_belt::prose::tests::a_highlight_picked_in_the_panel_reaches_the_screen` -- a green picked in the panel shows left of the caret | none | verified |
 
 ### 1.2 Paint a page
 
@@ -60,7 +61,7 @@ status values are normative in `ambre-spec-template.md`.
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 23 `verified`, 2 `unimplemented`. Every verified row is a host test in
+* **Verification.** 25 `verified`, 1 `unimplemented`. Every verified row is a host test in
   `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
   also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` is held in
   `crates/ambre-logic`: the Logic thread shapes, and the view draws what the bus hands it.
@@ -153,12 +154,17 @@ The steps, per page built:
 1. paint the soft shadow and the sheet, at the page origin the viewport resolves;
 2. walk the blocks the layout places on that page, continuations of split blocks included;
 3. for each block, clip to its fragment and take its drawing state from the cache;
-4. paint the selection rectangles under the glyphs, then the glyphs, then the inline highlights;
+4. paint the highlight marks, then the selection rectangles, then the glyphs in the ink of their
+   marks, then the inline highlights;
 5. paint the header, the footer and the footnote band from the runs the layout carries;
 6. paint the remote carets last, so a collaborator never hides local text.
 
 Step 4 reads the highlights indexed by block when they arrive, so a paint touches only the
 annotations of the blocks it draws (`PROSE-UI-020`).
+
+The screen paints its selections before the walk, so the screen fills the highlight marks itself,
+under its selections, and its walk leaves them out. A print has no selection, and its walk fills
+them (`PROSE-UI-280`).
 
 **What is repainted.** `RepaintStrip` is Prose's use of the shared content-repaint contract, not a
 mechanism beside it (`PROSE-UI-017`). The dirty pages map onto the shared full and reuse modes.
@@ -190,6 +196,7 @@ is on it. What is drawn, and where each colour comes from:
 | a comment highlight | the `warning` status | two fifths |
 | a suggested insertion | the `success` status | three tenths |
 | a suggested deletion | the `error` status, struck through | three tenths |
+| a highlight mark | the block's own highlight mark | full |
 | a remote caret and its selection | the peer colour (`ambre-spec-presence.md section 3`) | four fifths for the bar, a sixth for the selection |
 | a spelling error | the `error` status, as a wavy underline | full |
 

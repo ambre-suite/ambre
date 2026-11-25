@@ -48,6 +48,8 @@ mod relay;
 #[cfg(test)]
 mod serve;
 #[cfg(test)]
+mod settings;
+#[cfg(test)]
 mod store;
 #[cfg(test)]
 mod toile;
