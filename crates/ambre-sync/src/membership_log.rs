@@ -2382,15 +2382,16 @@ pub(crate) mod tests {
         assert_eq!(back.cap(&bob.public()), None);
     }
 
-    /// Holds `SYNC-300` at the walk: a cap binds on a revoke alone. Alice
-    /// signs a change of Bob's role that carries a cap, then gives him his
-    /// writing role back. The walk takes both entries, and caps and
-    /// readmits nobody: Bob writes at any clock, and his snapshot stands.
+    /// Holds `SYNC-340` at the walk. Alice signs a change of Bob's role
+    /// that carries a cap, which no client posts, then gives him his
+    /// writing role back. The capped entry is malformed: the walk stops
+    /// before it and takes nothing after it. The same two changes with no
+    /// cap walk whole.
     #[test]
-    fn a_cap_on_another_act_caps_nobody() {
+    fn a_cap_on_another_act_stops_the_walk() {
         let (alice, bob) = (Person::new(1), Person::new(2));
-        let at = Seq::<DeltaAuthor>::new;
         let mut log = created(&alice, &bob);
+        let before = log.len();
         let next = LogHead {
             position: place_after(log.len()),
             previous: log.last().and_then(digest),
@@ -2404,24 +2405,25 @@ pub(crate) mod tests {
             role: Role::Viewer,
             key: None,
         };
-        log.push(sign_capped(draft, Some(at(2)), next, alice.id, &alice.key).unwrap());
-        let walked = walk(&log);
-        assert_eq!(walked.walked_head().position, place_after(log.len()));
-        assert_eq!(Writers::of(&walked).cap(&bob.public()), None);
+        let cap = Some(Seq::<DeltaAuthor>::new(2));
+        log.push(sign_capped(draft, cap, next, alice.id, &alice.key).unwrap());
+        let back = |log: &mut Vec<MembershipEntry>| {
+            append(log, &alice, &bob, MembershipAct::ChangeRole, Role::Editor);
+        };
+        back(&mut log);
+        assert_eq!(walk(&log).walked_head().position, place_after(before));
 
+        let mut uncapped = created(&alice, &bob);
         append(
-            &mut log,
+            &mut uncapped,
             &alice,
             &bob,
             MembershipAct::ChangeRole,
-            Role::Editor,
+            Role::Viewer,
         );
-        let walked = walk(&log);
-        assert_eq!(walked.walked_head().position, place_after(log.len()));
-        let writers = Writers::of(&walked);
-        assert!(writers.admits_delta(&bob.public(), at(9), LogHead::EMPTY));
-        assert!(writers.admits_snapshot(&bob.public()));
-        assert_eq!(writers.proof_head(), None, "nobody readmitted");
+        back(&mut uncapped);
+        let walked = walk(&uncapped);
+        assert_eq!(walked.walked_head().position, place_after(uncapped.len()));
     }
 
     /// Holds `SYNC-306` at the walk. Carol leaves on her own and names her
