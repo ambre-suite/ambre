@@ -401,6 +401,77 @@ mod tests {
         assert_eq!(text.trim(), "Make this bold", "{text}");
     }
 
+    /// `PROSE-UI-267`: a highlight picked in the panel over a selected word
+    /// reaches the screen. The pixels left of the caret, which sits at the
+    /// end of the word, turn yellow once the selection collapses.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn a_highlight_picked_in_the_panel_reaches_the_screen() {
+        let page = Page::new_document("prose").await;
+        write(&page, "Make this yellow").await;
+        wait_counted(&page, "16 with spaces").await;
+        let mut keys = vec![json!({ "type": "keyDown", "value": SHIFT })];
+        for _ in 0..6 {
+            keys.push(json!({ "type": "keyDown", "value": LEFT }));
+            keys.push(json!({ "type": "keyUp", "value": LEFT }));
+        }
+        keys.push(json!({ "type": "keyUp", "value": SHIFT }));
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": keys }]))
+            .await;
+        wait_pressed(&page, "Bold", "false").await;
+        page.browser
+            .script(
+                "document.querySelector('.ambre-color button[aria-label=\"Highlight\"]').click();",
+                json!([]),
+            )
+            .await;
+        page.browser
+            .wait_for(
+                "the highlight swatches",
+                "const b = document.querySelector( \
+                   '.ambre-color-popover button[aria-label=\"#ffff00\"]'); \
+                 if (b) { b.click(); } return !!b;",
+                STEP,
+            )
+            .await;
+        press(&page, &[END]).await;
+        // The caret bar, through the input pipe the host places on it
+        // (`CHROME-007`), in canvas pixels.
+        let (ox, oy) = page.canvas_origin().await;
+        let bar = page
+            .browser
+            .script(
+                "const r = document.querySelector('textarea.ambre-input').getBoundingClientRect(); \
+                 return [r.left, r.top + r.height / 2];",
+                json!([]),
+            )
+            .await;
+        let (x, y) = (
+            bar[0].as_f64().unwrap_or(0.0) - ox,
+            bar[1].as_f64().unwrap_or(0.0) - oy,
+        );
+        let yellow = |[r, g, b]: [u8; 3]| r > 200 && g > 200 && b < 120;
+        let deadline = std::time::Instant::now() + STEP;
+        loop {
+            let mut seen = Vec::new();
+            for step in 1..=12 {
+                seen.push(page.color_at((x - 3.0 * f64::from(step), y)).await);
+            }
+            if seen.iter().filter(|&&c| yellow(c)).count() >= 3 {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "no yellow left of the caret at ({x}, {y}): {seen:?}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
     /// `CHROME-023`: the arrow keys walk the caret from paragraph to
     /// paragraph, and the live region names each one the caret enters, by its
     /// text. `Ctrl+Home` and a left arrow then place the keys typed after

@@ -8,9 +8,9 @@
 //! sheets and the selections before the walk, and the carets and the
 //! composition after it.
 
-use ambre_core::Rgba;
 use ambre_core::index::{Pos, Span};
 use ambre_core::{Count, Px, Surface};
+use ambre_draw::list::color_of;
 use ambre_draw::{
     Affine, Brush, Color, DocumentWalk, DrawSurface, LayoutText, Point, PositionedLayoutItem, Rect,
 };
@@ -202,6 +202,39 @@ pub struct PageView<'v> {
     pub(crate) pages: &'v [PagePaint],
     /// What each picture address shows now.
     pub(crate) pictures: &'v PictureStore,
+    /// Who draws the highlight marks under the glyphs.
+    pub(crate) marks: MarkFills,
+}
+
+/// Who draws the box a highlight mark fills under its glyphs (`PROSE-UI-267`).
+///
+/// The screen draws its selections before the walk, so an opaque fill the
+/// walk drew would hide them. The screen therefore fills the marks itself,
+/// under its selections, and the walk leaves them out. A print has no
+/// selection, and its walk fills them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MarkFills {
+    /// The walk fills them, under the glyphs of each block.
+    Walked,
+    /// The caller filled them before the walk, through [`fill_marks`].
+    Underlaid,
+}
+
+/// Fill the box under each highlight mark of a run drawn at `placed`.
+pub(crate) fn fill_marks<S: DrawSurface>(surface: &mut S, run: &ShapedRun, placed: &Placed) {
+    let data = run.data();
+    for span in data.marks() {
+        let Some(highlight) = span.highlight else {
+            continue;
+        };
+        let chars = Span::new(
+            data.offset_of_byte(span.start),
+            data.offset_of_byte(span.end),
+        );
+        for rect in data.range_boxes(chars) {
+            surface.fill_rect(to_rect(placed, &rect), color_of(highlight));
+        }
+    }
 }
 
 /// What each picture address shows, as the view or a print holds it.
@@ -257,13 +290,13 @@ impl PageWalk<'_> {
         let palette = view.palette;
         match item {
             PageItem::Picture(picture) => draw_picture(surface, palette, view.pictures, picture),
-            PageItem::Block(block) => self.block(surface, palette, block),
+            PageItem::Block(block) => self.block(surface, view, block),
             PageItem::Table { clip, cells } => {
                 surface.push_clip(*clip);
                 for cell in cells {
                     paint_cell_box(surface, palette, &cell.style, cell.bounds);
                     for block in &cell.blocks {
-                        self.block(surface, palette, block);
+                        self.block(surface, view, block);
                     }
                 }
                 surface.pop_clip();
@@ -283,16 +316,16 @@ impl PageWalk<'_> {
         }
     }
 
-    /// A block's glyphs, then its inline highlights over them.
-    fn block<S: DrawSurface>(
-        &mut self,
-        surface: &mut S,
-        palette: &PagePalette,
-        block: &BlockPaint,
-    ) {
+    /// A block's highlight marks, its glyphs, then its inline highlights
+    /// over them.
+    fn block<S: DrawSurface>(&mut self, surface: &mut S, view: &PageView<'_>, block: &BlockPaint) {
+        let palette = view.palette;
         let data = block.run.data();
         let placed = &block.placed;
         surface.push_clip(placed.clip);
+        if view.marks == MarkFills::Walked {
+            fill_marks(surface, &block.run, placed);
+        }
         draw_run(
             surface,
             self.runs,
@@ -481,7 +514,6 @@ fn draw_run<S: DrawSurface>(
     insertions: &[Insertion],
 ) {
     let data: &ParleyRunData = run.data();
-    let brush = Brush::Solid(color);
     // The glyph runs of a line follow each other in the order of its items,
     // so one walk of the items reaches them all. Parley walks a line from
     // its start to reach any item. A reach per glyph run then costs the
@@ -512,6 +544,7 @@ fn draw_run<S: DrawSurface>(
                 .iter()
                 .filter(|cut| cut.line == at.line)
                 .peekable();
+            let (brush, color) = ink(&glyphs, color);
             if cuts.peek().is_none() {
                 surface.draw_glyphs(&glyphs, text, &brush, run_at(&glyphs, origin));
                 draw_lines(surface, &glyphs, origin, color);
@@ -538,6 +571,18 @@ fn draw_run<S: DrawSurface>(
             }
             slice(surface, from, band, shift);
         }
+    }
+}
+
+/// The brush and the colour a glyph run is drawn in: the ink its mark set
+/// on it (`PROSE-UI-210`), or `page` when none did. An unmarked run holds
+/// the default brush, which is transparent.
+fn ink(glyphs: &parley::GlyphRun<'_, ambre_draw::ParleyBrush>, page: Color) -> (Brush, Color) {
+    match &glyphs.style().brush {
+        Brush::Solid(marked) if glyphs.style().brush != Brush::default() => {
+            (Brush::Solid(*marked), *marked)
+        }
+        _ => (Brush::Solid(page), page),
     }
 }
 
@@ -596,7 +641,6 @@ pub(crate) fn draw_shape<S: DrawSurface>(
     at: Point,
     color: Color,
 ) {
-    let brush = Brush::Solid(color);
     let data = shape.data();
     for index in Span::from_len(Pos::<RunLine>::ZERO, data.line_count()) {
         let Some((line, shift)) = data.line(index) else {
@@ -606,6 +650,7 @@ pub(crate) fn draw_shape<S: DrawSurface>(
         let origin = at + (0.0, f64::from(shift.get()));
         for item in line.items() {
             if let PositionedLayoutItem::GlyphRun(glyphs) = item {
+                let (brush, color) = ink(&glyphs, color);
                 surface.draw_glyphs(&glyphs, text, &brush, run_at(&glyphs, origin));
                 draw_lines(surface, &glyphs, origin, color);
             }
@@ -623,7 +668,7 @@ fn paint_cell_box<S: DrawSurface>(
     bounds: Rect,
 ) {
     if let Some(fill) = style.fill {
-        surface.fill_rect(bounds, packed(fill));
+        surface.fill_rect(bounds, color_of(fill));
     }
     let Some(border) = style.border else {
         surface.stroke_rect(
@@ -633,7 +678,7 @@ fn paint_cell_box<S: DrawSurface>(
         );
         return;
     };
-    let colour = border.color.map_or(palette.sheet_border, packed);
+    let colour = border.color.map_or(palette.sheet_border, color_of);
     let (top, bottom) = (f64::from(border.top.get()), f64::from(border.bottom.get()));
     let (left, right) = (f64::from(border.left.get()), f64::from(border.right.get()));
 
@@ -648,12 +693,6 @@ fn paint_cell_box<S: DrawSurface>(
             surface.fill_rect(edge, colour);
         }
     }
-}
-
-/// A colour packed as `0xRRGGBBAA`.
-fn packed(rgba: Rgba) -> Color {
-    let [r, g, b, a] = rgba.channels();
-    Color::from_rgba8(r, g, b, a)
 }
 
 #[cfg(test)]

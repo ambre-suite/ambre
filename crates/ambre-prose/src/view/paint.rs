@@ -22,8 +22,8 @@ use crate::view::cache::RunKey;
 use crate::view::caret::Spot;
 use crate::view::hit::{Fragment, cell_frame};
 use crate::view::walk::{
-    BlockPaint, CellPaint, Highlights, Insertion, PageItem, PagePaint, PageView, PageWalk,
-    PicturePaint, Placed, draw_shape, to_rect,
+    BlockPaint, CellPaint, Highlights, Insertion, MarkFills, PageItem, PagePaint, PageView,
+    PageWalk, PicturePaint, Placed, draw_shape, fill_marks, to_rect,
 };
 pub use crate::view::walk::{PAPER, PagePalette, Paper, ThemeInks};
 
@@ -312,6 +312,7 @@ impl ProseUiState {
         for block in &frame.blocks {
             surface.push_transform(Affine::translate((0.0, block.top.get())));
             surface.push_clip(block.placed.clip);
+            fill_marks(surface, &block.run, &block.placed);
             self.paint_selections(surface, palette, block);
             surface.pop_clip();
             surface.pop_transform();
@@ -324,6 +325,7 @@ impl ProseUiState {
             height,
             pages: &frame.pages,
             pictures: &self.pictures,
+            marks: MarkFills::Underlaid,
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
@@ -1835,6 +1837,88 @@ mod tests {
         assert!(strike.2 < under.2, "the strike sits above the underline");
     }
 
+    /// `PROSE-UI-210`: a colour mark draws the glyphs it covers, and their
+    /// underline, in its colour. The rest of the block keeps the page's ink.
+    #[test]
+    fn a_colour_mark_draws_its_glyphs_and_their_line_in_its_colour() {
+        let (mut state, _) = laid_out(1, 2);
+        let block = *state.root_blocks().last().expect("a block");
+        for (key, value) in [("fg", Some("#c00000")), ("u", None)] {
+            state.handle_command(ProseCommand::ApplyMark {
+                block_id: block,
+                range: Span::<DocChar>::from_usize_range(0..4),
+                key: key.into(),
+                value: value.map(crate::mark::test_value),
+            });
+        }
+        let mut ui = ProseUiState::default();
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
+        ui.apply_layout(state.shaped_layout());
+        let red = Color::from_rgba8(0xc0, 0x00, 0x00, 0xff);
+        let surface = paint(&mut ui);
+        let inked = |wanted: Color| {
+            surface.count(|op| matches!(op, DrawOp::Glyphs { color: Some(c), .. } if *c == wanted))
+        };
+        assert!(
+            inked(red) > Count::<ambre_draw::testing::Ops>::ZERO,
+            "the marked word"
+        );
+        assert!(
+            inked(palette().text) > Count::<ambre_draw::testing::Ops>::ZERO,
+            "the rest"
+        );
+        assert!(
+            surface
+                .ops()
+                .iter()
+                .any(|op| matches!(op, DrawOp::StrokeLine { color, .. } if *color == red)),
+            "the underline takes the ink of its text"
+        );
+    }
+
+    /// `PROSE-UI-267`: a highlight mark fills the box of its text under the
+    /// glyphs. On screen it goes under the local selection too, so an opaque
+    /// fill never hides the selection.
+    #[test]
+    fn a_highlight_mark_goes_under_the_selection_and_the_glyphs() {
+        let (mut state, _) = laid_out(1, 2);
+        let block = *state.root_blocks().last().expect("a block");
+        state.handle_command(ProseCommand::ApplyMark {
+            block_id: block,
+            range: Span::<DocChar>::from_usize_range(0..4),
+            key: "bg".into(),
+            value: Some(crate::mark::test_value("#ffff00")),
+        });
+        let mut ui = ProseUiState::default();
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
+        ui.apply_layout(state.shaped_layout());
+        ui.cursor = Some(CursorPosition {
+            block_id: block,
+            offset: Pos::<DocChar>::new(3),
+            anchor: Some((block, Pos::<DocChar>::new(0))),
+        });
+        let yellow = Color::from_rgba8(0xff, 0xff, 0x00, 0xff);
+        let selection = palette().accent.multiply_alpha(0.2);
+        let surface = paint(&mut ui);
+        let fills =
+            surface.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == yellow));
+        assert_eq!(
+            fills,
+            Count::<ambre_draw::testing::Ops>::of(1),
+            "drawn once, by the screen"
+        );
+        let fill = first(
+            &surface,
+            |op| matches!(op, DrawOp::FillRect { color, .. } if *color == yellow),
+        );
+        let selected = first(
+            &surface,
+            |op| matches!(op, DrawOp::FillRect { color, .. } if *color == selection),
+        );
+        let text = first(&surface, glyphs);
+        assert!(fill < selected && selected < text);
+    }
+
     /// `PROSE-UI-208`: a draft typed right after an underlined word is
     /// drawn underlined, one line running from the word through the draft.
     #[test]
@@ -2394,6 +2478,7 @@ mod tests {
                 height: Px::<Surface>::new(f64::from(ui.shaped.layout.page_height.get())),
                 pages: &frame.pages,
                 pictures: &ui.pictures,
+                marks: crate::view::walk::MarkFills::Underlaid,
             };
             let mut runs = RunCache::default();
             let mut walked = RecordingSurface::new();
