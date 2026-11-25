@@ -24,7 +24,7 @@
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 10 |  |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 22 |  |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 37 |  |
-| `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
+| `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 11 |  |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | implemented | 39 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 21 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 27 implemented, 21 partial, 2 design-only. 1942 contract rows, 14 loose.**
+**50 features: 27 implemented, 21 partial, 2 design-only. 1943 contract rows, 14 loose.**
