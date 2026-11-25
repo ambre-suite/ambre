@@ -3995,10 +3995,10 @@ pub(crate) mod tests {
             .await;
         let at = |i: usize| placed[i].as_f64().unwrap_or(0.0);
         let ratio = at(4);
-        let first = canvas_shot(&bob_page).await;
+        let first = canvas_alone(&bob_page).await;
         let seen = shot_of(&bob_page, ".murmure-float-mini").await;
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let second = canvas_shot(&bob_page).await;
+        let second = canvas_alone(&bob_page).await;
         let seen_after = shot_of(&bob_page, ".murmure-float-mini").await;
         let (moved, bounds) = changed(&first, &second);
         assert!(
@@ -4053,14 +4053,27 @@ pub(crate) mod tests {
                 STEP,
             )
             .await;
-        for page in [&ada_page, &bob_page] {
-            page.browser
-                .script(
-                    "document.querySelector('.murmure-call-hang-up').click(); return true;",
-                    json!([]),
-                )
-                .await;
-        }
+        bob_page
+            .browser
+            .script(
+                "document.querySelector('.murmure-call-float .murmure-call-hang-up')?.click(); \
+                 return true;",
+                json!([]),
+            )
+            .await;
+        click_header(&ada_page, ".murmure-call-hang-up").await;
+    }
+
+    /// The pixels of the channel canvas of `page`, as [`canvas_shot`] reads them, with the call
+    /// bubble transparent during the shot. Its clock then moves no pixel of the shot, and its
+    /// layout, so the box it published, stays.
+    async fn canvas_alone(page: &Page) -> image::RgbImage {
+        let fade = "const b = document.querySelector('.murmure-call-float'); \
+                    if (b) b.style.opacity = arguments[0]; return true;";
+        page.browser.script(fade, json!(["0"])).await;
+        let shot = canvas_shot(page).await;
+        page.browser.script(fade, json!([""])).await;
+        shot
     }
 
     /// The pixels of the canvas `selector`, cut out of a screenshot of the whole page. The shot
