@@ -28,6 +28,17 @@ pub(crate) enum Removal {
     LeaveChannel { channel_id: Id<Channel> },
 }
 
+/// What the Logic thread read in the sealed state of a channel for a
+/// removal: the documents its `meta` names, and the threads those name.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Named {
+    /// The segments and amendments the `meta` names (`SYNC-320`).
+    pub documents: Vec<Id<Document>>,
+    /// The threads those name (`SYNC-321`). A listing that leaves one out
+    /// passes only under an owner's erasure of it (`SYNC-322`).
+    pub threads: Vec<Id<Document>>,
+}
+
 /// A document a removal caps, as the relay lists it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Counted {
@@ -111,10 +122,11 @@ impl SyncState {
     /// does not hold lists the documents it caps first, then opens them
     /// (`SYNC-312`, `SYNC-314`). Any other runs at once.
     ///
-    /// `named` lists the documents the sealed `meta` of a channel names, as
-    /// the Logic thread read them. A removal from a channel with no such
-    /// list, or an empty one, fails before it lists anything (`SYNC-320`).
-    pub(crate) fn begin_removal(&mut self, removal: Removal, named: Option<Vec<Id<Document>>>) {
+    /// `named` holds what the sealed state of a channel names, as the Logic
+    /// thread read it. A removal from a channel with no such list, or an
+    /// empty one, fails before it lists anything (`SYNC-320`). A thread the
+    /// listing leaves out passes under an owner's erasure alone (`SYNC-322`).
+    pub(crate) fn begin_removal(&mut self, removal: Removal, named: Option<Named>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.run_removal(removal);
         };
@@ -161,15 +173,16 @@ impl SyncState {
         // Only the sealed `meta` says which documents a channel holds. A
         // census with no word from it fails closed (`SYNC-320`).
         let named = match (channel, named) {
-            (Some(_), Some(named)) if !named.is_empty() => named,
+            (Some(_), Some(named)) if !named.documents.is_empty() => named,
             (Some(_), _) => {
                 return self.fail_removal(
                     removal,
                     ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen),
                 );
             }
-            (None, _) => Vec::new(),
+            (None, _) => Named::default(),
         };
+        let erasing = channel.and_then(|channel_id| self.erasure_params(channel_id, removal));
         crate::spawn(async move {
             let root = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             let result = match (channel, removal) {
@@ -179,9 +192,33 @@ impl SyncState {
                         Removal::Revoke { document_id, .. } => Some(document_id),
                         Removal::Leave { .. } | Removal::LeaveChannel { .. } => None,
                     };
-                    http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth)
+                    match http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth.clone())
                         .await
-                        .and_then(|listed| channel_counted(&listed.documents, revoked_on, &named))
+                    {
+                        Ok(listed) => {
+                            let hidden = hidden_threads(&listed.documents, &named.threads);
+                            let erased = match (hidden.is_empty(), erasing) {
+                                (true, _) => Ok(()),
+                                (false, Some(params)) => {
+                                    let params = crate::erasure::ErasureParams { hidden, ..params };
+                                    crate::erasure::erase_hidden(
+                                        &crate::sharing::GlooHttp { auth },
+                                        params,
+                                    )
+                                    .await
+                                }
+                                // No footing of the `meta`, or no signed-in
+                                // user: no erasure can be checked or signed.
+                                (false, None) => Err(http::HttpError::Local(
+                                    ambre_core::LocalFailure::ChannelDocumentHidden,
+                                )),
+                            };
+                            erased.and_then(|()| {
+                                channel_counted(&listed.documents, revoked_on, &named.documents)
+                            })
+                        }
+                        Err(error) => Err(error),
+                    }
                 }
                 (None, Removal::Leave { document_id, .. }) => {
                     let url = root.route(format!("/documents/{document_id}"));
@@ -309,6 +346,33 @@ impl SyncState {
         }
     }
 
+    /// What an erasure of the hidden threads of `removal` from `channel_id`
+    /// needs, with no hidden thread yet. `None` when the `meta` has no
+    /// footing here or no user is signed in: a hidden thread then fails the
+    /// removal (`SYNC-322`).
+    fn erasure_params(
+        &self,
+        channel_id: Id<Channel>,
+        removal: Removal,
+    ) -> Option<crate::erasure::ErasureParams> {
+        let meta = match removal {
+            Removal::Revoke { document_id, .. } => document_id,
+            Removal::Leave { .. } | Removal::LeaveChannel { .. } => {
+                *self.listing_metas.get(&channel_id)?
+            }
+        };
+        Some(crate::erasure::ErasureParams {
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+            channel_id,
+            meta,
+            hidden: Vec::new(),
+            footing: self.footing(meta)?,
+            rule: self.log_rule(meta),
+            author: self.author()?,
+        })
+    }
+
     /// Runs `removal` on the documents open here.
     fn run_removal(&mut self, removal: Removal) {
         match removal {
@@ -344,6 +408,19 @@ impl SyncState {
             }
         }
     }
+}
+
+/// The threads of `threads` the relay's listing `entries` leaves out
+/// (`SYNC-321`).
+fn hidden_threads(
+    entries: &[http::ChannelDocumentEntry],
+    threads: &[Id<Document>],
+) -> Vec<Id<Document>> {
+    threads
+        .iter()
+        .copied()
+        .filter(|thread| !entries.iter().any(|e| e.document_id == *thread))
+        .collect()
 }
 
 /// The documents of a channel a removal caps beside its `meta`, each under
@@ -759,6 +836,27 @@ mod tests {
         );
     }
 
+    /// `SYNC-322`: of the threads a removal names, only those the listing
+    /// leaves out go to the erasure check. A segment the `meta` names takes
+    /// no erasure: its absence fails the removal whatever the relay erased.
+    #[test]
+    fn only_a_hidden_thread_goes_to_the_erasure_check() {
+        let entry = |document_id, kind| http::ChannelDocumentEntry { document_id, kind };
+        let listed = [
+            entry(META, ambre_core::ChannelDocumentKind::Meta),
+            entry(THREAD, ambre_core::ChannelDocumentKind::Thread),
+        ];
+        let phantom = Id::<Document>::from_bytes([12; 16]);
+        assert_eq!(hidden_threads(&listed, &[THREAD, phantom]), [phantom]);
+        assert!(hidden_threads(&listed, &[THREAD]).is_empty());
+        assert!(matches!(
+            channel_counted(&listed, Some(META), &[SEGMENT]),
+            Err(http::HttpError::Local(
+                ambre_core::LocalFailure::ChannelDocumentHidden
+            ))
+        ));
+    }
+
     /// `SYNC-320`: a removal from a channel with no named documents, or an
     /// empty list of them, fails before it asks the relay for anything. A
     /// revoke on a `meta` through the plain request names none, so it fails
@@ -773,11 +871,17 @@ mod tests {
             document_id: META,
             user_id: Id::<User>::from_bytes([8; 16]),
         };
+        let empty = || {
+            Some(Named {
+                documents: Vec::new(),
+                threads: vec![THREAD],
+            })
+        };
         for (removal, named) in [
             (leave, None),
-            (leave, Some(Vec::new())),
+            (leave, empty()),
             (revoke, None),
-            (revoke, Some(Vec::new())),
+            (revoke, empty()),
         ] {
             let (mut state, rx, _author) = signed_in();
             let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();

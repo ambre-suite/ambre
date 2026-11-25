@@ -1589,6 +1589,95 @@ pub async fn find_or_create_direct_message(
     Ok(DirectMessage::Created)
 }
 
+/// One erasure of a thread name, as the relay keeps it (`SRV-347`). Each
+/// client checks the signature against the log of the channel itself
+/// (`SYNC-322`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThreadErasureRow {
+    pub thread: Id<Document>,
+    pub signer: FixedBytes<ambre_core::PublicKey>,
+    pub signature: FixedBytes<ambre_core::Signature>,
+}
+
+/// Records an owner's erasure of `erasure.thread` in `channel_id`
+/// (`SRV-347`). A second erasure of the same thread keeps the first.
+///
+/// The channel row lock orders the erasure against a thread registration,
+/// so no erasure lands for a document the channel groups.
+///
+/// # Errors
+/// [`AppError::NotFound`] for an unknown channel. [`AppError::Conflict`]
+/// when the channel groups the document. A database error otherwise.
+pub async fn record_thread_erasure(
+    pool: &PgPool,
+    channel_id: &Id<Channel>,
+    erasure: &ThreadErasureRow,
+) -> Result<(), AppError> {
+    let channel = id_to_uuid(*channel_id);
+    let mut tx = pool.begin().await?;
+    sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
+        .bind(channel)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: crate::error::Resource::Channel,
+        })?;
+    let grouped: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM channel_documents WHERE channel_id = $1 AND document_id = $2)",
+    )
+    .bind(channel)
+    .bind(id_to_uuid(erasure.thread))
+    .fetch_one(&mut *tx)
+    .await?;
+    if grouped {
+        return Err(AppError::Conflict {
+            detail: "the channel groups the document".into(),
+        });
+    }
+    sqlx::query(
+        "INSERT INTO channel_erasures (channel_id, thread_id, signer_pubkey, signature) \
+         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+    )
+    .bind(channel)
+    .bind(id_to_uuid(erasure.thread))
+    .bind(erasure.signer.as_slice())
+    .bind(erasure.signature.as_slice())
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Every erasure of a thread name the relay keeps for `channel_id`
+/// (`SRV-347`), in thread order.
+///
+/// # Errors
+/// A database error, or a stored key or signature of the wrong length.
+pub async fn list_thread_erasures(
+    pool: &PgPool,
+    channel_id: &Id<Channel>,
+) -> Result<Vec<ThreadErasureRow>, AppError> {
+    let rows = sqlx::query(
+        "SELECT thread_id, signer_pubkey, signature FROM channel_erasures \
+         WHERE channel_id = $1 ORDER BY thread_id",
+    )
+    .bind(id_to_uuid(*channel_id))
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            let thread: uuid::Uuid = r.try_get("thread_id")?;
+            let signature: Vec<u8> = r.try_get("signature")?;
+            Ok(ThreadErasureRow {
+                thread: uuid_row_to_id(thread),
+                signer: decode_key(r.try_get("signer_pubkey")?)?,
+                signature: FixedBytes::from_slice(&signature)
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2152,6 +2241,10 @@ mod tests {
                 ("channel_documents", "lease_until"),
                 ("channel_documents", "state"),
                 ("channel_documents", "thread_root"),
+                ("channel_erasures", "channel_id"),
+                ("channel_erasures", "signature"),
+                ("channel_erasures", "signer_pubkey"),
+                ("channel_erasures", "thread_id"),
                 ("channels", "id"),
                 ("channels", "is_public"),
                 ("channels", "space_id"),
