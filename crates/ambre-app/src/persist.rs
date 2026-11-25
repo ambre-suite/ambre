@@ -97,6 +97,7 @@ impl PersistLink {
                     gone.set(Opening::Never);
                     if let Some(user) = kept_read.user() {
                         kept_read.read(user, Vec::new());
+                        no_kept_settings(&logs_tx);
                     }
                     return;
                 }
@@ -105,6 +106,7 @@ impl PersistLink {
                     gone.set(Opening::Never);
                     if let Some(user) = kept_read.user() {
                         kept_read.read(user, Vec::new());
+                        no_kept_settings(&logs_tx);
                     }
                     return;
                 }
@@ -187,6 +189,7 @@ impl PersistLink {
         if self.kept.signed_in(user) == Load::Needed {
             if self.gone.get() == Opening::Never {
                 self.kept.read(user, Vec::new());
+                no_kept_settings(&self.to_logic);
             } else if let Some(store) = self.opened.borrow().clone() {
                 let kept = self.kept.clone();
                 let to_logic = self.to_logic.clone();
@@ -218,6 +221,16 @@ async fn read_kept(
     kept.read_logs(user, store.load_kept_logs(user).await.unwrap_or_default());
     send_kept_logs(kept, to_logic);
     kept.read(user, store.load_inviters(user).await.unwrap_or_default());
+    // The settings document this device opened before waits on no other
+    // read, and the relay's answer waits on it (`SETTINGS-031`).
+    let document_id = store.load_settings_document(user).await.ok().flatten();
+    to_logic.send(LogicCommand::KeptSettings { document_id });
+}
+
+/// Tells Logic that no store answers which settings document this device
+/// kept, so the relay's answer opens (`SETTINGS-031`).
+fn no_kept_settings(to_logic: &ShellOutbox) {
+    to_logic.send(LogicCommand::KeptSettings { document_id: None });
 }
 
 /// Sends every kept log of the session's user to the Sync worker.

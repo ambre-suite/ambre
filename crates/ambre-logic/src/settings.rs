@@ -14,7 +14,10 @@ use ambre_client_core::{
 use ambre_core::authorship::PeerEntry;
 use ambre_core::crdt::CrdtName as _;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{DeltaBytes, Instant, Ms, PageLoad, Payload, PeerId, SnapshotBytes, TimeSpan};
+use ambre_core::{
+    DeltaBytes, FixedBytes, Instant, LinkState, Ms, PageLoad, Payload, PeerId, SessionNonce,
+    SnapshotBytes, TimeSpan,
+};
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 /// The map that holds the kind marker, beside the section maps.
@@ -50,12 +53,25 @@ pub enum SettingsRefusal {
     Foreign,
 }
 
+/// Where an import came from. The relay holds what it served. The local
+/// store holds what earlier sessions of this device wrote, which the relay may
+/// lack (`SETTINGS-035`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Source {
+    Relay,
+    Store,
+}
+
 /// The settings document, held by the Logic thread while the user is signed
 /// in (`SETTINGS-005`).
 pub struct SettingsDoc {
     doc: LoroDoc,
-    /// The version the last flush exported up to: what the relay was handed.
+    /// What this session handed over or needs not send: its own flushes, and
+    /// every import.
     flushed: VersionVector,
+    /// What the relay is known to hold: what it served, the echoes of this
+    /// session's own deltas included.
+    held: VersionVector,
 }
 
 impl SettingsDoc {
@@ -73,6 +89,7 @@ impl SettingsDoc {
         Self {
             doc,
             flushed: VersionVector::default(),
+            held: VersionVector::default(),
         }
     }
 
@@ -82,6 +99,7 @@ impl SettingsDoc {
         Self {
             doc: LoroDoc::new(),
             flushed: VersionVector::default(),
+            held: VersionVector::default(),
         }
     }
 
@@ -103,13 +121,74 @@ impl SettingsDoc {
     /// # Errors
     /// [`SettingsRefusal::Undecodable`] for bytes that are no update.
     pub fn import(&mut self, bytes: &Payload<DeltaBytes>) -> Result<(), SettingsRefusal> {
+        self.take_in(bytes.as_bytes(), Source::Relay)
+    }
+
+    /// Imports `bytes`, a delta or a snapshot. What arrived needs no second
+    /// send under this session's nonce. Only the operations the bytes carry
+    /// count, so a write of this session still waiting on its delay leaves.
+    fn take_in(&mut self, bytes: &[u8], source: Source) -> Result<(), SettingsRefusal> {
+        let end = LoroDoc::decode_import_blob_meta(bytes, false)
+            .map_err(|_| SettingsRefusal::Undecodable)?
+            .partial_end_vv;
         self.doc
-            .import(bytes.as_bytes())
-            .map(|_| ())
+            .import(bytes)
             .map_err(|_| SettingsRefusal::Undecodable)?;
-        // What arrived from the relay needs no second send.
-        self.flushed.merge(&self.doc.oplog_vv());
+        self.flushed.merge(&end);
+        if source == Source::Relay {
+            self.held.merge(&end);
+        }
         Ok(())
+    }
+
+    /// Imports the local copy of an earlier session (`SETTINGS-035`). Its
+    /// operations leave under the nonce of the session that wrote them, never
+    /// under this one's. A row that does not import is skipped.
+    pub fn restore(
+        &mut self,
+        snapshot: Option<&Payload<SnapshotBytes>>,
+        deltas: &[Payload<DeltaBytes>],
+    ) {
+        let rows = snapshot
+            .map(Payload::as_bytes)
+            .into_iter()
+            .chain(deltas.iter().map(Payload::as_bytes));
+        for row in rows {
+            if self.take_in(row, Source::Store).is_err() {
+                tracing::warn!("Logic: a row of the settings copy did not import");
+            }
+        }
+    }
+
+    /// The whole document, for the local copy.
+    #[must_use]
+    pub fn snapshot(&self) -> Option<Payload<SnapshotBytes>> {
+        self.doc.commit();
+        self.doc.export(ExportMode::Snapshot).ok().map(Payload::new)
+    }
+
+    /// Hands again, at the next flush, what `peer` wrote past the echoes of
+    /// the relay. A socket that went down dropped those deltas
+    /// (`SETTINGS-035`).
+    pub fn rewind(&mut self, peer: PeerId) {
+        let echoed = self.held.get(&peer.get()).copied().unwrap_or(0);
+        self.flushed.set_end(loro::ID::new(peer.get(), echoed));
+    }
+
+    /// What `peer` wrote past what the relay holds, as one delta, or `None`
+    /// when the relay holds it all (`AUTHOR-028`).
+    #[must_use]
+    pub fn unsent(&self, peer: PeerId) -> Option<Payload<DeltaBytes>> {
+        let end = self.doc.oplog_vv().get(&peer.get()).copied().unwrap_or(0);
+        let start = self.held.get(&peer.get()).copied().unwrap_or(0);
+        if end <= start {
+            return None;
+        }
+        let span = loro::IdSpan::new(peer.get(), start, end);
+        self.doc
+            .export(ExportMode::updates_in_range(vec![span]))
+            .ok()
+            .map(Payload::new)
     }
 
     /// The value of one setting: its default when the document holds none,
@@ -167,7 +246,7 @@ impl SettingsDoc {
         Some(Payload::new(bytes))
     }
 
-    /// Imports a snapshot of the relay or of the local store.
+    /// Imports a snapshot of the relay.
     ///
     /// # Errors
     /// [`SettingsRefusal::Undecodable`] for bytes that are no snapshot.
@@ -175,12 +254,7 @@ impl SettingsDoc {
         &mut self,
         bytes: &Payload<SnapshotBytes>,
     ) -> Result<(), SettingsRefusal> {
-        self.doc
-            .import(bytes.as_bytes())
-            .map(|_| ())
-            .map_err(|_| SettingsRefusal::Undecodable)?;
-        self.flushed.merge(&self.doc.oplog_vv());
-        Ok(())
+        self.take_in(bytes.as_bytes(), Source::Relay)
     }
 
     /// Every setting of the catalogue, read (`SETTINGS-010`).
@@ -313,8 +387,25 @@ impl SettingsDoc {
 enum Identity {
     /// Not yet: a change waits.
     Awaited,
-    /// The session writes under its PeerID.
-    Known,
+    /// The session writes under this PeerID.
+    Known(PeerId),
+}
+
+/// Whether a step the earlier sessions wait on is done.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Step {
+    Awaited,
+    Done,
+}
+
+/// What an earlier session of this device left unsent, and what the relay
+/// holds whole (`AUTHOR-028`).
+#[derive(Default)]
+pub struct Unsent {
+    /// Each delta, with the nonce of the session that wrote it.
+    pub sends: Vec<(Payload<DeltaBytes>, FixedBytes<SessionNonce>)>,
+    /// The sessions the relay holds whole: their rows can go.
+    pub forgotten: Vec<PeerId>,
 }
 
 /// The settings document of this session, with what a write waits on: the
@@ -328,6 +419,14 @@ pub struct SettingsSession {
     pending: Vec<SettingChange>,
     /// The instant the coalesced writes leave (`SETTINGS-036`).
     due: Option<Instant<PageLoad>>,
+    /// The earlier sessions the local copy names (`SETTINGS-035`).
+    earlier: Vec<(PeerId, FixedBytes<SessionNonce>)>,
+    /// Whether the local copy landed. No copy is written over it before.
+    copy: Step,
+    /// Whether the relay served its whole replay, so `held` is worth reading.
+    replay: Step,
+    /// The socket as the Sync worker last reported it.
+    link: LinkState,
 }
 
 impl SettingsSession {
@@ -340,6 +439,10 @@ impl SettingsSession {
             identity: Identity::Awaited,
             pending: Vec::new(),
             due: None,
+            earlier: Vec::new(),
+            copy: Step::Awaited,
+            replay: Step::Awaited,
+            link: LinkState::Connected,
         }
     }
 
@@ -377,7 +480,7 @@ impl SettingsSession {
         if self.doc.adopt_session(peer, entry).is_err() {
             return;
         }
-        self.identity = Identity::Known;
+        self.identity = Identity::Known(peer);
         for change in std::mem::take(&mut self.pending) {
             let _ = self.doc.apply(&change);
         }
@@ -387,7 +490,7 @@ impl SettingsSession {
     /// One change of the view. It lands now, or once the identity arrives,
     /// and leaves at the end of the coalescing delay (`SETTINGS-036`).
     pub fn change(&mut self, change: SettingChange, now: Option<Instant<PageLoad>>) {
-        if self.identity == Identity::Known {
+        if matches!(self.identity, Identity::Known(_)) {
             if self.doc.apply(&change).is_err() {
                 return;
             }
@@ -395,6 +498,81 @@ impl SettingsSession {
         } else {
             self.pending.push(change);
         }
+    }
+
+    /// The local copy landed, with the earlier sessions it names.
+    pub fn restored(
+        &mut self,
+        snapshot: Option<&Payload<SnapshotBytes>>,
+        deltas: &[Payload<DeltaBytes>],
+        sessions: Vec<(PeerId, FixedBytes<SessionNonce>)>,
+    ) {
+        self.doc.restore(snapshot, deltas);
+        for (peer, nonce) in sessions {
+            if !self.earlier.iter().any(|(known, _)| *known == peer) {
+                self.earlier.push((peer, nonce));
+            }
+        }
+        self.copy = Step::Done;
+    }
+
+    /// The relay served its whole replay.
+    pub fn replayed(&mut self) {
+        self.replay = Step::Done;
+    }
+
+    /// The whole document for the local copy, once the copy it replaces
+    /// landed.
+    #[must_use]
+    pub fn copy(&self) -> Option<Payload<SnapshotBytes>> {
+        match self.copy {
+            Step::Done => self.doc.snapshot(),
+            Step::Awaited => None,
+        }
+    }
+
+    /// The socket went down or came back. Back after a fall, what this
+    /// session wrote past the echoes leaves again at once: the fall dropped
+    /// it (`SETTINGS-035`).
+    pub fn relinked(&mut self, link: LinkState, now: Option<Instant<PageLoad>>) {
+        let fell = self.link == LinkState::Disconnected;
+        self.link = link;
+        if link == LinkState::Connected
+            && fell
+            && let Identity::Known(peer) = self.identity
+        {
+            self.doc.rewind(peer);
+            self.due = Some(now.unwrap_or_else(|| Instant::<PageLoad>::new(0.0)));
+        }
+    }
+
+    /// What the earlier sessions left unsent, once the copy landed, the
+    /// replay ended and the identity arrived. Empty before (`AUTHOR-028`).
+    pub fn unsent(&mut self) -> Unsent {
+        let mut unsent = Unsent::default();
+        let Identity::Known(me) = self.identity else {
+            return unsent;
+        };
+        if self.copy == Step::Awaited || self.replay == Step::Awaited {
+            return unsent;
+        }
+        let doc = &self.doc;
+        self.earlier.retain(|(peer, nonce)| {
+            if *peer == me {
+                return false;
+            }
+            match doc.unsent(*peer) {
+                Some(delta) => {
+                    unsent.sends.push((delta, *nonce));
+                    true
+                }
+                None => {
+                    unsent.forgotten.push(*peer);
+                    false
+                }
+            }
+        });
+        unsent
     }
 
     /// Opens the coalescing delay, unless one runs.

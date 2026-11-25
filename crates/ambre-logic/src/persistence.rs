@@ -189,6 +189,13 @@ impl IdbKey {
         Self::document_of(rest.strip_prefix(':')?)
     }
 
+    /// The row of the settings document `user` opened on this device
+    /// (`SETTINGS-031`). Its prefix `settings:` starts no user's 32 hex
+    /// digits, as [`IdbKey::inviter`] states.
+    fn settings(user: Id<User>) -> Self {
+        Self(format!("settings:{}", Self::user(user)))
+    }
+
     /// The row of the log `user` kept for `document` (`SYNC-290`). It
     /// starts with the prefix `log:`, which no user's 32 hex digits start
     /// with, as [`IdbKey::inviter`] does.
@@ -513,6 +520,62 @@ impl PersistenceStore {
         {
             tracing::warn!("Persistence: inviter add failed for {key}: {e:?}");
         }
+    }
+
+    /// Keep `document_id` as the settings document of `user` on this device
+    /// (`SETTINGS-031`, fire-and-forget). A row there stays: the add fails
+    /// on it, so no later answer replaces the kept one.
+    pub fn save_settings_document(&self, user: Id<User>, document_id: Id<Document>) {
+        let key = IdbKey::settings(user);
+        let row = JsValue::from_str(&IdbKey::document(document_id).0);
+        if let Err(e) = self
+            .db
+            .transaction_with_str_and_mode(
+                IdbStore::TrustedKeys.name(),
+                IdbTransactionMode::Readwrite,
+            )
+            .and_then(|txn| txn.object_store(IdbStore::TrustedKeys.name()))
+            .and_then(|store| store.add_with_key(&row, &key.to_js()))
+        {
+            tracing::warn!("Persistence: settings add failed for {key}: {e:?}");
+        }
+    }
+
+    /// The settings document `user` kept on this device, or `None` when the
+    /// store holds none or the read failed (`SETTINGS-031`).
+    pub fn load_settings_document(
+        &self,
+        user: Id<User>,
+    ) -> oneshot::Receiver<Option<Id<Document>>> {
+        let (tx, rx) = answer();
+        let key = IdbKey::settings(user);
+        let request = self
+            .db
+            .transaction_with_str(IdbStore::TrustedKeys.name())
+            .and_then(|txn| txn.object_store(IdbStore::TrustedKeys.name()))
+            .and_then(|store| store.get(&key.to_js()));
+        let Ok(request) = request else {
+            tx.send(None);
+            return rx;
+        };
+        let tx_ok = tx.clone();
+        let req = request.clone();
+        let on_success = Closure::<dyn FnMut(web_sys::Event)>::new(move |_: web_sys::Event| {
+            let kept = req
+                .result()
+                .ok()
+                .and_then(|value| value.as_string())
+                .and_then(|text| IdbKey::document_of(&text));
+            tx_ok.send(kept);
+        });
+        request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
+        on_success.forget();
+        let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(move |_: web_sys::Event| {
+            tx.send(None);
+        });
+        request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+        on_error.forget();
+        rx
     }
 
     /// Keep `kept`, where the log of `document_id` stood for `user`
@@ -1496,6 +1559,37 @@ mod wasm_tests {
         let mut kept = later.load_inviters(me).await.unwrap();
         kept.sort_by_key(|(id, _)| *id.as_bytes());
         assert_eq!(kept, vec![(doc, pin([0xA1; 32])), (other, pin([0xB1; 32]))]);
+    }
+
+    /// `SETTINGS-031` at rest: the settings document a user opened reads back
+    /// on a later open of the store, a second one never replaces it, and
+    /// another user reads none.
+    #[wasm_bindgen_test]
+    async fn a_kept_settings_document_outlives_the_page_and_is_never_replaced() {
+        let name = "ambre-test-settings-document";
+        delete_db(name).await;
+        let open = || async {
+            PersistenceStore::open_named(DbName(name))
+                .await
+                .expect("channel")
+                .expect("store opens")
+        };
+        let store = open().await;
+        let (me, other) = (
+            Id::<User>::from_bytes([0x44; 16]),
+            Id::<User>::from_bytes([0x55; 16]),
+        );
+        assert_eq!(store.load_settings_document(me).await.unwrap(), None);
+        let (first, second) = (
+            Id::<Document>::from_bytes([0x11; 16]),
+            Id::<Document>::from_bytes([0x22; 16]),
+        );
+        store.save_settings_document(me, first);
+        store.save_settings_document(me, second);
+        store.delete_snapshot(first);
+        let later = open().await;
+        assert_eq!(later.load_settings_document(me).await.unwrap(), Some(first));
+        assert_eq!(later.load_settings_document(other).await.unwrap(), None);
     }
 
     /// Holds `SYNC-290` at rest. A kept log reads back for its user alone,
