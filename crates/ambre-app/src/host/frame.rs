@@ -567,6 +567,11 @@ impl FrameHost {
         }
 
         let mut plan = self.view.plan_repaint(raf_timestamp, hud_tick);
+        // The mini video of the call bubble draws over the overlay of any application. So the
+        // overlay repaints at each frame it shows a picture (`MURMURE-699`, `CALL-015`).
+        if crate::call_stage::mini_repaints() {
+            plan.overlay = LayerRepaint::Redraw;
+        }
         // Reconcile + pump the nested child views AFTER the parent's plan_repaint
         // has issued `OpenDocument` for any newly visible embed. A child's first
         // viewport request then never reaches Logic before its document is open. A
@@ -658,6 +663,9 @@ impl FrameHost {
                             child.paint_overlay(s, &mut gpu.font_cx, &mut gpu.text_cache, &stats);
                         },
                     );
+                    // Last, the mini video of the call bubble, under the box the bubble
+                    // published, above everything the application drew (`MURMURE-698`).
+                    crate::call_stage::paint_mini(&mut surface);
                 }
             }
             gpu.text_cache

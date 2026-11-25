@@ -4752,10 +4752,22 @@ body {
     font-weight: 400;
 }
 
+/* The faces are a button: a press opens the mini video (`MURMURE-699`). */
 .murmure-float-faces {
     display: inline-flex;
-    margin-left: auto;
-    padding-left: var(--space-2);
+    align-items: center;
+    padding: 0 0 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-full);
+    background: none;
+    cursor: pointer;
+}
+
+/* The box of the mini video. The render runtime draws the picture on the
+   canvas below it, so the box shows on the bubble from the phone width up
+   alone, where the bubble floats (`CALL-015`). */
+.murmure-float-mini {
+    display: none;
 }
 
 .murmure-float-face {
@@ -4857,6 +4869,41 @@ body {
 
     .murmure-float-wide {
         display: flex;
+    }
+
+    .murmure-float-faces {
+        align-self: flex-start;
+    }
+
+    /* The bubble clips what it paints to its own round box, the cover of
+       the mini video included. */
+    .murmure-call-float[data-mini] {
+        overflow: hidden;
+    }
+
+    .murmure-float-mini {
+        position: relative;
+        z-index: -1;
+        display: grid;
+        place-items: center;
+        aspect-ratio: 16 / 9;
+        border-radius: var(--radius-md);
+        background: var(--surface-2);
+        color: var(--text-dim);
+        font-size: var(--font-xs);
+    }
+
+    /* Over a picture, nothing of the bubble paints inside the box: the
+       bubble gives up its background, and the shadow of the box paints it
+       everywhere else. The box sits under the other children, so its shadow
+       covers none of them, and no outline of a control reaches into it. */
+    .murmure-call-float[data-mini="video"] {
+        background: transparent;
+    }
+
+    .murmure-call-float[data-mini="video"] .murmure-float-mini {
+        background: transparent;
+        box-shadow: 0 0 0 100vmax var(--surface);
     }
 }
 

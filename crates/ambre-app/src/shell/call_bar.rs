@@ -680,6 +680,11 @@ pub(super) fn RingAlert() -> impl IntoView {
 /// The bubble offers mute, the camera, the share, the way back and hang up, and the pill keeps
 /// mute and hang up. A drag of the bubble moves it, and its release rests it in the nearest
 /// corner. Nothing here writes into a channel or changes the choice of videos.
+///
+/// A press on the faces of the bubble opens its mini video (`MURMURE-699`). Over a picture, the
+/// box of the mini video paints nothing. The render runtime draws the picture on the canvas below
+/// it (`CALL-015`). So the bubble measures what it covers and publishes it at each
+/// change of its place or of its size (`MURMURE-698`).
 #[component]
 pub(super) fn CallFloat(
     /// The pane the user is in, which names the shown channel.
@@ -689,7 +694,8 @@ pub(super) fn CallFloat(
     /// The sidebar names the channel, and the spaces name each participant.
     relay: MurmureRelay,
 ) -> impl IntoView {
-    use ambre_murmure::ui::call_float::{Corner, Float, clock};
+    use crate::call_stage::MiniShows;
+    use ambre_murmure::ui::call_float::{Corner, Cover, Float, Mini, clock};
     let from = crate::call::where_from();
     let from_shown = from.clone();
     let shown = Signal::derive(move || {
@@ -770,12 +776,61 @@ pub(super) fn CallFloat(
         CallPhase::InCall(microphone) => microphone,
         _ => Microphone::Live,
     });
+    let mini = RwSignal::from(crate::call_stage::mini());
+    let mini_shows = RwSignal::from(crate::call_stage::mini_shows());
+    let bubble_box = NodeRef::<leptos::html::Div>::new();
+    let mini_box = NodeRef::<leptos::html::Div>::new();
+    // The page box of what the bubble shows, after the layout of the frame.
+    let measure = move || {
+        let placed = |el: Option<web_sys::HtmlDivElement>| {
+            el.map(|el| el.get_bounding_client_rect())
+                .filter(|r| r.width() > 0.0 && r.height() > 0.0)
+                .map(|r| ambre_draw::Rect::new(r.left(), r.top(), r.right(), r.bottom()))
+        };
+        let cover = if shown.get_untracked() {
+            Cover {
+                bubble: placed(bubble_box.get_untracked()),
+                mini: (mini.get_untracked() == Mini::Open)
+                    .then(|| placed(mini_box.get_untracked()))
+                    .flatten(),
+            }
+        } else {
+            Cover::NONE
+        };
+        crate::call_stage::publish_cover(cover);
+    };
+    // A change of place, of size or of the mini video measures again once the layout ran. The
+    // clock measures each second too, so a late font that moves the box is caught.
+    Effect::new(move |_| {
+        let _ = (
+            shown.get(),
+            corner.get(),
+            dragged.get(),
+            mini.get(),
+            mini_shows.get(),
+            tick.get(),
+        );
+        request_animation_frame(measure);
+    });
+    let on_resize = window_event_listener(leptos::ev::resize, move |_| {
+        request_animation_frame(measure);
+    });
+    on_cleanup(move || {
+        on_resize.remove();
+        crate::call_stage::publish_cover(Cover::NONE);
+    });
     view! {
         <Show when=move || shown.get()>
             <div
                 class="murmure-call-float"
                 role="region"
                 aria-label="Call in progress"
+                node_ref=bubble_box
+                data-mini=move || match (mini.get(), mini_shows.get()) {
+                    (Mini::Folded, _) => None,
+                    (Mini::Open, MiniShows::Faces) => Some("faces"),
+                    (Mini::Open, MiniShows::Video) => Some("video"),
+                }
                 data-corner=move || corner.get().word()
                 data-dragging=move || dragged.get().is_some().then_some("true")
                 style:left=move || dragged.get().map(|(x, _)| format!("{x}px"))
@@ -805,18 +860,36 @@ pub(super) fn CallFloat(
                     <Icon icon=icondata::MdiPhone />
                     <span class="murmure-float-channel">{channel_name}</span>
                     <span class="murmure-float-clock">{elapsed}</span>
-                    <span class="murmure-float-faces">
-                        {move || {
-                            faces
-                                .get()
-                                .into_iter()
-                                .map(|initials| view! {
-                                    <span class="murmure-float-face" aria-hidden="true">{initials}</span>
-                                })
-                                .collect_view()
-                        }}
-                    </span>
                 </button>
+                <button
+                    r#type="button"
+                    class="murmure-float-faces"
+                    aria-label=move || match mini.get() {
+                        Mini::Folded => "Show the video of the call",
+                        Mini::Open => "Hide the video of the call",
+                    }
+                    aria-pressed=move || mini.get().pressed()
+                    on:click=move |_| mini.update(|m| *m = m.toggled())
+                >
+                    {move || {
+                        faces
+                            .get()
+                            .into_iter()
+                            .map(|initials| view! {
+                                <span class="murmure-float-face" aria-hidden="true">{initials}</span>
+                            })
+                            .collect_view()
+                    }}
+                </button>
+                <Show when=move || mini.get() == Mini::Open>
+                    // The box the render runtime draws the picture through. It holds a word
+                    // alone while no video arrives, and nothing over a picture.
+                    <div class="murmure-float-mini" node_ref=mini_box>
+                        {move || (mini_shows.get() == MiniShows::Faces).then_some(view! {
+                            <span class="murmure-float-mini-none">"No video"</span>
+                        })}
+                    </div>
+                </Show>
                 <div class="murmure-float-controls">
                     <MuteButton microphone=microphone />
                     <span class="murmure-float-wide">

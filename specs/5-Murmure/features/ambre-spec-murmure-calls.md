@@ -41,8 +41,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-691` | `OBS` | A sidebar entry whose channel the page never opened MUST show the live call of that channel. | this spec section 3, who is in the call; `ZK-024` | not built | unbuilt -- lands with the `Live calls of unopened channels in the sidebar` Story (`ambre-roadmap.md` V1) | unimplemented |
 | `MURMURE-696` | `OBS` | While the page is in a call and shows no channel region of it, over the phone width it MUST show the call bubble: the channel, the time since the member entered the call, the faces, mute, the camera, the share, the way back and hang up. | this spec section 3, away from the channel of the call | `ambre_murmure::ui::call_float::tests::the_call_floats_away_from_its_channel_alone`; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier, at a desktop width | none | verified |
 | `MURMURE-697` | `OBS` | While the page is in a call and shows no channel region of it, under the phone width it MUST show the call pill under the header: the channel, the time since the member entered the call, the faces, mute and hang up. | this spec section 3, away from the channel of the call | `ambre_murmure::ui::call_float::tests::the_call_floats_away_from_its_channel_alone`; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier, at a phone width: the camera, the share and the way back hide | none | verified |
-| `MURMURE-698` | `INV` | The call bubble MUST publish the part of the canvas it covers. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-shell.md section 2` (`CHROME-171`) | not built | unbuilt -- lands with the `The floating cover` Story (`ambre-roadmap.md` MVP) | unimplemented |
-| `MURMURE-699` | `OBS` | A press on the faces of the call bubble MUST show the video of the member who speaks, or the received screen, drawn by the render runtime of the page. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | not built | unbuilt -- lands with the `Video in the call bubble` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-698` | `INV` | The call bubble MUST publish the part of the canvas it covers. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-shell.md section 2` (`CHROME-171`) | `ambre_app::shell::murmure_regions::the_bubble_publishes_what_it_covers_and_the_box_of_its_mini_video` -- wasm tier under the shell stylesheet: the folded bubble publishes its box, an open one the box of its mini video too, the pill no mini video, and the way back clears both; `ambre_murmure::ui::call_float::tests::the_mini_video_lands_at_its_box_less_the_corner_of_the_canvas` | none | verified |
+| `MURMURE-699` | `OBS` | A press on the faces of the call bubble MUST show the video of the member who speaks, or the received screen, drawn by the render runtime of the page. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_belt::murmure::tests::a_press_on_the_faces_of_the_bubble_shows_the_video_of_the_speaker` -- browser tier, in Murmure: every moved pixel of Bob's canvas lies in the box, and the page shows them through it; `ambre_murmure::ui::call_float::tests::the_mini_video_draws_the_screen_then_the_speaker`; `ambre_app::shell::murmure_regions::the_bubble_publishes_what_it_covers_and_the_box_of_its_mini_video` -- wasm tier: over a picture, the box is topmost and paints nothing; structural -- `FrameHost` draws the mini video after the overlay of every application, so only Murmure verifies it end to end until `MURMURE-726` ships | none | verified |
 | `MURMURE-629` | `OBS` | While the page receives a screen, the video region MUST draw it in a tile taller than each tile of a camera. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_murmure::ui::call_videos::tests::a_screen_takes_a_tile_taller_than_each_camera_above_their_row`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: the moved pixels of Bob's canvas span more than the tallest tile of a camera | none | verified |
 | `MURMURE-630` | `OBS` | Given a share that the screen of another member took over, the header MUST say that another member shares. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-107`) | `ambre_murmure::ui::call_controls::tests::another_screen_takes_over_a_share_and_the_header_says_so`; `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the take-over is a status; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's header reads that another member shares | none | verified |
 | `MURMURE-645` | `OBS` | Given a ring of the caller that ended with no answer, the header MUST say whether the member declined or did not answer, until the next call gesture. | this spec section 3, the ring | `ambre_murmure::ui::call_ring::tests::the_header_says_why_a_ring_ended_with_no_answer`; `ambre_app::shell::murmure_regions::the_header_says_why_a_call_rang_with_no_answer` -- wasm tier: the notice is a status beside the call button | none | verified |
@@ -592,12 +592,21 @@ back of the bubble, and a press on the pill, show the channel of the call in Mur
 videos (`MURMURE-702`). Each control names itself and takes the focus (`MURMURE-693`).
 
 The bubble rests in a corner of the content. A drag moves it, and its release rests it in the
-nearest corner (`MURMURE-703`).
- It floats over the canvas, so it publishes the part it covers, as
-each floating surface of the shell does (`MURMURE-698`, `CHROME-171`). A press on its faces would
-show the video of the member who speaks, or the screen. The render runtime of the page draws a
-video, never an element over the canvas (`CALL-015`). So the bubble shows no video until the
-runtime of Prose, Trame and Toile draws a slot of the call (`MURMURE-699`).
+nearest corner (`MURMURE-703`). It floats over the canvas, so it publishes the box it covers and
+the box of its mini video (`MURMURE-698`, `CHROME-171`). A press on its faces opens the mini
+video, and a second press folds it (`MURMURE-699`):
+
+| The call brings | The mini video shows |
+|---|---|
+| a received screen | the screen |
+| no screen, and a slot that carries the camera of the member who spoke last | that camera |
+| neither | no video, and the page asks the SFU for no other video (`MURMURE-702`) |
+
+The render runtime draws the picture through the box, never an element over the canvas
+(`CALL-015`). The host draws it over the overlay of every application alike. Only Murmure
+verifies it end to end today, since a call ends with a switch of application (`MURMURE-726`). The
+overlay repaints at each frame the picture shows, and the content keeps its paint. The pill
+shows no video.
 
 **Present a document.** A screen share of an Ambre document sends pixels of what every member
 could open. Present opens the document itself for each participant who is a member of it, and
@@ -633,7 +642,8 @@ sync, under its own key (`MURMURE-709`).
 | `crates/ambre-murmure/src/ui/call_ring.rs` | the steps of a ring, on the page of the member and on the page of the caller |
 | `crates/ambre-app/src/call_ring.rs` | the ring of the page: its alert, its tone, its timer, and the join, the decline or the hang-up a step asks for |
 | `crates/ambre-murmure/src/ui/call_videos.rs` | the band, the grid and the tiles of the video region, the screen included, and who speaks |
-| `crates/ambre-app/src/call_stage.rs` | what the page shows of its call: the participants, the video of each, the level of each audio slot |
+| `crates/ambre-murmure/src/ui/call_float.rs` | when the bubble and the pill show, the corner of the bubble, its clock, its cover and the choice of its mini video |
+| `crates/ambre-app/src/call_stage.rs` | what the page shows of its call: the participants, the video of each, the level of each audio slot, and the mini video of the bubble |
 | `crates/ambre-canvas/src/video.rs` | the detached video element of each slot, which the render runtime copies |
 
 ---

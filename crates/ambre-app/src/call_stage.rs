@@ -22,13 +22,15 @@
 
 use std::cell::{Cell, RefCell};
 
+use ambre_canvas::video::Facing;
 use ambre_core::id::{Id, User};
 use ambre_core::index::Pos;
 use ambre_core::{Bounded, FracMs, Instant, MeterLevel, OWN_SLOT, PageLoad, SCREEN_SLOT, TimeSpan};
 use ambre_murmure::ui::call_controls::CallPhase;
+use ambre_murmure::ui::call_float::{Cover, Mini, Received};
 use ambre_murmure::ui::call_videos::{
-    CallPress, CallStage, Fill, GridPages, Layout, Own, Paging, Participant, Subject, Turn, Voices,
-    Width, grid,
+    CallPress, CallStage, Fill, GridPages, Layout, Own, Paging, Participant, Picture, Subject,
+    Turn, Voices, Width, grid,
 };
 use ambre_protocol::signaling::{PHONE_VIDEOS, ReceivedVideos, VIDEOS_PER_RECEIVER, VideoChoice};
 use leptos::prelude::{ArcRwSignal, Get, GetUntracked, Set};
@@ -62,6 +64,106 @@ thread_local! {
     static SCREEN: Cell<Subject> = const { Cell::new(Subject::None) };
     /// The layout and the width of the last stage, which size the pages the header turns.
     static SHAPE: ArcRwSignal<(Layout, Width)> = ArcRwSignal::new((Layout::Band, Width::Wider));
+    /// What the call bubble covers of the page, as it last measured itself (`MURMURE-698`).
+    static COVER: Cell<Cover> = const { Cell::new(Cover::NONE) };
+    /// Whether the bubble shows its mini video, which a press on its faces sets.
+    static MINI: ArcRwSignal<Mini> = ArcRwSignal::new(Mini::Folded);
+    /// What the mini video of the bubble shows now, which the bubble reads to open its box.
+    static MINI_SHOWS: ArcRwSignal<MiniShows> = ArcRwSignal::new(MiniShows::Faces);
+    /// The picture of the mini video the last frame drew, so the frame after it erases it.
+    static MINI_DRAWN: Cell<Option<Picture>> = const { Cell::new(None) };
+}
+
+/// What the mini video of the bubble shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MiniShows {
+    /// No picture: no screen arrives, and no slot carries the camera of the speaker.
+    Faces,
+    /// A picture the render runtime draws through the box of the mini video.
+    Video,
+}
+
+/// The backdrop the render runtime paints under the picture of the mini video. A picture of
+/// another aspect then leaves no part of the box open on the canvas below.
+const MINI_BACKDROP: ambre_draw::Color = ambre_draw::Color::from_rgb8(0x10, 0x10, 0x12);
+
+/// The bubble publishes what it covers of the page (`MURMURE-698`).
+pub(crate) fn publish_cover(cover: Cover) {
+    COVER.with(|c| c.set(cover));
+}
+
+/// What the call bubble covers of the page, as it last published it (`MURMURE-698`).
+pub(crate) fn cover() -> Cover {
+    COVER.with(Cell::get)
+}
+
+/// Whether the bubble shows its mini video, for the faces button.
+pub(crate) fn mini() -> ArcRwSignal<Mini> {
+    MINI.with(ArcRwSignal::clone)
+}
+
+/// What the mini video shows now, for the box of the bubble.
+pub(crate) fn mini_shows() -> ArcRwSignal<MiniShows> {
+    MINI_SHOWS.with(ArcRwSignal::clone)
+}
+
+/// The picture of the mini video of the bubble, in whichever application the page shows
+/// (`MURMURE-699`). The render runtime draws it, never an element over the canvas (`CALL-015`).
+/// It draws a received screen first, then the camera of the member who spoke last. `None` while
+/// the bubble is folded or hidden, or while neither video arrives.
+fn mini_picture() -> Option<Picture> {
+    let on_canvas = cover().mini_on_canvas(crate::host::canvas_origin())?;
+    if !matches!(crate::call::phase().get_untracked(), CallPhase::InCall(_)) {
+        return None;
+    }
+    // Away from its channel, the page reads the levels of the audio slots for the bubble.
+    hear(crate::host::now());
+    let live = ambre_canvas::video::live();
+    let speaker = VOICES
+        .with(|voices| voices.borrow().latest())
+        .and_then(|member| {
+            call_volumes::videos_of(member)
+                .into_iter()
+                .find(|slot| live.contains(slot))
+        });
+    let received = Received {
+        screen: live.contains(&SCREEN_SLOT).then_some(SCREEN_SLOT),
+        speaker,
+    };
+    received.mini().map(|slot| Picture {
+        slot,
+        dest: on_canvas,
+        facing: Facing::AsSent,
+    })
+}
+
+/// Whether the overlay of the frame repaints for the mini video of the bubble. The overlay then
+/// repaints at each frame while the mini video shows a picture, and once more to erase it. The
+/// content layer keeps its paint (the call video paint row of `ambre-spec-budgets.md`).
+pub(crate) fn mini_repaints() -> bool {
+    let now = mini_picture();
+    let before = MINI_DRAWN.with(|drawn| drawn.replace(now));
+    let shows = if now.is_some() {
+        MiniShows::Video
+    } else {
+        MiniShows::Faces
+    };
+    MINI_SHOWS.with(|signal| {
+        if signal.get_untracked() != shows {
+            signal.set(shows);
+        }
+    });
+    now.is_some() || before.is_some()
+}
+
+/// Paints the mini video of the bubble over the overlay of any application: its backdrop, then
+/// the current picture of its slot (`MURMURE-699`, `CALL-015`).
+pub(crate) fn paint_mini(surface: &mut ambre_canvas::WgpuSurface<'_>) {
+    let Some(picture) = MINI_DRAWN.with(Cell::get) else {
+        return;
+    };
+    ambre_draw::DrawSurface::fill_rect(surface, picture.dest, MINI_BACKDROP);
+    surface.draw_video(picture.slot, picture.dest, picture.facing);
 }
 
 /// The phone width of the adaptive layout, in CSS pixels: the width the stylesheet switches at

@@ -71,6 +71,7 @@ pub use ambre_murmure::ui::view::{MurmureView, THREAD_CANVAS};
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
 pub use murmure::{DraftKeeper, page_reads};
+pub(crate) use prose::canvas_origin;
 pub use prose::{ProseSignals, ProseView, ProseWiring};
 
 /// Where a finger is in its gesture.
