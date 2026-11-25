@@ -188,16 +188,25 @@ pub enum LostReply {
 impl LostReply {
     /// What the user is told when the draft held text.
     #[must_use]
-    pub const fn notice(self) -> &'static str {
+    pub fn notice(self) -> &'static str {
         match self {
             Self::Deleted => {
-                "A collaborator deleted the thread you were replying to. Your reply was not posted."
+                ambre_commands::tr!(
+                    "A collaborator deleted the thread you were replying to. Your reply was not posted.",
+                    "Un collaborateur a supprim\u{e9} le fil auquel vous r\u{e9}pondiez. Votre r\u{e9}ponse n'a pas \u{e9}t\u{e9} publi\u{e9}e."
+                )
             }
             Self::Resolved => {
-                "A collaborator resolved the thread you were replying to. Your reply was not posted."
+                ambre_commands::tr!(
+                    "A collaborator resolved the thread you were replying to. Your reply was not posted.",
+                    "Un collaborateur a r\u{e9}solu le fil auquel vous r\u{e9}pondiez. Votre r\u{e9}ponse n'a pas \u{e9}t\u{e9} publi\u{e9}e."
+                )
             }
             Self::Orphaned => {
-                "A collaborator deleted the text of the thread you were replying to. Your reply was not posted."
+                ambre_commands::tr!(
+                    "A collaborator deleted the text of the thread you were replying to. Your reply was not posted.",
+                    "Un collaborateur a supprim\u{e9} le texte du fil auquel vous r\u{e9}pondiez. Votre r\u{e9}ponse n'a pas \u{e9}t\u{e9} publi\u{e9}e."
+                )
             }
         }
     }

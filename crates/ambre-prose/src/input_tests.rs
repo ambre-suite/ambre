@@ -2013,7 +2013,7 @@ fn the_query_narrows_the_items_in_order() {
     let labels = |q: &str| -> Vec<&str> {
         crate::view::slash::filter(q)
             .iter()
-            .map(|item| item.label)
+            .map(|item| item.label.en)
             .collect()
     };
     assert_eq!(labels("HEAD"), vec!["Heading 1", "Heading 2", "Heading 3"]);
