@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 132 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 31 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 161 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 162 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 20 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 23 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 27 implemented, 21 partial, 2 design-only. 1942 contract rows, 14 loose.**
+**50 features: 27 implemented, 21 partial, 2 design-only. 1943 contract rows, 14 loose.**

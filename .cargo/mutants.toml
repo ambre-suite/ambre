@@ -75,6 +75,11 @@ exclude_re = [
     # Equivalent: at a counter equal to the highest the shift is 0, so the
     # mutant leaves the map and the highest as they were.
     "replace > with >= in ReplayWindow::mark",
+    # Equivalent: at an equal time both arms keep the same instant, so a
+    # second close keeps the earlier time either way.
+    "replace < with <= in ReceiveKeys::close",
+    # Equivalent: `V1` is the one variant, and it spells the byte 1.
+    'replace (WrapVersion|SeedVersion)::byte -> u8 with 1',
     # Host-unreachable: the socket handle exists in the browser alone, so no
     # host build reaches the send, and the wasm entry is compiled for wasm32
     # alone. The browser tier holds both.
