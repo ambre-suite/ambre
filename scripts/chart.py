@@ -683,6 +683,38 @@ def link_key_served(kubectl: list[str], origin: str) -> int:
     return 0
 
 
+def termination_messages(pods: dict) -> str:
+    """The termination messages of the init containers of the patch.
+
+    The chart sets `FallbackToLogsOnError`, so a failed container leaves the
+    tail of its log in its status, which outlives the restarts of the kubelet.
+    """
+    return "\n".join(
+        c.get(k, {}).get("terminated", {}).get("message", "")
+        for p in pods.get("items", [])
+        for c in p.get("status", {}).get("initContainerStatuses", [])
+        if c.get("name") == LINK_INIT
+        for k in ("state", "lastState")
+    )
+
+
+def refusal_log(kubectl: list[str], pods: dict, pod: str, reason: str) -> str:
+    """What the refused pod says: its termination messages, then its logs.
+
+    `kubectl logs` of an init container the kubelet starts again can answer
+    nothing, so each source is read a few times before the verdict.
+    """
+    seen = termination_messages(pods)
+    for _ in range(6):
+        if reason in seen:
+            break
+        for extra in (["--previous"], []):
+            out = subprocess.run([*kubectl, "logs", pod, "-c", LINK_INIT, *extra], capture_output=True, text=True, check=False)
+            seen += "\n" + out.stdout
+        time.sleep(5)
+    return seen
+
+
 def refused(kubectl: list[str], planted: str, reason: str) -> list[str]:
     """Plants `planted` as the key of the Secret, restarts the web server, and reads the verdict."""
     secret = yaml.safe_load(TEST_VALUES.read_text())["existingSecret"]
@@ -706,12 +738,7 @@ def refused(kubectl: list[str], planted: str, reason: str) -> list[str]:
         ]
         if not failed or len(pods.get("items", [])) != 1:
             continue
-        log = subprocess.run(
-            [*kubectl, "logs", failed[0], "-c", LINK_INIT, "--previous"], capture_output=True, text=True, check=False
-        )
-        if log.returncode != 0:
-            log = subprocess.run([*kubectl, "logs", failed[0], "-c", LINK_INIT], capture_output=True, text=True, check=False)
-        return link_key_faults(pods, log.stdout + log.stderr, reason)
+        return link_key_faults(pods, refusal_log(kubectl, pods, failed[0], reason), reason)
     return [f"no web pod failed its link key within 180 s under {planted or 'an empty key'}"]
 
 

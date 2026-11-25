@@ -423,6 +423,16 @@ class LinkKeyRefusalTest(unittest.TestCase):
         text = " ".join(chart.link_key_faults(pods(FAILED, WAITING), "link_key: no link key slot", REASON))
         self.assertIn("does not say why", text)
 
+    def test_the_termination_message_keeps_the_reason_past_a_restart(self) -> None:
+        restarted = {"state": {"waiting": {"reason": "CrashLoopBackOff"}}, "lastState": {"terminated": {"exitCode": 1, "message": LOG}}}
+        self.assertIn(REASON, chart.termination_messages(pods(restarted, WAITING)))
+        self.assertNotIn(REASON, chart.termination_messages(pods(FAILED, WAITING)))
+
+    def test_the_chart_keeps_the_log_of_a_refused_patch(self) -> None:
+        template = (chart.ROOT / "deploy/chart/ambre/templates/web.yaml").read_text()
+        patch = template[template.index("- name: link-key") : template.index("containers:\n        - name: web")]
+        self.assertIn("terminationMessagePolicy: FallbackToLogsOnError", patch)
+
     def test_each_refusal_plants_a_key_the_patch_refuses(self) -> None:
         for planted, reason in chart.REFUSALS:
             with self.subTest(reason=reason):

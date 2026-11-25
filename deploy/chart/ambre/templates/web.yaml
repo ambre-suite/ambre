@@ -118,6 +118,9 @@ spec:
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           {{- include "ambre.containerSecurity" . | nindent 10 }}
           command: ["python3", "/opt/ambre/link_key.py", "patch", "/site"]
+          # The status of the pod keeps the tail of the log of a refusal, so a
+          # reader finds the reason after the kubelet starts the container again.
+          terminationMessagePolicy: FallbackToLogsOnError
           env:
             {{- include "ambre.secretEnv" (dict "root" . "name" "THREAD_LINK_KEY" "key" "thread-link-key") | nindent 12 }}
           {{- with .Values.web.resources }}
