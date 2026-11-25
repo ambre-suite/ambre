@@ -164,6 +164,7 @@ pub(crate) async fn checked_removal(
         role: Some(removal.role),
         key: Some(None),
     };
+    let mut capped: Vec<Id<Document>> = removal.document_caps.iter().map(|c| c.document).collect();
     let mut place = removal.position;
     let mut entries = Vec::with_capacity(continued.len());
     for text in continued {
@@ -174,11 +175,13 @@ pub(crate) async fn checked_removal(
                 "continued: not the cap continuation of this removal".into(),
             ));
         }
+        capped.extend(next.document_caps.iter().map(|c| c.document));
         entries.push(db::LogEntry {
             position: next.position,
             bytes: text.clone(),
         });
     }
+    grouped_caps(state, doc_id, &capped).await?;
     Ok(db::RemovalEntries {
         entry: Some(db::LogEntry {
             position: removal.position,
@@ -186,6 +189,42 @@ pub(crate) async fn checked_removal(
         }),
         continued: entries,
     })
+}
+
+/// Refuses a removal on the log of a channel's `meta` whose caps name a
+/// document that the channel does not group (`SRV-355`). A census reads such
+/// a cap as proof that the document stood in the channel, so no erasure
+/// covers it (`SYNC-345`). A cap the relay never checked would let one member
+/// block every later removal. The log of any other document keeps its caps
+/// unchecked: no census reads them.
+///
+/// # Errors
+///
+/// [`AppError::BadRequest`] for a cap outside the channel.
+async fn grouped_caps(
+    state: &AppState,
+    doc_id: Id<Document>,
+    capped: &[Id<Document>],
+) -> Result<(), AppError> {
+    if capped.is_empty() {
+        return Ok(());
+    }
+    let Some(channel) = db::channel_of_document(&state.db, &doc_id).await? else {
+        return Ok(());
+    };
+    let grouped = db::list_channel_documents(&state.db, &channel).await?;
+    let is_meta = grouped
+        .iter()
+        .any(|d| d.document_id == doc_id && d.kind == ambre_core::ChannelDocumentKind::Meta);
+    let all_grouped = capped
+        .iter()
+        .all(|document| grouped.iter().any(|d| d.document_id == *document));
+    if is_meta && !all_grouped {
+        return Err(AppError::BadRequest(
+            "entry: a cap names no document of the channel".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Request to add a user to a document. `doc_key_enc` is the DocumentKey

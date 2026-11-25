@@ -5082,3 +5082,5 @@ ambre-toile | src/chrome/floatbar.rs | crate::chrome::floatbar | property_title(
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | CallIcon(class) | param | &'static str	free-text	the class an icon of the call gives its button for the stylesheet and the tests, as IconButton(class)
 ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | ERASURE_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-sync | src/erasure.rs | crate::erasure | verifies() | ret | bool	generic	predicate result
+ambre-server | src/db/members.rs | crate::db::members | holds_owner() | ret | Result<bool,AppError>	generic	predicate answer: whether any member row of the document is an owner, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::caps_document() | ret | bool	generic	predicate answer: whether a valid revoke of the log caps the document, selects no mode

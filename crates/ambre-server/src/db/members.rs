@@ -339,6 +339,19 @@ pub(super) async fn upsert_member(
     Ok(())
 }
 
+/// Whether any member row of `document_id` is an owner. A `meta` with none
+/// gives the erasure of a thread name to each writer (`SRV-356`). A direct
+/// message holds none, nor does a public channel its last owner left.
+pub async fn holds_owner(pool: &PgPool, document_id: &Id<Document>) -> Result<bool, AppError> {
+    let held: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM document_members WHERE document_id = $1 AND role = 'owner')",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_one(pool)
+    .await?;
+    Ok(held)
+}
+
 /// Fails with a 409 if the document has only one owner left. Callers hold the
 /// target owner's row locked, so the count is stable for the transaction.
 ///
