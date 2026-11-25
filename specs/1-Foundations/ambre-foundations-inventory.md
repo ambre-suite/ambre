@@ -57,7 +57,7 @@
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
 | `server` | The one process every client talks to. | partial | 136 | 1 |
-| `shell` | Where each command of a document page lives. | partial | 100 |  |
+| `shell` | Where each command of a document page lives. | partial | 101 |  |
 | `sync` | The one part of the client that talks to the network. | partial | 91 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 27 implemented, 21 partial, 2 design-only. 1940 contract rows, 14 loose.**
+**50 features: 27 implemented, 21 partial, 2 design-only. 1941 contract rows, 14 loose.**

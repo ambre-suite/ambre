@@ -95,7 +95,7 @@ pub(crate) fn MurmureShell(
                 <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members()>
                     <CallBar pane=pane phase=call_phase relay=relay />
                 </ChannelHeader>
-                <RingAlert />
+                <RingAlert relay=relay />
                 <InviteControl relay=relay send=send />
                 <MurmureInviteLink link=invite_link />
                 <MessageSearch relay=relay send=send />

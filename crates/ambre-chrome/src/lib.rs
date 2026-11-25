@@ -67,6 +67,7 @@ mod status;
 mod tip;
 mod toast;
 
+pub use ambre_commands::CallVerb;
 pub use app_shell::{
     AppShell, CanvasCell, CanvasOverlay, ContextRegion, FormulaBar, Header, Panel, RowShown,
     ShellRegion, ShellRows, Sidebar, StatusBar, Tabs, Toolbar,

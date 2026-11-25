@@ -1615,6 +1615,12 @@ impl CommandHandler for MurmureHandler {
         if id == PALETTE {
             return vec![ShellAction::OpenPalette];
         }
+        // The page holds the call, so the shell performs the verb, as the icon of the verb
+        // does (`MURMURE-731`).
+        let shown = self.relay.pane.get_untracked().shown_channel();
+        if let Some(verb) = crate::ui::commands::call_verb(id, shown) {
+            return vec![ShellAction::Call(verb)];
+        }
         // An action of a message acts on the target of the menu. With none,
         // as from the palette, it does nothing (`MURMURE-419`).
         match self.relay.act(id) {

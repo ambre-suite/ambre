@@ -319,6 +319,59 @@ fn pointer(el: &web_sys::Element, name: &str, kind: &str) {
     el.dispatch_event(&ev).unwrap();
 }
 
+/// `CHROME-256`: a toggle passes the tip of the command its press runs now. The name, the
+/// accessible name, the chord, the description and the reach follow the state.
+#[wasm_bindgen_test]
+async fn a_toggle_icon_names_the_command_its_press_runs() {
+    use ambre_chrome::CommandTip;
+    with_styles();
+    let on = RwSignal::new(false);
+    let root = mount_in_container(move || {
+        view! {
+            <IconButton
+                icon=icondata::BsHandIndex
+                tip=Signal::derive(move || CommandTip::of(if on.get() { &HAND } else { &BOLD }))
+                on_press=Callback::new(move |()| on.update(|on| *on = !*on))
+            />
+        }
+    });
+    leptos::task::tick().await;
+    let button = q(&root, "button");
+    let read = |name: &str| button.get_attribute(name).unwrap_or_default();
+    let tip = q(&root, ".ambre-tip");
+    assert_eq!(read("aria-label"), "Bold");
+    assert_eq!(q(&tip, ".ambre-tip-name").text_content().unwrap(), "Bold");
+    assert_eq!(
+        read("data-reach"),
+        ambre_chrome::commands::Reach::Command(BOLD.id).marker()
+    );
+    assert!(
+        tip.query_selector(".ambre-tip-description")
+            .unwrap()
+            .is_none()
+    );
+    let untipped = |command: &Command| untipped_icons(&root, std::slice::from_ref(command));
+    assert_eq!(untipped(&BOLD), Vec::<String>::new());
+    button.dyn_ref::<web_sys::HtmlElement>().unwrap().click();
+    leptos::task::tick().await;
+    assert_eq!(read("aria-label"), "Hand");
+    assert_eq!(q(&tip, ".ambre-tip-name").text_content().unwrap(), "Hand");
+    assert_eq!(
+        read("data-reach"),
+        ambre_chrome::commands::Reach::Command(HAND.id).marker()
+    );
+    assert_eq!(
+        read("aria-keyshortcuts"),
+        KeyBinding::primary(KeyChar::H).to_string()
+    );
+    assert_eq!(
+        q(&tip, ".ambre-tip-description").text_content().unwrap(),
+        "Drag to move the view"
+    );
+    assert_eq!(untipped(&HAND), Vec::<String>::new());
+    root.remove();
+}
+
 /// `CHROME-186`: the tooltip of a command's icon shows the name, the chord
 /// and the description the command declares. It has no word of its own.
 #[wasm_bindgen_test]

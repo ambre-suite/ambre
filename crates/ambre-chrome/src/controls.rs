@@ -225,6 +225,10 @@ fn fixed_origin(el: &web_sys::Element) -> Point<Px<Css>> {
 /// (`CHROME-189`). A command's icon takes its words from a
 /// [`CommandTip`](crate::CommandTip) (`CHROME-186`).
 ///
+/// `tip` names the command the icon reaches. It gives the name, the chord, the description and
+/// the reach, in place of `label`, `chord`, `description` and `reach`. It may follow a
+/// state: a toggle names the command its press runs now (`CHROME-256`).
+///
 /// `pressed` makes it a toggle. `checked` makes it one radio of a group, as a
 /// segment of a [`SegmentBar`] is. `expanded` makes it the opener of a list or
 /// a panel. `reach` is the id of the command or the property it reaches
@@ -234,7 +238,8 @@ fn fixed_origin(el: &web_sys::Element) -> Point<Px<Css>> {
 #[component]
 pub fn IconButton(
     #[prop(into)] icon: Signal<icondata::Icon>,
-    #[prop(into)] label: Signal<String>,
+    #[prop(optional, into)] label: Option<Signal<String>>,
+    #[prop(optional, into)] tip: Option<Signal<crate::CommandTip>>,
     on_press: Callback<()>,
     #[prop(optional_no_strip)] chord: Option<KeyBinding>,
     #[prop(optional_no_strip)] description: Option<
@@ -311,28 +316,41 @@ pub fn IconButton(
         || "ambre-icon-button".to_owned(),
         |c| format!("ambre-icon-button {c}"),
     );
-    let described =
-        (chord.is_some() || description.is_some()).then(|| format!("ambre-tip-{}", next_tip()));
-    let spoken = {
-        let parts: Vec<String> = chord
+    // A tip gives every word of the tooltip, and follows its signal; the plain props are fixed.
+    let name = move || match (tip, label) {
+        (Some(tip), _) => tip.with(|t| t.title().as_str().to_owned()),
+        (None, Some(label)) => label.get(),
+        (None, None) => String::new(),
+    };
+    let chord_now = move || tip.map_or(chord, |tip| tip.with(crate::CommandTip::chord));
+    let description = StoredValue::new(description);
+    let line = move || match tip {
+        Some(tip) => tip.with(|t| t.description().map(|d| d.as_str().to_owned())),
+        None => description.with_value(|d| d.as_ref().map(|d| d.as_str().to_owned())),
+    };
+    let reach_now = move || tip.map_or(reach, |tip| Some(tip.with(crate::CommandTip::reach)));
+    let spoken = move || {
+        let parts: Vec<String> = chord_now()
             .map(|c| c.to_string())
             .into_iter()
-            .chain(description.as_ref().map(|d| d.as_str().to_owned()))
+            .chain(line())
             .collect();
         parts.join(". ")
     };
-    let line = description.map(|d| d.into_string());
+    let described = (tip.is_some() || chord.is_some() || description.with_value(Option::is_some))
+        .then(|| format!("ambre-tip-{}", next_tip()));
     let described_by = described.clone();
+    let described_by = move || described_by.clone().filter(|_| !spoken().is_empty());
     view! {
         <button
             class=class
             node_ref=node
             data-size=size.as_str()
             data-look=look.as_str()
-            data-reach=reach.map(|r| r.marker())
-            aria-label=move || label.get()
+            data-reach=move || reach_now().map(|r| r.marker())
+            aria-label=name
             aria-describedby=described_by
-            aria-keyshortcuts=chord.map(|c| c.to_string())
+            aria-keyshortcuts=move || chord_now().map(|c| c.to_string())
             aria-pressed=move || pressed.map(|p| p.get().aria())
             role=checked.map(|_| "radio")
             aria-checked=move || checked.map(|c| c.get().aria())
@@ -381,10 +399,10 @@ pub fn IconButton(
                 style:top=move || tip_at.get().map(|p| format!("{}px", p.y.get()))
             >
                 <span class="ambre-tip-head">
-                    <span class="ambre-tip-name">{move || label.get()}</span>
-                    {chord.map(|c| view! { <crate::Kbd binding=c /> })}
+                    <span class="ambre-tip-name">{name}</span>
+                    {move || chord_now().map(|c| view! { <crate::Kbd binding=c /> })}
                 </span>
-                {line.map(|l| view! { <span class="ambre-tip-description">{l}</span> })}
+                {move || line().map(|l| view! { <span class="ambre-tip-description">{l}</span> })}
             </span>
             {described.map(|id| view! { <span id=id hidden>{spoken}</span> })}
         </button>

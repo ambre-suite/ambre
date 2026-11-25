@@ -351,8 +351,6 @@ ambre-murmure | src/message/mod.rs | crate::message | MurmureCommand::is_mutatin
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | field | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Fill::label() | ret | &'static str	free-text	the accessible name of the fill button, which a person reads and no code matches back
-ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Turn::label() | ret | &'static str	free-text	the accessible name of a page button of the header, which a person reads and no code matches back
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | Turn::arrow() | ret | &'static str	free-text	the sign an arrow of the grid draws for a person to read, which no code matches back
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | PINNED_SHARE | const | f32	math	the share of the area of the grid a pinned tile takes at most, a scalar multiplier of that width
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | BESIDE_PINNED | const | f32	math	the share of the width of a pinned tile a tile of the grid beside it takes at most, a scalar multiplier of that width
@@ -3854,13 +3852,11 @@ ambre-murmure | src/logic/call.rs | crate::logic::call | is_own_end() | ret | bo
 ambre-murmure | src/logic/call.rs | crate::logic::call | is_own_end(key) | param | &str	generic	the codec of a call_end key: a stored key, decoded back into the Id<User> of its writer
 ambre-murmure | src/logic/call.rs | crate::logic::call | write_end() | ret | Result<bool,loro::LoroError>	generic	predicate result: whether the end was written, false when the member wrote it already
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CallPhase::accepts_a_gesture() | ret | bool	generic	predicate result: whether a call gesture may open a call now
-ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Camera::label() | ret | &'static str	free-text	the accessible name of the camera button, which says what a press does
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Camera::sends() | ret | bool	generic	predicate result: whether the camera goes into the call, which the pressed state of the button reads
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CameraRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CameraRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the camera is refused
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
-ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::label() | ret | &'static str	free-text	the accessible name of the share button, which says what a press does
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::notice() | ret | Option<&'static str>	free-text	the words the header shows the user when no screen is shared or another member took the share over
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::sends() | ret | bool	generic	predicate result: whether a screen goes into the call, which the pressed state of the button reads
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | ShareRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getDisplayMedia, which this parses into the fieldless enum
@@ -4950,7 +4946,7 @@ ambre-trame | src/chrome/panel.rs | crate::chrome::panel | label() | ret | Strin
 ambre-chrome | src/controls.rs | crate::controls | ColorSwatch(label) | param | String	free-text	the accessible name and tooltip of a swatch, display text
 ambre-chrome | src/controls.rs | crate::controls | ControlSize::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-size word, which the stylesheet reads off the attribute
 ambre-chrome | src/controls.rs | crate::controls | IconLook::as_str() | ret | &'static str	newtype-inner	the fieldless enum's own data-look word, which the stylesheet reads off the attribute
-ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | Signal<String>	free-text	the accessible name and tooltip of an icon button, read from a command or a property description, or following the state of a toggle
+ambre-chrome | src/controls.rs | crate::controls | IconButton(label) | param | Option<Signal<String>>	free-text	the accessible name and tooltip of an icon button, for a control that reaches no command: a property, or a control of the shell alone
 ambre-chrome | src/controls.rs | crate::controls | IconButton(class) | param | Option<&'static str>	free-text	the class an application gives the button for its own stylesheet and its tests
 ambre-chrome | src/controls.rs | crate::controls | SLIDER_STEPS | const | f32	foreign-api	the max of the range input, which the one foreign call that renders the input reads
 ambre-chrome | src/controls.rs | crate::controls | SegmentBar(label) | param | String	free-text	the accessible name of a radio group, display text
@@ -5079,3 +5075,4 @@ ambre-prose | src/view/panel.rs | crate::view::panel | style_label() | ret | &'s
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::is_swept() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::sweep_arrival() | ret | bool	generic	state flag/predicate
 ambre-toile | src/chrome/floatbar.rs | crate::chrome::floatbar | property_title() | ret | String	free-text	the label a person reads in the tooltip of a colour trigger
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | CallIcon(class) | param | &'static str	free-text	the class an icon of the call gives its button for the stylesheet and the tests, as IconButton(class)

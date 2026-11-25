@@ -1061,7 +1061,8 @@ body {
     margin: 0;
 }
 
-.murmure-ring-decline {
+.ambre-icon-button.murmure-ring-decline,
+.ambre-icon-button.murmure-ring-decline:hover {
     color: var(--error);
 }
 
