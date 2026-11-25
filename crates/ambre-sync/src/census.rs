@@ -37,6 +37,9 @@ pub(crate) struct Named {
     /// The threads those name (`SYNC-321`). A listing that leaves one out
     /// passes only under an owner's erasure of it (`SYNC-322`).
     pub threads: Vec<Id<Document>>,
+    /// The link receipts those documents hold. A hidden thread under a valid
+    /// one takes no erasure (`SYNC-330`).
+    pub receipts: Vec<ambre_bus::LinkReceipt>,
 }
 
 /// A document a removal caps, as the relay lists it.
@@ -200,7 +203,11 @@ impl SyncState {
                             let erased = match (hidden.is_empty(), erasing) {
                                 (true, _) => Ok(()),
                                 (false, Some(params)) => {
-                                    let params = crate::erasure::ErasureParams { hidden, ..params };
+                                    let params = crate::erasure::ErasureParams {
+                                        hidden,
+                                        receipts: named.receipts,
+                                        ..params
+                                    };
                                     crate::erasure::erase_hidden(
                                         &crate::sharing::GlooHttp { auth },
                                         params,
@@ -367,6 +374,7 @@ impl SyncState {
             channel_id,
             meta,
             hidden: Vec::new(),
+            receipts: Vec::new(),
             footing: self.footing(meta)?,
             rule: self.log_rule(meta),
             author: self.author()?,
@@ -875,6 +883,7 @@ mod tests {
             Some(Named {
                 documents: Vec::new(),
                 threads: vec![THREAD],
+                receipts: Vec::new(),
             })
         };
         for (removal, named) in [

@@ -347,12 +347,14 @@ pub enum LogicEvent {
     /// The relay registered `thread` for `root`, a message of `segment`,
     /// answering [`SyncCommand::CreateThread`](crate::SyncCommand::CreateThread).
     /// A registration that lost its race names the winner's, and the Sync
-    /// worker deleted its own (`SRV-214`).
+    /// worker deleted its own (`SRV-214`). `receipt` is the relay's
+    /// signature over the link, which the root keeps (`SRV-363`).
     ThreadLinked {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
+        receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
     },
     /// The relay refused the creation or the registration of `thread` for
     /// `root`, or never answered it.

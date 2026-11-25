@@ -809,15 +809,11 @@ impl SyncState {
     pub(crate) fn handle_leave_channel(
         &mut self,
         channel_id: Id<Channel>,
-        named: Vec<Id<Document>>,
-        threads: Vec<Id<Document>>,
+        named: crate::census::Named,
     ) {
         self.begin_removal(
             crate::census::Removal::LeaveChannel { channel_id },
-            Some(crate::census::Named {
-                documents: named,
-                threads,
-            }),
+            Some(named),
         );
     }
 
@@ -2184,7 +2180,13 @@ pub(crate) mod tests {
             ),
         );
 
-        state.handle_leave_channel(channel_id, vec![meta], Vec::new());
+        state.handle_leave_channel(
+            channel_id,
+            crate::census::Named {
+                documents: vec![meta],
+                ..crate::census::Named::default()
+            },
+        );
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
             result: Err(crate::http::HttpError::Local(

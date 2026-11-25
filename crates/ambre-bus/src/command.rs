@@ -339,11 +339,14 @@ pub enum SyncCommand {
     /// thread read. The census refuses a relay listing that leaves one out,
     /// and an empty `named` (`SYNC-320`). `threads` lists the threads those
     /// documents name. A listing that leaves one out passes only under an
-    /// owner's erasure of it (`SYNC-321`, `SYNC-322`).
+    /// owner's erasure of it (`SYNC-321`, `SYNC-322`). `receipts` lists the
+    /// relay's receipt of each link those documents hold: a thread under a
+    /// valid one takes no erasure (`SYNC-330`).
     LeaveChannel {
         channel_id: Id<Channel>,
         named: Vec<Id<Document>>,
         threads: Vec<Id<Document>>,
+        receipts: Vec<crate::LinkReceipt>,
     },
     /// Revoke `user_id` from the channel whose `meta` is `document_id`, as
     /// [`RestCommand::RevokeFromDocument`] does. It carries what
@@ -355,6 +358,7 @@ pub enum SyncCommand {
         user_id: Id<User>,
         named: Vec<Id<Document>>,
         threads: Vec<Id<Document>>,
+        receipts: Vec<crate::LinkReceipt>,
     },
     /// Open or create the direct message of this user and `members`, in one
     /// request. It carries one channel key wrapped for each member alone, and

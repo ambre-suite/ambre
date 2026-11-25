@@ -1981,12 +1981,15 @@ pub(crate) struct RegisterThreadRequest {
 }
 
 /// The thread document of a root after a registration. `created` is false
-/// when an earlier registration linked another.
+/// when an earlier registration linked another. `receipt` is the relay's
+/// signature over the link (`SRV-363`), absent from an older relay.
 #[derive(Deserialize)]
 pub(crate) struct ThreadResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub thread: Id<Document>,
     pub created: ambre_core::Creation,
+    #[serde(default)]
+    pub receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/lease`: the lease, or none
