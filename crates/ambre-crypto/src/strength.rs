@@ -1104,11 +1104,18 @@ mod tests {
     }
 
     /// `ZK-035`: a row read backward past its first character goes on from
-    /// its last, as a ring. `cbazyxwvut` costs what `poiuytrewq` costs.
+    /// its last, as a ring. `cbazyxwvut` costs what `poiuytrewq` costs. A
+    /// walk longer than its row goes round the ring again: `098765432109`
+    /// costs the first digit, the log of 12 and one bit.
     #[test]
     fn a_row_read_backward_past_its_start_is_a_sequence() {
         assert_eq!(bits("cbazyxwvut"), Count::new(870));
         assert_eq!(typed("cbazyxwvut").met, Some(PassphraseWeakness::Sequence));
+        assert_eq!(bits("098765432109"), Count::new(732));
+        assert_eq!(
+            typed("098765432109").met,
+            Some(PassphraseWeakness::Sequence)
+        );
     }
 
     /// `ZK-035`: each common password of a chain costs the log of its rank
