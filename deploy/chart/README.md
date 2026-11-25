@@ -17,6 +17,15 @@ A release publishes the images to `ghcr.io/ambre-suite/ambre` and the chart to
 `oci://ghcr.io/ambre-suite/charts`. The chart of a release names each image by its digest
 (`SRV-308`), and `ambre-images.txt` on the release lists the same digests.
 
+Each image carries a signed provenance attestation in the registry (`SRV-354`). Verify each image
+of a release against the commit of its tag before the install, with `gh` signed in:
+
+```bash
+gh release download v<version> -R ambre-suite/ambre -p ambre-images.txt
+python3 scripts/image_provenance.py verify ambre-images.txt \
+  --source-ref refs/tags/v<version> --source-digest "$(git rev-parse v<version>^{commit})"
+```
+
 ```bash
 kubectl create namespace ambre
 ./secret.sh ambre | kubectl apply -n ambre -f -

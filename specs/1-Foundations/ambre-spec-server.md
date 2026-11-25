@@ -60,6 +60,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-310` | `INV` | The self-hosting compose file of the repository MUST deploy, on one host, a stack against which the browser tier passes. | this spec section 3; `SRV-308` | `ambre_belt::prose::tests::the_self_hosted_stack_serves_two_members_one_document` -- browser tier, through the TLS front on port 443 of the stack that `just selfhost-test` builds and starts, in the CI `selfhost` job: the page is cross-origin isolated, and two members edit one document; `ambre_belt::murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp` -- the same stack: a call between two members decodes on both, and the one peer of each page is the media port of the SFU | none | verified |
 | `SRV-351` | `INV` | Each pod of the chart off the network of its node MUST accept and open only the flows of the table of this spec section 3. | README pillar "Security"; this spec section 3, the network of the chart; `SRV-309` | ci-gate -- `scripts/chart.py`, run by `just chart-check` in the CI `lint` job, renders the chart under three sets of values. It reads each NetworkPolicy, and fails a pod no policy isolates in either direction, a flow the table does not name and a flow of the table the policies refuse. The `NetworkTest` tests of `scripts/test_chart.py` plant each one | none | verified |
 | `SRV-352` | `INV` | On a cluster that enforces NetworkPolicy, a pod the flow table does not name MUST NOT reach a store or the relay of the chart. | this spec section 3, the network of the chart; `SRV-351` | ci-gate -- `scripts/chart.py probe`, run by `just chart-test` in the CI `selfhost` job on the kind cluster of the stack: a pod outside the release and a pod of the release under no component of the table each find every port of the stores and of the relay refused, and the first one reaches the web server. The `ProbeTest` tests of `scripts/test_chart.py` hold the verdict | none | verified |
+| `SRV-354` | `INV` | A release MUST push, beside each image it publishes, a signed provenance attestation of the digest of that image. | this spec section 3; `SRV-308` | ci-gate -- `scripts/image_provenance.py`, run by `just image-provenance` in the CI `lint` job, reads each workflow of `.github/workflows/`. It refuses a job that pushes an image with no `actions/attest-build-provenance` step on the digest of that push, an attestation kept off the registry, an attestation action pinned by no commit, and a push outside `docker/build-push-action`. The tests of `scripts/test_image_provenance.py` plant each one | none | verified |
+| `SRV-355` | `INV` | A job of a workflow that pushes no image MUST NOT hold the right to sign an attestation. | this spec section 3; `SRV-354` | ci-gate -- `scripts/image_provenance.py`, run by `just image-provenance` in the CI `lint` job, refuses a workflow that grants `id-token` or `attestations` write to every job, a job that holds either and pushes no image, and a job that pushes an image without both. The tests of `scripts/test_image_provenance.py` plant each one | none | verified |
+| `SRV-356` | `INV` | The chart test of a release MUST verify the provenance of each image by its digest, against the commit and the workflow of the release, before it pulls any image. | this spec section 3; `SRV-354` | ci-gate -- `scripts/image_provenance.py`, run by `just image-provenance` in the CI `lint` job, refuses a release with no job that runs `just chart-test-release`, a chart pushed before that job, a step of it that loads an image, and a recipe that loads or pulls an image before `scripts/image_provenance.py pull`. The tests of `scripts/test_image_provenance.py` plant each one, and hold that one refusal pulls no image and that a tag with no digest fails before any call | none | verified |
+| `SRV-357` | `INV` | Each image a release publishes MUST pass `gh attestation verify` against the repository, the release workflow, the tag and the commit of that release. | this spec section 3; `SRV-354`; `SRV-356` | not built | unbuilt -- lands with the `The relay images carry their provenance` Story (`ambre-roadmap.md` MVP). The `chart-test` job of `.github/workflows/release.yml` runs the verification on a tag push alone, and no tag has run it yet | unimplemented |
 
 ### 1.2 A request is classified and limited
 
@@ -204,7 +208,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 132 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+* **Verification.** 135 `verified`, 1 `human-review`, 7 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -503,6 +507,16 @@ outside the cluster needs its rule, and the chart renders nothing without one.
 
 A NetworkPolicy binds only a cluster whose network plugin enforces it. The kind cluster of the
 chart test enforces it, and two probe pods find each store and the relay refused there (`SRV-352`).
+
+**A release proves where each image comes from.** A digest names the bytes and not their source.
+Each job that pushes an image therefore attests the digest it pushed (`SRV-354`). GitHub signs the
+attestation through the OIDC token of that job, and the job pushes it beside the image. Only a job
+that pushes an image holds that token (`SRV-355`).
+
+**The chart test checks the provenance first.** It verifies each image against the repository, the
+release workflow, the tag and the commit. It pulls no image before every image passes (`SRV-356`),
+and the chart of the release waits for it. An operator runs the same check on `ambre-images.txt`
+with `scripts/image_provenance.py verify`.
 
 **One address serves the page and TURN.** A host with one address has one port 443, and TURN over
 TCP needs that port on networks that open nothing else (`CALL-042`). The compose file puts one TLS
