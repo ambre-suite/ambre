@@ -59,6 +59,7 @@ mod header;
 #[cfg(test)]
 mod hover_scan;
 mod kit;
+mod language;
 mod menu;
 mod palette;
 mod passphrase;
@@ -100,6 +101,7 @@ pub use kit::{
     LengthField, LengthUnit, PropertyToggle, Row, Segmented, SelectField, Step, native_controls,
     reach_markers, repeated_title, unreached_controls,
 };
+pub use language::{LanguageName, endonym, interface_locale, language, set_language, stored_tag};
 pub use menu::{
     Checked, MenuKey, MenuRow, Openness, Selected, focus_first_item, initial, menu_key,
     on_menu_keydown,

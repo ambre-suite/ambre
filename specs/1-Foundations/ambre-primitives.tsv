@@ -5053,6 +5053,8 @@ ambre-chrome | src/header.rs | crate::header | PrimaryButton(label) | param | &'
 ambre-chrome | src/header.rs | crate::header | SEARCH_LABEL | const | &str	free-text	the words and the accessible name of the search field of the header
 ambre-chrome | src/status.rs | crate::status | Build::shows_diagnostics() | ret | bool	generic	predicate result
 ambre-commands | src/lib.rs | crate | NOTHING_SELECTED | const | &str	free-text	the subtitle a person reads over an empty selection
+ambre-commands | src/lib.rs | crate | TitleWords.en | field | &'static str	free-text	the English words of a display label, in a const table
+ambre-commands | src/lib.rs | crate | TitleWords.fr | field | &'static str	free-text	the French words of a display label, in a const table
 ambre-prose | src/count.rs | crate::count | words_in(text) | param | &str	free-text	the text a person wrote, counted in words
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
 ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel

@@ -14,7 +14,6 @@
 use crate::ui::commands as registry;
 use crate::ui::menu::{CtxScope, context_menu_ids};
 use ambre_chrome::MenuEntry;
-use ambre_chrome::commands::Locale;
 use ambre_core::{Commands, StaticKey};
 
 use super::icons;
@@ -24,7 +23,7 @@ use super::icons;
 /// produces.
 fn entry(id: StaticKey<Commands>) -> Option<MenuEntry> {
     let cmd = ambre_chrome::commands::find(registry::COMMANDS, id)?;
-    let entry = MenuEntry::command(cmd, &Locale::En);
+    let entry = MenuEntry::command(cmd, &ambre_chrome::language());
     Some(match cmd.icon.and_then(icons::resolve) {
         Some(icon) => entry.icon(icon),
         None => entry,

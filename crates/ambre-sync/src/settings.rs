@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(transport.calls().len(), 1, "one read, no claim");
     }
 
-    /// `SETTINGS-042`: the exchange key derives from the Master Seed, and a
+    /// `SETTINGS-045`: the exchange key derives from the Master Seed, and a
     /// recovery or a new device unlocks the same seed. So the self-wrap of the
     /// creation opens on that device with no re-wrap, and the seed of another
     /// account opens nothing.

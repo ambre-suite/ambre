@@ -38,7 +38,7 @@ pub fn RangeBar(
     // declares (`UI-THREAD-019`).
     let command = move |id: StaticKey<Commands>, pressed: Option<Signal<Pressed>>| {
         ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
-            let label = (c.title)(&ambre_chrome::commands::Locale::En).into_string();
+            let label = c.title.pick(&ambre_chrome::language()).into_string();
             let icon = registry::icon(id)
                 .and_then(super::icons::resolve)
                 .unwrap_or(icondata::LuSquare);

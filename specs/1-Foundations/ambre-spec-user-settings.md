@@ -30,7 +30,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-009` | `CONC` | Two devices signing in for the first time at once MUST converge on one settings document. | this spec section 3, the store; `SETTINGS-002` | `ambre_server::routes::tests::handler_tests::two_first_claims_at_once_converge_on_one_document` | none | verified |
 | `SETTINGS-016` | `CONC` | Two devices that change one setting, one of them offline, MUST converge on one value once both reach the relay. | this spec section 3, the merge; `ambre-spec-delta-order.md` | `ambre_logic::settings::tests::two_devices_converge_after_writing_apart` | none | verified |
 | `SETTINGS-017` | `INV` | The key of the settings document MUST be wrapped for the exchange key of its user, as the key of any document. | this spec section 3, the key; `ambre-spec-membership.md section 3` | `ambre_sync::settings::tests::an_account_with_none_claims_one_and_opens_the_relay_answer` -- the self-wrap of the creation rides the claim | none | verified |
-| `SETTINGS-042` | `INV` | Every device of the user MUST open the settings key from its first self-wrap, after a recovery too. | this spec section 3, the key; `SETTINGS-017`; `ambre-spec-zero-knowledge.md`, `ZK-009`, `ZK-043`; `ambre-spec-session.md`, `SRV-030`; `ambre-spec-sync.md`, `SYNC-249` | `ambre_sync::settings::tests::the_settings_self_wrap_opens_under_the_key_a_recovery_derives` -- the words of the account derive the registered exchange key and open the copy, and another seed opens nothing; `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only` -- the relay writes the exchange key of an account once, database tier | none | verified |
+| `SETTINGS-045` | `INV` | Every device of the user MUST open the settings key from its first self-wrap, after a recovery too. | this spec section 3, the key; `SETTINGS-017`; `ambre-spec-zero-knowledge.md`, `ZK-009`, `ZK-043`; `ambre-spec-session.md`, `SRV-030`; `ambre-spec-sync.md`, `SYNC-249` | `ambre_sync::settings::tests::the_settings_self_wrap_opens_under_the_key_a_recovery_derives` -- the words of the account derive the registered exchange key and open the copy, and another seed opens nothing; `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only` -- the relay writes the exchange key of an account once, database tier | none | verified |
 | `SETTINGS-018` | `INV` | The settings document MUST declare its kind inside its sealed content. | this spec section 3, the store | `ambre_logic::settings::tests::a_created_document_names_its_kind_in_its_first_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` -- the first delta names the kind | none | verified |
 | `SETTINGS-019` | `INV` | Every setting MUST declare a default value. | this spec section 3, the catalogue | type-level -- `SettingValue` requires `Default`, and `Setting::read` falls back on it | none | verified |
 | `SETTINGS-020` | `INV` | A setting whose meaning or type changes MUST take a new key, and never reuse the old one. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
@@ -38,6 +38,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-022` | `INV` | The width of the context panel MUST stay on the device, outside the settings document. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` -- the frozen catalogue holds no width | none | verified |
 | `SETTINGS-023` | `INV` | The theme MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-design-tokens.md section 2` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
 | `SETTINGS-024` | `INV` | The interface language MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-044` | `INV` | Every command and property title MUST carry its words in each interface language that ships. | this spec section 3, the catalogue | type-level -- `ambre_commands::TitleWords` holds one field per language, so a table that omits one does not compile; `ambre_commands::tests::a_table_names_each_missing_part_of_a_description` -- a blank language is a defect | none | verified |
 | `SETTINGS-025` | `INV` | The side of the context panel MUST be a setting of the account. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
 | `SETTINGS-026` | `INV` | The fold of the context panel MUST be a setting of the account, one value per application. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
 | `SETTINGS-027` | `INV` | The number convention of a reader and their own locale MUST be settings of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
@@ -61,8 +62,10 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SETTINGS-032` | `POST` | A page with a boot hint MUST boot in the theme the hint names. | this spec section 3, the boot | `ambre_app::platform::tests::a_page_boots_in_the_theme_of_the_stored_boot_hint` -- wasm tier; `ambre_app::settings_view::tests::a_page_boots_in_the_theme_of_its_boot_hint` | none | verified |
-| `SETTINGS-033` | `POST` | A page with a boot hint MUST boot in the interface language the hint names. | this spec section 3, the boot | not built | unbuilt -- lands with the `The interface speaks the reader's language` Story (`ambre-roadmap.md` V1). No command title reads the interface language yet. | unimplemented |
+| `SETTINGS-033` | `POST` | A page with a boot hint MUST boot in the interface language the hint names. | this spec section 3, the boot | `ambre_app::platform::tests::a_page_boots_in_the_language_of_the_stored_boot_hint` -- wasm tier; `ambre_app::settings_view::tests::a_page_boots_in_the_language_of_its_boot_hint`; `ambre_chrome::language::tests::a_french_tag_of_any_region_shows_french`; `ambre_chrome::language::tests::a_tag_of_none_takes_the_browser_language` | none | verified |
 | `SETTINGS-034` | `FRAME` | Reading the boot hint MUST NOT wait on the network, on a key or on the local store. | this spec section 3, the boot | structural -- the page reads the hint through the synchronous local storage, before the first frame and before any wait | none | verified |
+| `SETTINGS-042` | `POST` | A pick in the language picker of the avatar menu MUST change the interface language of the page and of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the French option writes `fr` | none | verified |
+| `SETTINGS-043` | `POST` | A new interface language MUST redraw every label that reads it, with no reload. | this spec section 3, the boot | `ambre_chrome::language::tests::a_label_read_in_a_reactive_scope_follows_a_new_language` | none | verified |
 
 ### 1.4 Change a setting
 
@@ -89,8 +92,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 41 `verified`, 1 `unimplemented`: no command title reads the interface language
-  yet. The row lands with one Story.
+* **Verification.** 45 `verified`.
 
 ---
 
@@ -106,7 +108,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | signs in on a new phone | the phone | nothing yet, on the phone | the default theme, then her settings once they load (`SETTINGS-010`) | none |
 | signs in on two new devices at the same moment | both | one document | the same settings on both (`SETTINGS-009`) | none |
 | signs out | her phone | her settings, on the relay | nothing left on the phone, and everything back at the next sign-in (`SETTINGS-014`, `SETTINGS-039`) | none |
-| forgets her passphrase, and recovers with her 24 words on a new laptop | the laptop | her settings, under the same copy of the key | her settings, with no re-wrap and no prompt (`SETTINGS-042`) | none |
+| forgets her passphrase, and recovers with her 24 words on a new laptop | the laptop | her settings, under the same copy of the key | her settings, with no re-wrap and no prompt (`SETTINGS-045`) | none |
 | -- | -- | the relay points her new phone at a document of her own that is no settings document | the defaults, and that document unchanged (`SETTINGS-030`) | none |
 
 ---
@@ -163,7 +165,7 @@ derives the wrap and no new derivation domain exists (`ZK-009`).
 
 **One exchange key for the life of the account.** Every event above unlocks the same seed, and the
 seed derives the same exchange key (`ZK-009`). So each device opens the copy of the creation, and
-no re-wrap exists (`SETTINGS-042`). A new seed needs a new account, since the relay keeps the keys
+no re-wrap exists (`SETTINGS-045`). A new seed needs a new account, since the relay keeps the keys
 of an account once. That account claims a settings document of its own (`SETTINGS-008`).
 
 **The merge.** Each section is a map, and each entry is one last-writer-wins value
@@ -210,6 +212,12 @@ empty map, so a later setting of an application adds a declaration and never a s
 
 A theme at `system` follows the scheme of each device. So two devices of one account can show two
 themes, each the one its system asks for.
+
+**The interface language.** The avatar menu holds a picker beside the theme, with one choice per
+language that ships: English and French (`SETTINGS-042`). A French tag of any region shows French,
+and every other tag shows English. A stored tag of none takes the browser's language. The page
+holds one language, and every label that reads it redraws on a change (`SETTINGS-043`). Each title
+carries its words in every language, on its description (`SETTINGS-044`).
 
 **The width stays on the device.** A width in CSS pixels takes another share of each screen. So
 300 px is a quarter of a laptop and a tenth of a large monitor. The width lives in the local store of the
@@ -267,7 +275,8 @@ metadata `ambre-spec-zero-knowledge.md` accepts (`ZK-055`).
 * `crates/ambre-logic/src/persistence.rs` and `crates/ambre-app/src/persist.rs` -- the kept identifier;
 * `crates/ambre-sync/src/settings.rs` -- the read or the claim at each unlock;
 * `crates/ambre-server/src/routes/settings.rs` and `src/db/settings.rs` -- the pointer and the claim;
-* `crates/ambre-app/src/settings_view.rs` and `src/platform.rs` -- the boot and the hint.
+* `crates/ambre-app/src/settings_view.rs` and `src/platform.rs` -- the boot and the hint;
+* `crates/ambre-chrome/src/language.rs` -- the interface language of the page.
 
 ---
 
