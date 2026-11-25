@@ -674,6 +674,7 @@ row reads `V1`.
 | `[ ]` A nested item that leaves its list alone | V1 | a nested list item that leaves its list without its parent stays a paragraph inside the parent item. No rule says whether it rises to the top level. Done when a row states where it lands and reads `verified` |
 | `[ ]` A transparent ink stays transparent | V1 | a mark ink of `#00000000` draws in the ink of the page, because the default brush of the shaper is transparent too. Done when a row states what a transparent ink draws and reads `verified` |
 | `[ ]` The contrast of a marked ink on the paper | V1 | `PROSE-UI-255` holds the contrast of the page ink alone. A colour mark can draw text the paper hides. Done when a row states the contrast a marked ink holds, or what the panel warns, and reads `verified` |
+| `[ ]` A user adds a font to a document | V1 | a document can use only the faces Ambre ships. A user adds a TrueType or OpenType file to a document as an asset, sealed and stored as an image is, so each member lays out the text with the same face. A font comes from a member, who may be hostile: the face is held to a size budget, its tables are checked before any use, a face that fails is refused whole and never repaired, and it is parsed on the Logic thread under a time budget. A face whose `fsType` forbids embedding is refused, and the PDF export embeds a subset. An added face wins over the substitution map. Done when rows state the asset, the checks, the budget and the licence rule, and each reads `verified` |
 
 ### Murmure
 
