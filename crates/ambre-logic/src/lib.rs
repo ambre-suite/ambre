@@ -896,6 +896,10 @@ pub enum PersistWrite<
     /// The inviter an open of the document proved, kept for the sessions
     /// after (`SYNC-238`). A row outside the copy: no eviction reaches it.
     KeepInviter(FixedBytes<ambre_core::InviterPin>),
+    /// The settings document of the signed-in user is this one: the device
+    /// keeps its name for the sessions after (`SETTINGS-031`). A row outside
+    /// the copy, which holds no setting: no eviction or sign-out reaches it.
+    KeepSettings,
     /// Where the membership log of the document stood when the Sync worker
     /// last accepted a key of it, kept for the sessions after (`SYNC-290`).
     /// The document is the log's own, the `meta` of a channel. A row
@@ -994,6 +998,9 @@ struct LogicState {
     /// The settings document of the signed-in user, once the relay named it
     /// (`ambre-spec-user-settings.md`).
     settings: Option<settings::SettingsSession>,
+    /// Whether the store answered which settings document this device kept
+    /// (`SETTINGS-031`).
+    kept_settings: settings_flow::KeptSettings,
     /// The locale each document this reader created waits to be seeded with,
     /// until it opens (`LOCALE-019`).
     locale_seeds: HashMap<Id<Document>, ambre_client_core::DocumentLocale>,
@@ -1110,6 +1117,7 @@ impl LogicState {
             faces: ambre_draw::FaceRegistry::new(),
             reader_locale: ambre_client_core::ReaderLocale::default(),
             settings: None,
+            kept_settings: settings_flow::KeptSettings::Reading,
             locale_seeds: HashMap::new(),
             export_cx: None,
             converters: converting::Converters::default(),
@@ -1685,6 +1693,7 @@ mod pass_tests {
                 | PersistWrite::Sent
                 | PersistWrite::Erase
                 | PersistWrite::KeepInviter(_)
+                | PersistWrite::KeepSettings
                 | PersistWrite::KeepLog(_) => {}
             }
         }

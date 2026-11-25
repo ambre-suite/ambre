@@ -224,6 +224,11 @@ impl LocalStore {
                 Some(user) => self.inner.store.save_kept_log(user, id, &kept),
                 None => tracing::warn!("Persistence: no session names a user, the log is dropped"),
             },
+            // The settings document of the session's user (`SETTINGS-031`).
+            PersistWrite::KeepSettings => match self.inner.user.get() {
+                Some(user) => self.inner.store.save_settings_document(user, id),
+                None => tracing::warn!("Persistence: no session names a user, the name is dropped"),
+            },
             PersistWrite::Shown | PersistWrite::Hidden => {}
             // The copy leaves whole, with what the quota held back of it
             // (`SYNC-233`).

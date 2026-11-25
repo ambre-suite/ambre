@@ -25,7 +25,9 @@ use crate::doc;
 use crate::events::grid::Row;
 use crate::layout::fonts;
 use crate::layout::run::{LocalLine, ParleyRunData, Resume, RunLine, RunSegment, ShapedRun};
+use crate::mark::{self, MarkRoot};
 use ambre_core::Flag as _;
+use ambre_core::crdt::CrdtName as _;
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
 /// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,
@@ -34,8 +36,9 @@ use ambre_core::Flag as _;
 const MAX_SEGMENTS: Len<RunSegment> = Len::<RunSegment>::new(16);
 
 /// A byte range of a block's text and the inline marks the shaper reads on
-/// it. A mark either changes the glyphs (`PROSE-UI-207`) or draws a line
-/// across them (`PROSE-UI-209`).
+/// it. A mark changes the glyphs (`PROSE-UI-207`, `PROSE-UI-210`), draws a
+/// line across them (`PROSE-UI-209`), or fills the box under them
+/// (`PROSE-UI-280`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MarkedSpan {
     pub start: Pos<Byte>,
@@ -44,6 +47,14 @@ pub struct MarkedSpan {
     pub italic: ambre_core::Slant,
     pub underline: ambre_core::Underline,
     pub strike: ambre_core::Strikethrough,
+    /// The size the span is set in, over the size of its block.
+    pub size: Option<ambre_core::FontSize>,
+    /// The shipped face the family of the span resolves to (`PROSE-108`).
+    pub family: Option<BundledFamily>,
+    /// The colour of the glyphs, over the ink of the page.
+    pub ink: Option<ambre_core::Rgba>,
+    /// The colour of the box under the glyphs.
+    pub highlight: Option<ambre_core::Rgba>,
 }
 
 impl MarkedSpan {
@@ -54,11 +65,18 @@ impl MarkedSpan {
             || self.italic.as_bool()
             || self.underline.as_bool()
             || self.strike.as_bool()
+            || self.size.is_some()
+            || self.family.is_some()
+            || self.ink.is_some()
+            || self.highlight.is_some()
     }
 }
 
-/// The text of a block and the spans of it that carry bold or italic, in
-/// one walk over its runs.
+/// The text of a block and the spans of it that carry a mark the shaper
+/// reads, in one walk over its runs.
+///
+/// A value that fails its grammar is dropped: the write path refused it
+/// already (`PROSE-FEAT-022`), so it came from a build that wrote it wrong.
 #[must_use]
 pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
     let mut out = String::new();
@@ -75,6 +93,10 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
                 .and_then(|marks| marks.get(key))
                 .is_some_and(|value| !matches!(value, LoroValue::Null))
         };
+        let text_of = |root: MarkRoot| match attributes.as_ref()?.get(root.as_str())? {
+            LoroValue::String(value) => Some(value.to_string()),
+            _ => None,
+        };
         let span = MarkedSpan {
             start: Pos::<Byte>::from_usize(out.len()),
             end: Pos::<Byte>::from_usize(out.len() + insert.len()),
@@ -82,6 +104,12 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
             italic: ambre_core::Slant::from_bool(on("i")),
             underline: ambre_core::Underline::from_bool(on("u")),
             strike: ambre_core::Strikethrough::from_bool(on("s")),
+            size: text_of(MarkRoot::FontSize).and_then(|raw| mark::read_font_size(&raw)),
+            family: text_of(MarkRoot::FontFamily)
+                .filter(|label| !label.is_empty())
+                .map(|label| fonts::resolve(&ambre_core::FontFamily::from_label(&label))),
+            ink: text_of(MarkRoot::Ink).and_then(|raw| mark::parse_color(&raw).ok()),
+            highlight: text_of(MarkRoot::Highlight).and_then(|raw| mark::parse_color(&raw).ok()),
         };
         out.push_str(&insert);
         if span.is_marked() {
@@ -788,6 +816,20 @@ fn build(
         }
         if span.strike == ambre_core::Strikethrough::Struck {
             builder.push(StyleProperty::Strikethrough(true), range);
+        }
+        if let Some(size) = span.size {
+            builder.push(StyleProperty::FontSize(size.to_px().get()), range);
+        }
+        if let Some(family) = span.family {
+            builder.push_family(family, range);
+        }
+        // The glyph run carries its ink as its brush, and the painter draws
+        // it in that colour (`PROSE-UI-210`).
+        if let Some(ink) = span.ink {
+            builder.push(
+                StyleProperty::Brush(ambre_draw::Brush::Solid(ambre_draw::list::color_of(ink))),
+                range,
+            );
         }
     }
     // The first-line indent is an empty box ahead of the text, so the line
