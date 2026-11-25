@@ -44,7 +44,7 @@ The user asks for the selection to fill the view. The target may be empty.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- the frame fits the box whole, clamped; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_clamps_to_the_grid_range` | none | verified |
-| `ZOOM-011` | `POST` | A zoom to a selection MUST frame it in the part of the view that no floating surface of the shell covers. | this spec section 3; `ambre-spec-chrome.md` | `ambre_toile::ui::viewport::tests::a_fit_lands_clear_of_the_floating_surfaces` -- for any measured strips, the box lands whole inside the uncovered part and centred on it, and centred alone when the clamp binds; `ambre_client_core::cover::tests::the_palette_covers_the_canvas_up_to_its_right_edge`; `::the_bar_reach_is_kept_above_the_frame`; `::nothing_measured_leaves_the_whole_canvas`; `::a_surface_beside_the_canvas_covers_none_of_it`; `::a_phone_sheet_covers_the_bottom_strip`; `::a_bubble_in_a_corner_takes_the_strip_that_costs_least`; `::each_side_keeps_the_widest_strip_of_every_surface` -- the strips follow each surface's box and the bar's reach, and a side nothing covers keeps none; `ambre_toile::chrome_ui::the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides` -- the palette measures itself under the shell stylesheet, tracks a change of width and clears when it hides; `ambre_toile::chrome_ui::the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves` -- the bar publishes its height and its lift, and clears when it leaves | none | verified |
+| `ZOOM-011` | `POST` | A zoom to a selection MUST frame it in the part of the view that no floating surface of the shell covers. | this spec section 3; `ambre-spec-chrome.md` | `ambre_toile::ui::viewport::tests::a_fit_lands_clear_of_the_floating_surfaces` -- for any measured strips, the box lands whole inside the uncovered part and centred on it, and centred alone when the clamp binds; `ambre_client_core::cover::tests::the_palette_covers_the_canvas_up_to_its_right_edge`; `::the_bar_reach_is_kept_above_the_frame`; `::nothing_measured_leaves_the_whole_canvas`; `::a_surface_beside_the_canvas_covers_none_of_it`; `::a_phone_sheet_covers_the_bottom_strip`; `::a_bubble_in_a_corner_takes_the_strip_that_costs_least`; `::each_side_keeps_the_widest_strip_of_every_surface` -- the strips follow each surface's box and the bar's reach, and a side nothing covers keeps none; `ambre_trame::ui::grid::tests::viewport::a_fit_lands_clear_of_the_floating_surfaces` -- the grid lands the selection whole inside the uncovered part, a phone sheet and a strip on each edge; type-level -- `TrameSignals` takes a required cover, so a sheet view mounted with none does not compile; `ambre_toile::chrome_ui::the_palette_publishes_the_edge_it_covers_and_clears_it_when_it_hides` -- the palette measures itself under the shell stylesheet, tracks a change of width and clears when it hides; `ambre_toile::chrome_ui::the_selection_bar_publishes_its_reach_and_clears_it_when_it_leaves` -- the bar publishes its height and its lift, and clears when it leaves | none | verified |
 | `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection`; `ambre_trame::ui::grid::tests::viewport::a_zoom_to_the_selection_shows_it_whole_and_keeps_it` -- the selection compares equal before and after | none | verified |
 | `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | `ambre_core::zoom::tests::a_box_is_framed_whole_and_an_empty_one_is_ignored` -- a box with no width or no height, or one not finite, gives no frame; `ambre_toile::ui::view::view_tests::a_zoom_to_the_selection_frames_it_and_keeps_the_selection` -- a box of no area moves nothing, and an empty selection publishes a notice and asks nothing | none | verified |
 
@@ -148,12 +148,13 @@ every editor.
 * **Prose frames no selection.** No command of the page asks for one, so `ZOOM-007` holds on the
   board and the grid alone. A key and the chip keep the top of the canvas in place; the anchor on
   the caret is not ruled (`4-Prose/features/ambre-spec-prose-viewport.md`).
-* **The grid frames with no strip.** Its bars are docked above the cells. On a phone, the sheet of
-  the context panel covers the bottom of the cells. The sheet publishes its cover, and no fit of the
-  grid reads it yet.
-* **Only the board reads the cover.** Each floating surface of the shell publishes what it covers
-  (`ambre-spec-shell.md`, `CHROME-171`), and a fit of the board reads the latest measure. No figure
-  of a size is declared twice.
+* **The grid frames clear of the cover by whole cells.** Its bars are docked above the cells. On a
+  phone, the sheet of the context panel covers the bottom of the cells. A strip at the far edge
+  shortens the room. A strip at the near edge moves the first cell shown back, until the selection
+  starts past the strip. The content the room holds then counts those cells.
+* **The board and the grid read one cover.** Each floating surface of the shell publishes what it
+  covers (`ambre-spec-shell.md`, `CHROME-171`), and a fit reads the latest measure. No figure of a
+  size is declared twice.
 
 ---
 

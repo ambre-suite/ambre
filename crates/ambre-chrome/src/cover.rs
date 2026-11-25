@@ -9,7 +9,7 @@
 
 use std::rc::Rc;
 
-use ambre_client_core::cover::{Cover, Covered, PageBox, Surface};
+use ambre_client_core::cover::{Clearance, Cover, Covered, PageBox, Surface};
 use ambre_core::{Css, Point, Px};
 use leptos::prelude::*;
 use leptos::tachys::html::element::ElementType;
@@ -87,6 +87,18 @@ pub fn page_box(rect: &web_sys::DomRect) -> PageBox {
         top_left: Point::new(css(rect.left()), css(rect.top())),
         bottom_right: Point::new(css(rect.right()), css(rect.bottom())),
     }
+}
+
+/// The strips of the page's canvas that a fit keeps clear of, as each
+/// floating surface last measured itself (`ZOOM-011`). A canvas not mounted
+/// yet has nothing over it.
+#[must_use]
+pub fn canvas_clearance(cover: &Cover) -> Clearance {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
+        .map(|el| cover.clearance(page_box(&el.get_bounding_client_rect())))
+        .unwrap_or_default()
 }
 
 /// Write what `surface` covers, and only when it moved, so a steady surface
