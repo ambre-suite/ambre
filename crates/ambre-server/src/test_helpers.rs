@@ -300,12 +300,13 @@ pub async fn storage_service() -> (
     )
 }
 
-/// What an [`S3Stub`] holds: each object's bytes, how often each was read, and
-/// how long a read of each is held before it is answered.
+/// What an [`S3Stub`] holds: each object's bytes, and how often each was read
+/// and written. It also holds how long a request on each key waits.
 #[derive(Default)]
 struct StubStore {
     objects: std::collections::BTreeMap<String, Vec<u8>>,
     gets: HashMap<String, usize>,
+    puts: HashMap<String, usize>,
     delays: HashMap<String, std::time::Duration>,
 }
 
@@ -357,6 +358,18 @@ impl S3Stub {
             .headers()
             .get("content-encoding")
             .is_some_and(|v| v.to_str().unwrap_or("").contains("aws-chunked"));
+        // A copy names its source `bucket/key`, percent-encoded, in a header.
+        let copy_source = req
+            .headers()
+            .get("x-amz-copy-source")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| {
+                let v = v.replace("%2F", "/");
+                v.trim_start_matches('/')
+                    .split_once('/')
+                    .map(|(_, k)| k.to_owned())
+                    .unwrap_or_default()
+            });
         let body = axum::body::to_bytes(req.into_body(), 1 << 24)
             .await
             .unwrap()
@@ -364,13 +377,28 @@ impl S3Stub {
         let body = if chunked { unchunk(&body) } else { body };
         let delay = held.lock().unwrap().delays.get(&key).copied();
         if let Some(delay) = delay
-            && method == Method::GET
+            && (method == Method::GET || method == Method::PUT)
         {
             tokio::time::sleep(delay).await;
         }
         let xmlns = r#"xmlns="http://s3.amazonaws.com/doc/2006-03-01/""#;
         let mut store = held.lock().unwrap();
+        if let Some(source) = copy_source
+            && method == Method::PUT
+        {
+            let Some(bytes) = store.objects.get(&source).cloned() else {
+                return (
+                    StatusCode::NOT_FOUND,
+                    format!("<Error><Code>NoSuchKey</Code><Key>{source}</Key></Error>"),
+                )
+                    .into_response();
+            };
+            store.objects.insert(key, bytes);
+            return format!("<CopyObjectResult {xmlns}><ETag>\"stub\"</ETag></CopyObjectResult>")
+                .into_response();
+        }
         if method == Method::PUT && !key.is_empty() {
+            *store.puts.entry(key.clone()).or_default() += 1;
             store.objects.insert(key, body);
             return StatusCode::OK.into_response();
         }
@@ -435,8 +463,8 @@ impl S3Stub {
         self.store.lock().unwrap().objects.insert(key, Vec::new());
     }
 
-    /// Holds every read of `key` for `delay` before answering it, so reads
-    /// issued together complete in the order the test picks.
+    /// Holds every read and every write of `key` for `delay` before answering
+    /// it, so requests issued together complete in the order the test picks.
     pub fn delay(&self, key: String, delay: std::time::Duration) {
         self.store.lock().unwrap().delays.insert(key, delay);
     }
@@ -444,6 +472,17 @@ impl S3Stub {
     /// The bytes of an object, when held.
     pub fn object(&self, key: &str) -> Option<Vec<u8>> {
         self.store.lock().unwrap().objects.get(key).cloned()
+    }
+
+    /// How many times an object was written.
+    pub fn puts(&self, key: &str) -> usize {
+        self.store
+            .lock()
+            .unwrap()
+            .puts
+            .get(key)
+            .copied()
+            .unwrap_or_default()
     }
 
     /// How many times an object was read.

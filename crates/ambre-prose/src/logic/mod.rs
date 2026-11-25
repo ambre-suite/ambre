@@ -959,6 +959,7 @@ impl ProseState {
             ProseCommand::CopyRange { anchor, focus } => self.copy_range(anchor, focus),
             ProseCommand::Paste {
                 at,
+                over,
                 text,
                 html,
                 payload,
@@ -970,13 +971,15 @@ impl ProseState {
                 let read = self
                     .converted
                     .take()
-                    .and_then(conversion::ConvertedInput::html);
-                self.paste(
-                    (tree_id(at.0), at.1),
-                    &text,
-                    read.unwrap_or_default(),
-                    payload.as_ref(),
-                )
+                    .and_then(conversion::ConvertedInput::html)
+                    .unwrap_or_default();
+                let at = (tree_id(at.0), at.1);
+                match over {
+                    Some(end) => {
+                        self.paste_over(at, (tree_id(end.0), end.1), &text, read, payload.as_ref())
+                    }
+                    None => self.paste(at, &text, read, payload.as_ref()),
+                }
             }
             ProseCommand::FormatSelection {
                 anchor,
@@ -1024,6 +1027,11 @@ impl ProseState {
                 focus,
                 kind,
             } => self.set_selection_kind(anchor, focus, kind),
+            ProseCommand::IndentSelection {
+                anchor,
+                focus,
+                step,
+            } => self.indent_selection(anchor, focus, step),
             ProseCommand::SetDefaultFont { font } => self.set_default_font(font),
             ProseCommand::FindStart { query } => self.find_start(query),
             ProseCommand::FindNext => self.find_step(StepDirection::Forward),

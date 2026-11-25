@@ -7,7 +7,8 @@
 // With no text selected the panel shows the page: its paper, its orientation
 // and its four margins (`PROSE-UI-253`). With a selection it shows the text:
 // the marks, superscript and subscript, and clearing the formatting
-// (`PROSE-UI-191`). A page control writes the whole format in one command, so
+// (`PROSE-UI-191`). The paragraph, the paragraph style and the actions follow
+// (`PROSE-UI-258`). A page control writes the whole format in one command, so
 // one undo takes it back (`PROSE-UI-252`).
 // ============================================================================
 
@@ -22,6 +23,11 @@ use crate::events::Words;
 pub const PAGE: StaticKey<PanelSections> = StaticKey::new("prose.page");
 /// The text of the selection.
 pub const TEXT: StaticKey<PanelSections> = StaticKey::new("prose.text");
+/// The suggestion at the caret, whatever the kind (`PROSE-UI-273`).
+pub const SUGGESTION: StaticKey<PanelSections> = StaticKey::new("prose.suggestion");
+/// The review section: suggestion mode, shown whatever is selected
+/// (`PROSE-UI-276`).
+pub const REVIEW: StaticKey<PanelSections> = StaticKey::new("prose.review");
 /// The paragraphs of the selection: alignment, line spacing, indents.
 pub const PARAGRAPH: StaticKey<PanelSections> = StaticKey::new("prose.paragraph");
 /// The kind of each paragraph of the selection.
@@ -47,6 +53,10 @@ pub const LINE_SPACING: StaticKey<Properties> = StaticKey::new("prose.paragraph.
 pub const INDENT_LEFT: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_left");
 /// The first-line indent of the paragraphs of the selection.
 pub const INDENT_FIRST: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_first");
+/// One step out for the paragraphs of the selection (`PROSE-UI-267`).
+pub const INDENT_OUT: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_out");
+/// One step in for the paragraphs of the selection (`PROSE-UI-267`).
+pub const INDENT_IN: StaticKey<Properties> = StaticKey::new("prose.paragraph.indent_in");
 /// What each paragraph of the selection is: body, heading, quote, list.
 pub const KIND: StaticKey<Properties> = StaticKey::new("prose.paragraph.kind");
 /// The body font of the document.
@@ -106,6 +116,8 @@ properties! {
     LINE_SPACING: LINE_SPACING, "Line spacing";
     INDENT_LEFT: INDENT_LEFT, "Left indent";
     INDENT_FIRST: INDENT_FIRST, "First-line indent";
+    INDENT_OUT: INDENT_OUT, "Decrease indent";
+    INDENT_IN: INDENT_IN, "Increase indent";
     KIND: KIND, "Paragraph style";
     BODY_FONT: BODY_FONT, "Body font";
     HEADING_FONT: HEADING_FONT, "Heading font";
@@ -214,6 +226,36 @@ pub const TEXT_COMMANDS: [StaticKey<Commands>; 8] = [
     commands::CLEAR_FORMATTING,
 ];
 
+/// The commands the suggestion section shows, in order (`PROSE-UI-273`).
+pub const SUGGESTION_COMMANDS: [StaticKey<Commands>; 2] =
+    [commands::ACCEPT_SUGGESTION, commands::REJECT_SUGGESTION];
+
+/// The commands the review section shows (`PROSE-UI-276`).
+pub const REVIEW_COMMANDS: [StaticKey<Commands>; 1] = [commands::SUGGEST_CHANGES];
+
+/// The sections the panel shows. First come those of `kind`, then the
+/// suggestion section while a suggestion holds the caret (`PROSE-UI-273`).
+/// The review section comes last, whatever is selected (`PROSE-UI-276`).
+#[must_use]
+pub fn sections(kind: PanelKind, at_caret: CaretSuggestion) -> Vec<StaticKey<PanelSections>> {
+    let mut all = kind.sections().to_vec();
+    if at_caret == CaretSuggestion::Held {
+        all.push(SUGGESTION);
+    }
+    all.push(REVIEW);
+    all
+}
+
+ambre_core::define_flag! {
+    /// Whether a suggestion holds the character after the caret.
+    pub enum CaretSuggestion {
+        /// The caret is outside every suggestion.
+        Outside,
+        /// A suggestion holds the caret.
+        Held,
+    }
+}
+
 /// What a control of the text, paragraph or default styles sections asks
 /// for, until the view turns it into one command (`PROSE-UI-098`).
 ///
@@ -235,6 +277,9 @@ pub enum TextWrite {
     Paragraph(crate::events::ParagraphStyle),
     /// What every paragraph of the selection becomes.
     Kind(crate::message::ParagraphKind),
+    /// One step in or out for every block of the selection: a list item
+    /// changes level, another block moves its left indent.
+    Indent(crate::message::IndentStep),
     /// A default font of the document. It needs no selection.
     DefaultFont(crate::message::DefaultFont),
 }
@@ -529,6 +574,23 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// `PROSE-UI-276`: the review section shows over the page and over a
+    /// selection, with the caret in a suggestion or not. A selection never
+    /// hides the suggestion-mode control.
+    #[test]
+    fn the_review_section_shows_whatever_is_selected() {
+        for kind in PanelKind::ALL {
+            for at_caret in [CaretSuggestion::Outside, CaretSuggestion::Held] {
+                let shown = sections(kind, at_caret);
+                assert_eq!(shown.last(), Some(&REVIEW), "{kind:?} {at_caret:?}");
+            }
+        }
+        let command =
+            ambre_commands::find(commands::COMMANDS, commands::SUGGEST_CHANGES).expect("declared");
+        assert_eq!(command.home, ambre_commands::Home::ContextPanel);
+        assert_eq!(REVIEW_COMMANDS, [commands::SUGGEST_CHANGES]);
     }
 
     #[test]

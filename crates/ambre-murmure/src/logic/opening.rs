@@ -14,7 +14,7 @@ use ambre_core::{DeltaBytes, LoroPayloadRef, Payload, Relay, Seq};
 use loro::LoroDoc;
 
 use crate::logic::channel::{ChannelState, live_segments};
-use crate::logic::delta::{self, Arrival, Refusal, Signer};
+use crate::logic::delta::{self, Arrival, Kept, Refusal, Signer};
 use crate::logic::error::MurmureError;
 use crate::logic::schema::{self, DocumentKind};
 use crate::logic::sequence::{Order, Sequence};
@@ -45,9 +45,13 @@ pub enum Receipt {
 pub struct OpeningChannel {
     channel_id: Id<Channel>,
     meta_id: Id<Document>,
-    /// Payloads of each expected document, in arrival order, until it is
-    /// ready. `meta` only ever holds bytes.
+    /// Payloads of each expected segment, in arrival order, until it is
+    /// ready.
     payloads: HashMap<Id<Document>, Vec<Arrival>>,
+    /// Payloads of `meta`, in arrival order, until it is admitted. A signed
+    /// delta keeps its signer, so the admission checks its PeerID
+    /// (`AUTHOR-037`).
+    meta_kept: Vec<Kept>,
     /// `meta` once admitted. `None` while its bytes are still arriving.
     meta: Option<LoroDoc>,
     /// The live segments `meta` named that are not ready yet.
@@ -67,7 +71,8 @@ impl OpeningChannel {
         Self {
             channel_id,
             meta_id,
-            payloads: HashMap::from([(meta_id, Vec::new())]),
+            payloads: HashMap::new(),
+            meta_kept: Vec::new(),
             meta: None,
             awaiting: HashSet::new(),
             closing: None,
@@ -87,13 +92,15 @@ impl OpeningChannel {
 
     /// Whether the bytes of `document_id` belong to this opening.
     pub fn expects(&self, document_id: Id<Document>) -> bool {
-        self.payloads.contains_key(&document_id)
+        document_id == self.meta_id || self.payloads.contains_key(&document_id)
     }
 
     /// Every document this opening asked the relay for, so a close or a
     /// failure can end the session of each.
     pub fn document_ids(&self) -> Vec<Id<Document>> {
-        self.payloads.keys().copied().collect()
+        std::iter::once(self.meta_id)
+            .chain(self.payloads.keys().copied())
+            .collect()
     }
 
     /// Keep the bytes of an expected document until it is ready. A document
@@ -121,14 +128,15 @@ impl OpeningChannel {
             }
             return Receipt::Kept;
         }
+        if document_id == self.meta_id {
+            self.meta_kept.push(Kept::Bytes(payload.to_payload()));
+            return Receipt::Kept;
+        }
         let Some(held) = self.payloads.get_mut(&document_id) else {
             return Receipt::NotExpected;
         };
         held.push(Arrival::Bytes(payload.to_payload()));
-        // `meta` holds no message: only a segment is numbered.
-        if let Some(order) = order
-            && document_id != self.meta_id
-        {
+        if let Some(order) = order {
             self.sequences
                 .entry(document_id)
                 .or_default()
@@ -139,7 +147,9 @@ impl OpeningChannel {
 
     /// Keep a delta a member signed until its document is ready
     /// (`MURMURE-029`). A segment delta is read now and checked once the
-    /// segment opens, against its registry then. `meta` is checked now.
+    /// segment opens, against its registry then. An admitted `meta` checks
+    /// a delta now. Before its admission, `meta` keeps the delta with its
+    /// signer, and the admission checks it (`AUTHOR-037`).
     ///
     /// # Errors
     /// [`MurmureError::NotHeld`] for a document this opening does not expect,
@@ -159,14 +169,20 @@ impl OpeningChannel {
             if !delta::binary_by(payload, signer.peer) {
                 return Err(Refusal::NotSigners.into());
             }
-            // An admitted `meta` reads its registry now (`AUTHOR-033`). Bytes
-            // held before it is admitted are not checked against it.
-            if let Some(meta) = &self.meta
-                && !delta::peer_unclaimed(meta, signer)
-            {
+            // An admitted `meta` reads its registry now (`AUTHOR-033`).
+            let Some(meta) = &self.meta else {
+                self.meta_kept.push(Kept::Signed {
+                    payload: payload.clone(),
+                    signer,
+                });
+                return Ok(());
+            };
+            if !delta::peer_unclaimed(meta, signer) {
                 return Err(Refusal::PeerClaimed.into());
             }
-            let _kept = self.receive(document_id, payload.into());
+            if let Err(e) = meta.import(payload.as_bytes()) {
+                tracing::warn!("[Murmure] delta for meta {document_id} refused: {e:?}");
+            }
             return Ok(());
         }
         let sequence = self.sequences.entry(document_id).or_default();
@@ -225,7 +241,6 @@ impl OpeningChannel {
             .meta
             .take()
             .ok_or(MurmureError::NotHeld(self.meta_id))?;
-        self.payloads.remove(&self.meta_id);
         let state = ChannelState::open_from_payloads(
             self.channel_id,
             (self.meta_id, meta),
@@ -236,17 +251,11 @@ impl OpeningChannel {
     }
 
     fn meta_ready(&mut self) -> Result<Opening, MurmureError> {
-        let payloads: Vec<LoroPayloadRef<'_>> = self
-            .payloads
-            .get(&self.meta_id)
-            .ok_or(MurmureError::NotHeld(self.meta_id))?
-            .iter()
-            .filter_map(|arrival| match arrival {
-                Arrival::Bytes(bytes) => Some(bytes.borrowed()),
-                Arrival::Signed { .. } => None,
-            })
-            .collect();
-        let meta = schema::admit_all(&payloads, DocumentKind::Meta, self.channel_id, self.meta_id)?;
+        let meta_id = self.meta_id;
+        let kept = &self.meta_kept;
+        let meta = schema::admit_with(DocumentKind::Meta, self.channel_id, meta_id, |doc| {
+            delta::import_kept(doc, kept, meta_id)
+        })?;
         let live = live_segments(&meta, self.channel_id)?;
         let segments: Vec<Id<Segment>> = [Some(live.active), live.closing]
             .into_iter()
@@ -258,10 +267,7 @@ impl OpeningChannel {
         }
         self.closing = live.closing.map(|segment| segment.document_id());
         self.meta = Some(meta);
-        // The entry of `meta` stays, emptied, so `expects` still names it.
-        if let Some(held) = self.payloads.get_mut(&self.meta_id) {
-            held.clear();
-        }
+        self.meta_kept = Vec::new();
         Ok(Opening::OpenSegments(segments))
     }
 }

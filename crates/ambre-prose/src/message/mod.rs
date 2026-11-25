@@ -773,6 +773,16 @@ pub enum ParagraphKind {
     List(ListStyle),
 }
 
+/// Which way an indent control moves the blocks of a selection
+/// (`PROSE-UI-267`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IndentStep {
+    /// One level out, or one step to the left.
+    Out,
+    /// One level in, or one step to the right.
+    In,
+}
+
 /// The value of each property over a selection, as the context panel reads
 /// it (`CHROME-210`). A property the selection holds two values of reads
 /// mixed. An absent mark reads as `None`: the block or the document decides.
@@ -888,6 +898,18 @@ pub enum EditMode {
     Editing,
     /// An edit is marked as a suggestion, for another to accept or reject.
     Suggesting,
+}
+
+impl EditMode {
+    /// The other mode: what the suggestion-mode command asks for
+    /// (`PROSE-UI-274`).
+    #[must_use]
+    pub fn toggled(self) -> Self {
+        match self {
+            Self::Editing => Self::Suggesting,
+            Self::Suggesting => Self::Editing,
+        }
+    }
 }
 
 /// Whether one side, the header or the footer, is drawn (`PROSE-FEAT-167`).
@@ -1524,8 +1546,13 @@ pub enum ProseCommand {
     /// kept (`PROSE-UI-107`). The HTML another application wrote comes next,
     /// then the plain text, one paragraph per line. The view only carries the halves
     /// (`PROSE-UI-105`).
+    ///
+    /// A paste over a selection carries the selection's end in `over`, and
+    /// `at` is its start. The Logic thread takes the selection out and
+    /// pastes in its place as one undo item (`CHROME-184`).
     Paste {
         at: (BlockId, Pos<DocChar>),
+        over: Option<(BlockId, Pos<DocChar>)>,
         text: String,
         html: Option<String>,
         payload: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>,
@@ -1620,6 +1647,14 @@ pub enum ProseCommand {
         anchor: (BlockId, Pos<DocChar>),
         focus: (BlockId, Pos<DocChar>),
         kind: ParagraphKind,
+    },
+    /// Move every block a selection covers one step in or out, in one
+    /// commit (`PROSE-UI-267`). A list item changes level, and any other
+    /// block moves its left indent one step.
+    IndentSelection {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        step: IndentStep,
     },
     /// Set the body font or the heading font of the document,
     /// `meta/defaults` (`PROSE-UI-261`, `PROSE-UI-266`).
@@ -1952,12 +1987,14 @@ impl fmt::Debug for ProseCommand {
             Self::CopyRange { anchor, focus } => fields!("CopyRange", anchor, focus),
             Self::Paste {
                 at,
+                over,
                 text,
                 html,
                 payload,
             } => f
                 .debug_struct("Paste")
                 .field("at", at)
+                .field("over", over)
                 .field("text", &ambre_core::RedactedChars::of(text))
                 .field("html", &html.as_deref().map(ambre_core::RedactedChars::of))
                 .field("payload", payload)
@@ -2002,6 +2039,11 @@ impl fmt::Debug for ProseCommand {
                 focus,
                 kind,
             } => fields!("SetSelectionKind", anchor, focus, kind),
+            Self::IndentSelection {
+                anchor,
+                focus,
+                step,
+            } => fields!("IndentSelection", anchor, focus, step),
             Self::SetDefaultFont { font } => fields!("SetDefaultFont", font),
             Self::FindStart { query } => fields!("FindStart", query),
             Self::FindNext => f.write_str("FindNext"),
@@ -2346,6 +2388,7 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::MarkSelection { .. }
             | Self::SetSelectionParagraph { .. }
             | Self::SetSelectionKind { .. }
+            | Self::IndentSelection { .. }
             | Self::SetDefaultFont { .. }
             | Self::FindStart { .. }
             | Self::FindNext
@@ -2488,6 +2531,7 @@ impl ProseCommand {
             Self::MarkSelection { .. } => "formatting the selection",
             Self::SetSelectionParagraph { .. } => "setting the paragraph",
             Self::SetSelectionKind { .. } => "setting the paragraph style",
+            Self::IndentSelection { .. } => "indenting the paragraphs",
             Self::SetDefaultFont { .. } => "setting the default font",
             Self::FindStart { .. } => "searching",
             Self::FindNext => "going to the next match",
@@ -3252,6 +3296,7 @@ mod tests {
                 "{:?}",
                 ProseCommand::Paste {
                     at: (block_id, pos),
+                    over: None,
                     text: secret.clone(),
                     html: Some(secret.clone()),
                     payload: None,

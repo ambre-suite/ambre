@@ -42,8 +42,9 @@ the edits to the page.
 **The sites a web embed may load, named by the deployment.** A Toile web embed
 frames a page of another site (`TOILE-088`). The deployment names the sites it
 admits in `AMBRE_EMBED_SITES`, at build time: hosts or `https` origins, split by
-spaces or commas, each host with an optional `*.` prefix. The hook writes each
-one into `frame-src` as an `https` origin. A deployment that names no site
+spaces or commas. Each entry names one host: a wildcard such as `*.github.io`
+would admit the page of any user of that host, so it fails the build. The hook
+writes each one into `frame-src` as an `https` origin. A deployment that names no site
 admits no frame (`SRV-312`). A value that is not a site fails the build, so no
 source of another kind reaches the policy.
 
@@ -279,18 +280,20 @@ def inline_digests(html: str) -> tuple[list[str], list[str]]:
 # The variable in which a deployment names the sites a web embed may load.
 EMBED_SITES_VAR = "AMBRE_EMBED_SITES"
 
-# One host: labels of letters, digits and inner hyphens, an optional `*.`
-# prefix and an optional port. Nothing else can stand in a source of the policy.
+# One host: labels of letters, digits and inner hyphens and an optional port.
+# No `*.` prefix: a wildcard admits every site under a shared host, such as the
+# page of any user of `github.io` (`SRV-312`). Nothing else can stand in a source
+# of the policy.
 LABEL = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
-SITE = re.compile(rf"(?:\*\.)?{LABEL}(?:\.{LABEL})*(?::[0-9]{{1,5}})?")
+SITE = re.compile(rf"{LABEL}(?:\.{LABEL})*(?::[0-9]{{1,5}})?")
 
 
 def embed_sites(value: str) -> list[str]:
     """The `frame-src` sources of the sites `value` names, each as an `https` origin.
 
     `value` holds hosts or `https` origins, split by spaces or commas. Any other
-    scheme, a path, a quoted keyword or a bare wildcard fails: the deployment
-    names sites, never a source of another kind.
+    scheme, a path, a quoted keyword or a wildcard, bare or as a `*.` prefix,
+    fails: the deployment names single hosts, never a source of another kind.
     """
     sources: list[str] = []
     for site in re.split(r"[\s,]+", value.strip().lower()):

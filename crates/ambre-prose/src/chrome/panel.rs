@@ -20,8 +20,9 @@ use leptos::prelude::*;
 use super::ProseSignals;
 use crate::doc::{Orientation, PageFormat};
 use crate::events::{Align, ParagraphStyle, TriState};
-use crate::message::{DefaultFont, ParagraphKind, SelectionValues};
-use crate::view::panel::{self, Margins, PanelKind, Paper, TextWrite};
+use crate::message::{DefaultFont, IndentStep, ParagraphKind, SelectionValues};
+use crate::view::annotate::review_intent;
+use crate::view::panel::{self, CaretSuggestion, Margins, PanelKind, Paper, TextWrite};
 use crate::view::toolbar::state_of;
 
 /// The value of every list and segmented control of the panel. One value
@@ -50,6 +51,11 @@ fn prop(
     id: ambre_core::StaticKey<ambre_core::Properties>,
 ) -> &'static ambre_chrome::commands::Property {
     panel::property(id)
+}
+
+/// The label of the property of `id`, as a control names it.
+fn label_of(id: ambre_core::StaticKey<ambre_core::Properties>) -> String {
+    (prop(id).title)(&ambre_chrome::commands::Locale::En).into_string()
 }
 
 /// The title and the sections of the page's context panel.
@@ -312,6 +318,18 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 icon: Some(icon),
             })
             .collect::<Vec<_>>();
+        // One step in or out: a list item changes level, another block moves
+        // its left indent (`PROSE-UI-267`).
+        let step = move |id, icon: icondata::Icon, step: IndentStep| {
+            view! {
+                <ambre_chrome::IconButton
+                    icon=icon
+                    label=label_of(id)
+                    reach=Some(Reach::Property(id))
+                    on_press=Callback::new(move |()| text_write(TextWrite::Indent(step)))
+                />
+            }
+        };
         let list = Signal::derive(move || match values.with(|v| v.kind) {
             Reading::Uniform(Some(ParagraphKind::List(style))) => {
                 Reading::Uniform(Pick::Kind(Some(ParagraphKind::List(style))))
@@ -358,6 +376,10 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             </Field>
             <Field label="First line">
                 {indent(panel::INDENT_FIRST, |v| v.indent_first, |pt| ParagraphStyle { indent_first: Some(pt), ..ParagraphStyle::default() })}
+            </Field>
+            <Field label="Indent">
+                {step(panel::INDENT_OUT, icondata::MdiFormatIndentDecrease, IndentStep::Out)}
+                {step(panel::INDENT_IN, icondata::MdiFormatIndentIncrease, IndentStep::In)}
             </Field>
             <Field label="List">
                 <Segmented
@@ -437,11 +459,69 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         .into_any()
     };
 
-    let sections = Signal::derive(move || {
-        kind.get()
-            .sections()
+    // Accept and reject of the suggestion at the caret, so a key or a tap
+    // reaches them with no hover (`PROSE-UI-273`, `CHROME-183`).
+    let suggestion_section = move || {
+        let on_command = Callback::new(move |id| {
+            if let Some(intent) = review_intent(id, signals.at_caret.get_untracked()) {
+                signals.intent.set(Some(intent));
+            }
+        });
+        let buttons = panel::SUGGESTION_COMMANDS
             .iter()
-            .filter_map(|&key| {
+            .filter_map(|&id| {
+                let command = ambre_commands::find(crate::commands::COMMANDS, id)?;
+                Some(view! { <CommandButton command=command icon={ Option::<icondata::Icon>::None } on_command=on_command /> })
+            })
+            .collect_view();
+        view! { <Field label="Review">{buttons}</Field> }.into_any()
+    };
+
+    // Suggestion mode, whatever is selected (`PROSE-UI-276`). The control
+    // reads the mode the Logic thread reported, so its pressed state is the
+    // mode itself (`PROSE-UI-275`).
+    let review_section = move || {
+        let on_command = Callback::new(move |id| {
+            if let Some(intent) = review_intent(id, signals.at_caret.get_untracked()) {
+                signals.intent.set(Some(intent));
+            }
+        });
+        let pressed = Signal::derive(move || {
+            if signals.mode.get() == crate::events::EditMode::Suggesting {
+                Pressed::On
+            } else {
+                Pressed::Off
+            }
+        });
+        let buttons = panel::REVIEW_COMMANDS
+            .iter()
+            .filter_map(|&id| {
+                let command = ambre_commands::find(crate::commands::COMMANDS, id)?;
+                Some(view! {
+                    <CommandButton
+                        command=command
+                        icon=super::icon_of(command)
+                        on_command=on_command
+                        pressed=pressed
+                        labelled=ambre_chrome::Labelled::Text
+                    />
+                })
+            })
+            .collect_view();
+        view! { <Field label="Mode">{buttons}</Field> }.into_any()
+    };
+
+    let at_caret = Memo::new(move |_| {
+        if signals.at_caret.with(Option::is_some) {
+            CaretSuggestion::Held
+        } else {
+            CaretSuggestion::Outside
+        }
+    });
+    let sections = Signal::derive(move || {
+        panel::sections(kind.get(), at_caret.get())
+            .into_iter()
+            .filter_map(|key| {
                 Some(match key {
                     k if k == panel::PAGE => {
                         PanelSection::new(k, "Page", icondata::MdiFileDocumentOutline, page_section)
@@ -469,6 +549,18 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                         "Default styles",
                         icondata::MdiFormatFont,
                         defaults_section,
+                    ),
+                    k if k == panel::SUGGESTION => PanelSection::new(
+                        k,
+                        "Suggestion",
+                        icondata::MdiFileDocumentEditOutline,
+                        suggestion_section,
+                    ),
+                    k if k == panel::REVIEW => PanelSection::new(
+                        k,
+                        "Review",
+                        icondata::MdiFileDocumentEditOutline,
+                        review_section,
                     ),
                     _ => return None,
                 })

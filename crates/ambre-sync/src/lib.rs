@@ -185,6 +185,7 @@ mod call;
 mod call_client;
 mod call_link;
 mod call_roster;
+mod census;
 mod chain;
 mod channels;
 mod converter;
@@ -198,6 +199,7 @@ mod fold;
 pub mod fuzz;
 mod generation;
 mod http;
+mod json;
 mod kept;
 mod key_vouch;
 mod lifecycle;
@@ -589,6 +591,12 @@ enum SyncEvent {
     ChannelDeleted {
         channel_id: Id<Channel>,
         result: Result<(), http::HttpError>,
+    },
+    /// The documents a removal caps, as the relay listed them, before their
+    /// census (`SYNC-312`, `SYNC-314`).
+    CensusPlanned {
+        removal: census::Removal,
+        result: Result<Vec<census::Counted>, http::HttpError>,
     },
     /// The answer to a channel leave (`SyncCommand::LeaveChannel`).
     ChannelLeft {
@@ -996,13 +1004,15 @@ struct SyncDocumentState {
     departed: Option<Seq<ambre_protocol::LogPlaces>>,
     /// Deltas whose signer no writer of the walk held names, kept sealed
     /// until a listing asked after each arrived answers (`SYNC-211`).
-    /// Bounded by [`QUARANTINE_LIMIT`], as the quarantine is.
+    /// Bounded by [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`], as the
+    /// quarantine is (`SYNC-310`).
     unvouched: Vec<Unvouched>,
     /// Deltas of a channel document that a listing refused as no writer's,
     /// kept sealed. A space that lists the channel can open later, or change
     /// its word. The next walk of the log decides them again (`SYNC-230`).
     /// The refusal stands until that walk. Bounded by
-    /// [`QUARANTINE_LIMIT`], as the quarantine is.
+    /// [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`], as the quarantine is
+    /// (`SYNC-310`).
     refused: Vec<Unvouched>,
     /// Whether the document may land a delta and seal a frame while its log
     /// walks again under the rule of a space (`SYNC-232`).
@@ -1066,6 +1076,32 @@ struct Unvouched {
     update: Update,
 }
 
+impl Unvouched {
+    /// The ciphertext bytes this delta holds while it waits.
+    fn bytes(&self) -> Count<ambre_core::Octets> {
+        Count::of(self.update.ciphertext.as_bytes().len())
+    }
+}
+
+/// Drops the oldest deltas of `held` until it fits both caps of the
+/// quarantine: [`QUARANTINE_LIMIT`] and [`QUARANTINE_BYTES`]. A thousand
+/// slots of the relay's largest frame would otherwise hold gigabytes
+/// (`SYNC-310`, audit `W206`). Returns how many it dropped.
+fn trim_held(held: &mut Vec<Unvouched>) -> Count<Quarantined> {
+    let excess = Count::<Quarantined>::of(held.len()).minus(QUARANTINE_LIMIT);
+    let mut bytes: Count<ambre_core::Octets> = held.iter().map(Unvouched::bytes).sum();
+    let mut cut = 0;
+    for entry in held.iter() {
+        if Count::<Quarantined>::of(cut) >= excess && bytes <= QUARANTINE_BYTES {
+            break;
+        }
+        bytes = bytes.minus(entry.bytes());
+        cut = cut.saturating_add(1);
+    }
+    held.drain(..cut);
+    Count::of(cut)
+}
+
 /// A snapshot the Logic thread is checking.
 struct PendingCheck {
     /// The signing key its sealed blob verified under: who built it.
@@ -1120,12 +1156,25 @@ pub(crate) struct Applied {
     /// signed, for the deltas that reached the document alone. A snapshot
     /// names no head, so it adds nothing here.
     heads: HashMap<FixedBytes<PublicKey>, Vec<(ambre_protocol::LogHead, Seq<DeltaAuthor>)>>,
+    /// The highest clock of each author's deltas folded in a snapshot. No
+    /// head proves when they were signed, so a cap a later grant lifted
+    /// still reads them (`SYNC-316`).
+    folded: HashMap<FixedBytes<PublicKey>, Seq<DeltaAuthor>>,
 }
 
 impl Applied {
     /// Notes a delta `author` signed at `clock`, alone or folded.
     fn note(&mut self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
         self.clocks
+            .entry(*author)
+            .and_modify(|held| *held = (*held).max(clock))
+            .or_insert(clock);
+    }
+
+    /// Notes a delta `author` signed at `clock`, folded in a snapshot.
+    fn note_folded(&mut self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
+        self.note(author, clock);
+        self.folded
             .entry(*author)
             .and_modify(|held| *held = (*held).max(clock))
             .or_insert(clock);
@@ -1168,6 +1217,9 @@ impl Applied {
         for (author, clock) in other.clocks {
             self.note(&author, clock);
         }
+        for (author, clock) in other.folded {
+            self.note_folded(&author, clock);
+        }
         for (author, heads) in other.heads {
             for (head, clock) in heads {
                 self.note_signed(&author, head, clock);
@@ -1180,8 +1232,9 @@ impl Applied {
         self.clocks.is_empty()
     }
 
-    /// Whether a delta applied lies past a cap `writers` sets, or past a cap
-    /// a later grant lifted under a head before that grant.
+    /// Whether a delta applied lies past a cap `writers` sets. A cap a
+    /// later grant lifted counts for a delta signed under a head before that
+    /// grant, and for a clock a snapshot folded.
     fn past_cap(&self, writers: &membership_log::Writers) -> bool {
         let capped = self
             .clocks
@@ -1192,7 +1245,11 @@ impl Applied {
                 .iter()
                 .any(|(head, clock)| !writers.readmits(author, *clock, *head))
         });
-        capped || excluded
+        let folded = self
+            .folded
+            .iter()
+            .any(|(author, clock)| writers.folds_past_cap_of(author, *clock));
+        capped || excluded || folded
     }
 }
 
@@ -1202,6 +1259,9 @@ impl Applied {
 pub(crate) struct StartBlob {
     pub blob: Payload<pipeline::FetchedBlob>,
     pub author: FixedBytes<PublicKey>,
+    /// The log head its confirmation signed, which proves a fold past a
+    /// lifted cap (`SYNC-317`).
+    pub proof: Option<ambre_protocol::LogHead>,
 }
 
 /// An older trusted snapshot an open starts from when its start folds a
@@ -1434,7 +1494,8 @@ impl SyncDocumentState {
         start: &StartBlob,
         served: pipeline::ServedSnapshot,
     ) -> Result<ambre_core::Payload<ambre_core::SnapshotBytes>, pipeline::PipelineError> {
-        let (payload, signer) = self.open_signed_snapshot(&start.blob, served)?;
+        let (payload, signer) =
+            self.open_signed_snapshot_under(&start.blob, served, start.proof)?;
         if signer != start.author {
             return Err(pipeline::PipelineError::WrongAuthor);
         }
@@ -1458,6 +1519,24 @@ impl SyncDocumentState {
         ),
         pipeline::PipelineError,
     > {
+        self.open_signed_snapshot_under(blob, served, None)
+    }
+
+    /// Opens a snapshot blob as [`Self::open_signed_snapshot`] does. A fold
+    /// past a lifted cap stands under `proof`, the log head a member other
+    /// than its author confirmed it at (`SYNC-317`).
+    fn open_signed_snapshot_under(
+        &self,
+        blob: &Payload<pipeline::FetchedBlob>,
+        served: pipeline::ServedSnapshot,
+        proof: Option<ambre_protocol::LogHead>,
+    ) -> Result<
+        (
+            ambre_core::Payload<ambre_core::SnapshotBytes>,
+            FixedBytes<PublicKey>,
+        ),
+        pipeline::PipelineError,
+    > {
         // No snapshot is adopted while the log walks again: its author may be
         // a writer the relay forged (`SYNC-234`).
         if !matches!(self.gate, channels::LogGate::Open) {
@@ -1473,9 +1552,11 @@ impl SyncDocumentState {
         }
         // A snapshot that folds a delta past the cap of its writer holds a
         // write the log refuses, whoever signed it. It is refused whole, and
-        // the deltas replay one by one under the cap (`SYNC-300`).
+        // the deltas replay one by one under the cap (`SYNC-300`). A cap a
+        // later grant lifted counts too, unless a confirmation by another
+        // member signs a head past that grant (`SYNC-316`, `SYNC-317`).
         let folded = &snapshot.public_data.parent_snapshot_update_clocks;
-        if self.writers.folds_past_cap(folded) {
+        if self.writers.folds_past_cap_under(folded, proof) {
             return Err(pipeline::PipelineError::PastCap);
         }
         let key = self
@@ -1485,15 +1566,18 @@ impl SyncDocumentState {
         // What the snapshot folds counts as applied, so a revoke caps a
         // writer at the deltas the snapshot holds too (`SYNC-300`).
         for (author, clock) in folded {
-            self.note_applied(author, *clock);
+            match proof {
+                Some(head) => self.applied.borrow_mut().note_signed(author, head, *clock),
+                None => self.note_applied(author, *clock),
+            }
         }
         Ok((payload, snapshot.public_data.pub_key))
     }
 
-    /// Notes that a delta `author` signed at `clock` reached the document,
-    /// alone or folded in a snapshot (`SYNC-300`).
+    /// Notes that a delta `author` signed at `clock` reached the document
+    /// folded in a snapshot (`SYNC-300`, `SYNC-316`).
     fn note_applied(&self, author: &FixedBytes<PublicKey>, clock: Seq<DeltaAuthor>) {
-        self.applied.borrow_mut().note(author, clock);
+        self.applied.borrow_mut().note_folded(author, clock);
     }
 
     /// The highest clock of `author`'s deltas this document applied, the
@@ -1792,6 +1876,17 @@ pub struct SyncState {
     /// hydrates instead of opening local-only with a throwaway key.
     pending_opens: Vec<(Id<Document>, DocType)>,
 
+    /// The removals that wait on the census of their documents
+    /// (`SYNC-312`, `SYNC-314`).
+    censuses: Vec<census::Census>,
+    /// The documents a census opened that the Logic thread does not hold.
+    /// What their opens would tell the Logic thread reaches the census
+    /// alone.
+    census_docs: HashSet<Id<Document>>,
+    /// What each document a census awaits said, held until the event that
+    /// raised it is handled whole.
+    census_signals: RefCell<Vec<(Id<Document>, census::Signal)>>,
+
     /// The inviter each document's invite link pinned, for the session
     /// (`SYNC-205`). A pin outlives a close, so a later open of the document
     /// in the session checks the same log against it.
@@ -1906,6 +2001,9 @@ impl SyncState {
             documents: HashMap::new(),
             doc_metadata: HashMap::new(),
             pending_opens: Vec::new(),
+            censuses: Vec::new(),
+            census_docs: HashSet::new(),
+            census_signals: RefCell::new(Vec::new()),
             pinned_inviters: HashMap::new(),
             murmure_roots: HashSet::new(),
             typed_opens: HashSet::new(),
@@ -1939,6 +2037,17 @@ impl SyncState {
     // -- Outbound: Sync -> Logic ------------------------------------------------
 
     fn send_to_logic(&self, event: LogicEvent) {
+        // An open a census runs tells the census alone (`SYNC-312`).
+        if let Some((document_id, signal)) = census::subject(&event) {
+            if let Some(signal) = signal
+                && self.censuses.iter().any(|c| c.awaits(document_id))
+            {
+                self.census_signals.borrow_mut().push((document_id, signal));
+            }
+            if self.census_docs.contains(&document_id) {
+                return;
+            }
+        }
         if let Err(SendError(ev)) = self.logic_tx.send(event) {
             crate::log::warning!(
                 "Sync: Logic receiver dropped, discarding {:?}",
@@ -2103,6 +2212,12 @@ impl SyncState {
     }
 
     pub fn handle_command(&mut self, cmd: SyncCommand) {
+        self.dispatch_command(cmd);
+        self.settle_census();
+    }
+
+    /// Acts on one command of the Logic thread.
+    fn dispatch_command(&mut self, cmd: SyncCommand) {
         match cmd {
             // -- Service plane: the relayed request/response family ------------
             SyncCommand::Rest { id, cmd } => self.handle_rest(id, cmd),
@@ -2117,6 +2232,9 @@ impl SyncState {
                     Some(meta) => self.channel_metas.insert(document_id, meta),
                     None => self.channel_metas.remove(&document_id),
                 };
+                // The Logic thread claims a document a census opened: its
+                // open now reaches the Logic thread (`SYNC-312`).
+                self.census_docs.remove(&document_id);
                 self.handle_open_document(document_id, doc_type);
             }
             SyncCommand::PinInviter {
@@ -2313,7 +2431,22 @@ impl SyncState {
                 documents,
             } => self.handle_watch_channel(channel_id, (meta, meta_last), &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
-            SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
+            SyncCommand::LeaveChannel { channel_id, named } => {
+                self.handle_leave_channel(channel_id, named);
+            }
+            SyncCommand::RevokeFromChannel {
+                id,
+                document_id,
+                user_id,
+                named,
+            } => self.begin_removal(
+                crate::census::Removal::Revoke {
+                    id,
+                    document_id,
+                    user_id,
+                },
+                Some(named),
+            ),
             SyncCommand::CreateDirectMessage {
                 channel_id,
                 meta,

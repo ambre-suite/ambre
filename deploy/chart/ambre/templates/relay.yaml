@@ -1,0 +1,125 @@
+{{- $c := dict "root" . "component" "relay" -}}
+{{- $domain := include "ambre.domain" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  replicas: {{ .Values.relay.replicas }}
+  selector:
+    matchLabels: {{- include "ambre.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ambre.labels" $c | nindent 8 }}
+    spec:
+      {{- include "ambre.podSecurity" (dict "uid" 999) | nindent 6 }}
+      {{- if .Values.garage.enabled }}
+      # Gives the object store its layout, the key of the stack and the
+      # bucket. Each step is skipped once done, so every start runs it again.
+      initContainers:
+        - name: garage-init
+          image: {{ include "ambre.image" (dict "root" . "component" "init") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          env:
+            - name: GARAGE_ADMIN
+              value: {{ printf "http://%s:3903" (include "ambre.name" (dict "root" . "component" "garage")) }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "GARAGE_ADMIN_TOKEN" "key" "garage-admin-token") | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "GARAGE_KEY_ID" "key" "s3-access-key-id") | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "GARAGE_KEY_SECRET" "key" "s3-secret-access-key") | nindent 12 }}
+            - name: S3_ENDPOINT
+              value: {{ include "ambre.s3Endpoint" . }}
+            - name: S3_BUCKET
+              value: {{ .Values.s3.bucket }}
+      {{- end }}
+      containers:
+        - name: relay
+          image: {{ include "ambre.image" $c }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          ports:
+            - name: http
+              containerPort: 3000
+            - name: metrics
+              containerPort: 9100
+          env:
+            - name: DEV_MODE
+              value: {{ ternary "true" "" .Values.relay.devMode | quote }}
+            {{- if .Values.postgres.enabled }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "POSTGRES_PASSWORD" "key" "postgres-password") | nindent 12 }}
+            - name: DATABASE_URL
+              value: {{ printf "postgres://ambre:$(POSTGRES_PASSWORD)@%s:5432/ambre" (include "ambre.name" (dict "root" . "component" "postgres")) }}
+            {{- else }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "DATABASE_URL" "key" "database-url") | nindent 12 }}
+            {{- end }}
+            {{- if .Values.redis.enabled }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "REDIS_PASSWORD" "key" "redis-password") | nindent 12 }}
+            - name: REDIS_URL
+              value: {{ printf "redis://:$(REDIS_PASSWORD)@%s:6379" (include "ambre.name" (dict "root" . "component" "redis")) }}
+            {{- else }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "REDIS_URL" "key" "redis-url") | nindent 12 }}
+            {{- end }}
+            - name: S3_ENDPOINT
+              value: {{ include "ambre.s3Endpoint" . }}
+            - name: S3_PUBLIC_ENDPOINT
+              value: {{ include "ambre.s3PublicEndpoint" . }}
+            - name: S3_BUCKET
+              value: {{ .Values.s3.bucket }}
+            - name: S3_ENV_PREFIX
+              value: ambre
+            - name: AWS_REGION
+              value: {{ .Values.s3.region }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "AWS_ACCESS_KEY_ID" "key" "s3-access-key-id") | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "AWS_SECRET_ACCESS_KEY" "key" "s3-secret-access-key") | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "JWT_SIGNING_SEED" "key" "jwt-signing-seed") | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "CALL_ADMISSION_SEED" "key" "call-admission-seed") | nindent 12 }}
+            # The metrics listen off the loopback of the pod, so the relay
+            # starts only with a scrape token (`SRV-318`). No route of the web
+            # server reaches them (`SRV-257`).
+            {{- include "ambre.secretEnv" (dict "root" . "name" "METRICS_TOKEN" "key" "metrics-token") | nindent 12 }}
+            - name: CALL_SFU_URL
+              value: {{ printf "wss://%s/sfu/call" $domain }}
+            - name: CORS_ALLOWED_ORIGINS
+              value: {{ printf "https://%s" $domain }}
+            # The web server is the one proxy in front of the relay (`SRV-285`).
+            - name: TRUST_PROXY_HEADERS
+              value: "1"
+            {{- include "ambre.secretEnv" (dict "root" . "name" "OIDC_GOOGLE_CLIENT_ID" "key" "oidc-google-client-id" "optional" true) | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "OIDC_GOOGLE_CLIENT_SECRET" "key" "oidc-google-client-secret" "optional" true) | nindent 12 }}
+            - name: OIDC_GOOGLE_REDIRECT_URI
+              value: {{ printf "https://%s/signin/google" $domain }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "OIDC_ISSUER" "key" "oidc-issuer" "optional" true) | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "OIDC_CLIENT_ID" "key" "oidc-client-id" "optional" true) | nindent 12 }}
+            {{- include "ambre.secretEnv" (dict "root" . "name" "OIDC_CLIENT_SECRET" "key" "oidc-client-secret" "optional" true) | nindent 12 }}
+            - name: OIDC_REDIRECT_URI
+              value: {{ printf "https://%s/signin/oidc" $domain }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+          {{- with .Values.relay.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "ambre.selector" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+    - name: metrics
+      port: 9100
+      targetPort: metrics

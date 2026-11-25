@@ -38,6 +38,7 @@ fn paste(html: &str) -> impl FnMut() -> (ProseState, ProseCommand) + '_ {
         };
         let command = ProseCommand::Paste {
             at: (first, Pos::<DocChar>::ZERO),
+            over: None,
             text: String::new(),
             html: Some(html.to_owned()),
             payload: None,

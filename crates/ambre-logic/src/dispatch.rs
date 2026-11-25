@@ -126,6 +126,17 @@ impl LogicState {
         self.route(|m| m.apply_channel_signed(document_id, deltas))
     }
 
+    /// Keep signed deltas, with their signers, for the space still opening
+    /// that holds `document_id` (`AUTHOR-037`). Returns `false` when no
+    /// opening space holds it.
+    pub(crate) fn murmure_space_signed(
+        &mut self,
+        document_id: Id<Document>,
+        deltas: &[SignedDelta],
+    ) -> bool {
+        self.route(|m| m.keep_space_signed(document_id, deltas))
+    }
+
     /// Apply a trusted payload the relay placed at `seq` to the channel or
     /// the space that holds `document_id`. Returns `false` when neither does.
     pub(crate) fn murmure_remote(
@@ -304,6 +315,14 @@ impl LogicState {
                     RestCommand::LeaveDocument { document_id }
                         if self.route(|m| m.hand_off_before_leave(id, *document_id)) =>
                     {
+                        return;
+                    }
+                    // A revoke on the `meta` of a channel names the documents
+                    // its sealed state holds (`SYNC-320`).
+                    RestCommand::RevokeFromDocument {
+                        document_id,
+                        user_id,
+                    } if self.route(|m| m.revoke_in_channel(id, *document_id, *user_id)) => {
                         return;
                     }
                     RestCommand::InviteToDocument { .. }
@@ -731,7 +750,7 @@ impl LogicState {
                 } else {
                     // A document this client created goes up whole first.
                     self.route(|m| m.flush_unsent(document_id));
-                    if self.route(|m| m.channel_document_ready(document_id))
+                    if self.route(|m| m.channel_document_ready(document_id, role))
                         || self.route(|m| m.space_document_ready(document_id, role))
                     {
                         // A channel or a space document is no document of
@@ -3970,6 +3989,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
@@ -4021,6 +4041,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,
@@ -4068,6 +4089,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: "plain".to_owned(),
                 html: Some("<h1>Title</h1>".to_owned()),
                 payload: None,

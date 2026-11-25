@@ -319,6 +319,9 @@ impl<D> Runtime<D> {
     /// Ask the relay for the documents of a channel (the Murmure engine spec).
     /// A channel already open or opening is left as it is.
     pub fn open_channel(&mut self, channel_id: Id<Channel>) {
+        // An open asked while a removal opened the channel keeps it open
+        // (`SYNC-320`).
+        self.opened_for_removal.remove(&channel_id);
         if self.channels.contains_key(&channel_id) || self.opening.contains_key(&channel_id) {
             return;
         }
@@ -472,9 +475,15 @@ impl<D> Runtime<D> {
     /// A channel still opening ends the session
     /// of each document it asked for.
     pub fn close_channel(&mut self, channel_id: Id<Channel>) {
+        // A removal that waits on the read of its threads fails: the read
+        // needs the channel open (`SYNC-321`).
+        if self.channels.contains_key(&channel_id) && self.removals.contains_key(&channel_id) {
+            self.fail_removals(channel_id);
+        }
         let Some(channel) = self.channels.remove(&channel_id) else {
             return self.end_channel(channel_id);
         };
+        self.meta_roles.remove(&channel.meta_id().document_id());
         // Its documents leave the relay's watch, so the other members see
         // this user go (`SRV-097`). A reopen lists the members again.
         self.channel_watchers.remove(&channel_id);
@@ -645,6 +654,7 @@ impl<D> Runtime<D> {
         };
         for document_id in documents {
             self.channel_ledgers.remove(&document_id);
+            self.meta_roles.remove(&document_id);
             self.forget_murmure_session(document_id);
             self.ask(SyncCommand::CloseDocument { document_id });
         }
@@ -755,12 +765,20 @@ impl<D> Runtime<D> {
         });
     }
 
-    /// A document of a channel has all its bytes. Returns `false` when no
-    /// channel, open or opening, asked for it.
-    pub fn channel_document_ready(&mut self, document_id: Id<Document>) -> bool {
+    /// A document of a channel has all its bytes, and `role` is this
+    /// client's role on it. Returns `false` when no channel, open or
+    /// opening, asked for it.
+    pub fn channel_document_ready(&mut self, document_id: Id<Document>, role: Role) -> bool {
+        self.note_meta_role(document_id, role);
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
+            // A document a removal reads for its threads, then closes
+            // (`SYNC-321`).
+            if channel.is_swept(document_id) {
+                self.swept_ready(channel_id, document_id);
+                return true;
+            }
             // A probe is read for the segment its header names, then
             // closed: nothing holds it.
             if channel.is_probe(document_id) {
@@ -799,6 +817,8 @@ impl<D> Runtime<D> {
                     }
                 }
                 self.advance_seek(channel_id);
+                // A removal may wait on what the view loaded.
+                self.advance_sweep(channel_id);
             }
             return true;
         }
@@ -813,6 +833,29 @@ impl<D> Runtime<D> {
         let result = opening.ready(document_id);
         self.advance_opening(channel_id, asked, result);
         true
+    }
+
+    /// Keep `role` when `document_id` is the `meta` of a channel open or
+    /// opening here. A role that changes on an open channel may let this
+    /// client seal its name now (`MURMURE-729`).
+    fn note_meta_role(&mut self, document_id: Id<Document>, role: Role) {
+        let open = self
+            .channels
+            .iter()
+            .find(|(_, c)| c.meta_id().document_id() == document_id)
+            .map(|(id, _)| *id);
+        let opening = self
+            .opening
+            .values()
+            .flatten()
+            .any(|o| o.meta_id().document_id() == document_id);
+        if open.is_none() && !opening {
+            return;
+        }
+        self.meta_roles.insert(document_id, role);
+        if let Some(channel_id) = open {
+            self.reseal_stale_name(channel_id);
+        }
     }
 
     /// Act on where an opening stands. `asked` lists every document it asked
@@ -884,6 +927,7 @@ impl<D> Runtime<D> {
                 for decline in self.declines.remove(&channel_id).unwrap_or_default() {
                     self.handle_channel_command(channel_id, decline);
                 }
+                self.release_removals(channel_id);
             }
             Err(error) => self.end_opening(channel_id, &error),
         }
@@ -940,6 +984,14 @@ impl<D> Runtime<D> {
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
+            // A document a removal reads for its threads fails the removal:
+            // its threads stay unknown (`SYNC-321`).
+            if channel.is_swept(document_id) {
+                tracing::warn!("Logic: {document_id} failed to open for a removal: {cause}");
+                channel.end_sweep();
+                self.sweep_failed(channel_id);
+                return true;
+            }
             // A missing key earns a band in the list. A transient failure
             // earns none: asking again may open it. A refusal earns none
             // either: the band names a key, and the relay's answer is told.
@@ -962,6 +1014,7 @@ impl<D> Runtime<D> {
                 self.emit(UiEvent::Channel { channel_id, event });
             }
             self.advance_seek(channel_id);
+            self.advance_sweep(channel_id);
             return true;
         }
         let Some(channel_id) = self.opening.iter().find_map(|(id, o)| {
@@ -1081,6 +1134,33 @@ impl<D> Runtime<D> {
             .collect()
     }
 
+    /// The channel whose `meta` is `document_id`, whether it is open,
+    /// opening or closed.
+    pub(crate) fn channel_of_meta_anywhere(
+        &self,
+        document_id: Id<Document>,
+    ) -> Option<Id<Channel>> {
+        let meta = Id::<Meta>::from_document(document_id);
+        let open = self
+            .channels
+            .iter()
+            .find(|(_, c)| c.meta_id() == meta)
+            .map(|(id, _)| *id);
+        let opening = || {
+            self.opening
+                .iter()
+                .find(|(_, o)| o.as_ref().is_some_and(|o| o.meta_id() == meta))
+                .map(|(id, _)| *id)
+        };
+        let closed = || {
+            self.closed_channels
+                .iter()
+                .find(|(_, c)| c.meta == meta)
+                .map(|(id, _)| *id)
+        };
+        open.or_else(opening).or_else(closed)
+    }
+
     /// Drop an opening that failed, end the session of each document it asked
     /// for, and tell the view.
     fn end_opening(&mut self, channel_id: Id<Channel>, cause: &dyn std::fmt::Display) {
@@ -1093,6 +1173,7 @@ impl<D> Runtime<D> {
         self.end_light_channel(channel_id);
         // A decline that waited on the open writes nothing: the ring ends at its timeout.
         self.declines.remove(&channel_id);
+        self.fail_removals(channel_id);
         self.channel_open_failed(channel_id, cause);
     }
 

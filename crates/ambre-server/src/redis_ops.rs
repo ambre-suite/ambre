@@ -249,7 +249,10 @@ pub async fn seed_clock_state(
     Ok(())
 }
 
-/// Appends a delta entry to the pending list for this document.
+/// Appends a delta entry to the pending list for this document. An older
+/// relay queued each large delta this way. A relay now writes the object on
+/// the write path (`SRV-307`). Only the tests call it now. They seed the
+/// lists that the flush and the replay still serve.
 ///
 /// The entry is a JSON blob `{ seq, s3_key, update_b64 }` carrying the full
 /// sealed Update wire. The global S3 flusher picks it up every 15 seconds
@@ -263,7 +266,8 @@ pub async fn seed_clock_state(
 ///
 /// The push itself failed: the list does not hold the delta. A dirty mark
 /// that fails after the push is no error: it comes back as
-/// [`Queued::MarkMissed`] (`SRV-262`).
+/// [`Queued::MarkMissed`].
+#[cfg(test)]
 pub async fn append_pending_delta(
     redis: &Client,
     document_id: &Id<Document>,
@@ -311,22 +315,21 @@ return redis.call('RPUSH', KEYS[1], ARGV[1])
     // store may not log it (`SRV-001`), so it hands it to the caller.
     Ok(match mark_pending_dirty(redis, &key).await {
         Ok(()) => Queued::Marked,
-        Err(e) => Queued::MarkMissed(e),
+        Err(_) => Queued::MarkMissed,
     })
 }
 
 /// What became of the dirty mark of a delta the pending list took.
 ///
-/// The list holds the delta under both variants. The caller logs a missed
-/// mark and counts it, since the flush of that list waits for the next
-/// reconciling sweep (`SRV-262`).
+/// The list holds the delta under both variants.
+#[cfg(test)]
 #[must_use]
 #[derive(Debug)]
 pub enum Queued {
     /// The dirty set names the list: the next flusher cycle visits it.
     Marked,
     /// The dirty set refused the mark of a list the push had just filled.
-    MarkMissed(AppError),
+    MarkMissed,
 }
 
 /// The refusal every tombstone-guarded script answers for a document being
@@ -463,15 +466,14 @@ pub async fn clear_pending_dirty_if_empty(
     Ok(())
 }
 
-/// Pushes a delta that could not be enqueued for S3 flushing onto a durable
-/// dead-letter list (`doc:{id}:deadletter`). An operator can then inspect and
-/// replay it (H1).
+/// Pushes a delta whose index row could not be written onto a dead-letter
+/// list (`doc:{id}:deadletter`). An operator can then inspect and replay it
+/// (H1).
 ///
-/// This is the fallback when `append_pending_delta` fails. The pending list is
-/// the only path a sequenced delta takes to S3. Without a dead-letter the seq
-/// is silently lost from the durable index, after it has already been assigned
-/// and acknowledged. The list is never trimmed automatically; it is an operator
-/// signal, not a hot path.
+/// The index row is the only path a replay reads. Without a dead-letter the
+/// seq is silently lost from the durable index, after it has already been
+/// assigned and acknowledged. The list is never trimmed automatically; it is
+/// an operator signal, not a hot path.
 pub async fn push_dead_letter(
     redis: &Client,
     document_id: &Id<Document>,
@@ -1418,6 +1420,39 @@ return 0
         .await
         .map_err(|e| AppError::Redis(crate::error::FaultText::of("session close", e)))?;
     Ok(last == 1)
+}
+
+/// Whether a delete has fenced a document, read from its tombstone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentFence {
+    /// No tombstone: the document is not being deleted.
+    Open,
+    /// The tombstone exists: a delete has begun (`SRV-017`).
+    Gone,
+}
+
+/// Reads the tombstone of a document. The write path asks it after the clock
+/// script, since a delete may begin between that script and the store
+/// (`SRV-335`). A store reset loses the tombstone until the next pass sets it
+/// again, so an `Open` answer is no proof: the sweeps stay the backstop.
+///
+/// # Errors
+///
+/// The ephemeral store did not answer.
+pub async fn document_fence(
+    redis: &Client,
+    document_id: &Id<Document>,
+) -> Result<DocumentFence, AppError> {
+    let gone_key = DocKey::<Gone>::of(document_id);
+    let found: usize = redis
+        .exists(gone_key.as_str())
+        .await
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("tombstone read", e)))?;
+    Ok(if found == 0 {
+        DocumentFence::Open
+    } else {
+        DocumentFence::Gone
+    })
 }
 
 /// Sets the tombstone of a document for `ttl`: the first step of a
@@ -2502,35 +2537,6 @@ mod redis_integration_tests {
         let _ = redis
             .srem(FlushDirtySet.as_str(), [pending_key.as_str()])
             .await;
-    }
-
-    /// `SRV-262`: a dirty set that refuses the mark after the push leaves the
-    /// delta in its list, and the store answers the missed mark typed.
-    #[tokio::test]
-    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
-    async fn a_refused_mark_keeps_the_delta_and_answers_the_miss() {
-        let redis = crate::test_helpers::connect_document_keys_redis()
-            .await
-            .expect("db-tier tests require a reachable Redis");
-        let doc = Id::<Document>::mint();
-
-        let queued = append_pending_delta(
-            &redis,
-            &doc,
-            ambre_core::Seq::<ambre_core::Relay>::new(1),
-            &ambre_core::ObjectKey::from("s3-x"),
-            &StoredPayload::new(vec![1, 2, 3]),
-        )
-        .await
-        .expect("the push reaches a key of the document");
-
-        assert!(
-            matches!(queued, Queued::MarkMissed(AppError::Redis(_))),
-            "{queued:?}"
-        );
-        let held = get_pending_deltas_map(&redis, &doc).await.unwrap();
-        assert_eq!(held.len(), 1, "the list keeps the delta");
-        let _ = redis.del([PendingKey::of(&doc).as_str()]).await;
     }
 
     /// `SRV-253`: three operations pair a list of one document with the dirty

@@ -53,18 +53,20 @@ pub fn Field(label: &'static str, children: Children) -> impl IntoView {
             <div class="ambre-kit-control">{children()}</div>
         </div>
     }
+    .into_any()
 }
 
 /// Controls side by side, on one line of a section.
 #[component]
 pub fn Row(children: Children) -> impl IntoView {
-    view! { <div class="ambre-kit-row">{children()}</div> }
+    view! { <div class="ambre-kit-row">{children()}</div> }.into_any()
 }
 
 /// A button that runs one command. With `pressed`, it is a toggle chip that
 /// shows the state of the command on the selection. An icon alone is an
-/// [`IconButton`](crate::IconButton): one box, and a tooltip with the name and
-/// the chord of the command.
+/// [`IconButton`](crate::IconButton): one box, and a tooltip with the name,
+/// the chord and the description of the command (`CHROME-186`). `size` and
+/// `look` set that box; a floating bar takes a large ghost.
 #[component]
 pub fn CommandButton(
     command: &'static Command,
@@ -74,22 +76,27 @@ pub fn CommandButton(
     /// Show the label beside the icon. A button with no icon always shows it.
     #[prop(optional)]
     labelled: Labelled,
+    #[prop(optional)] size: crate::ControlSize,
+    #[prop(optional)] look: crate::IconLook,
 ) -> impl IntoView {
     let label = command_label(command);
     let id = command.id;
     let reach = Reach::Command(id);
     match (icon, labelled) {
-        (Some(icon), Labelled::Icon) => view! {
-            <crate::IconButton
-                icon=icon
-                label=label
-                chord=command.chord()
-                pressed=pressed
-                reach=reach
-                on_press=Callback::new(move |()| on_command.run(id))
-            />
+        (Some(icon), Labelled::Icon) => {
+            let tip = crate::CommandTip::of(command);
+            view! {
+                <crate::IconButton
+                    icon=icon
+                    tip=Signal::stored(tip)
+                    pressed=pressed
+                    size=size
+                    look=look
+                    on_press=Callback::new(move |()| on_command.run(id))
+                />
+            }
+            .into_any()
         }
-        .into_any(),
         (icon, _) => {
             let (aria, tip) = (label.clone(), label.clone());
             view! {
@@ -128,10 +135,11 @@ pub fn PropertyToggle(
             icon=icon
             label=property_label(property)
             pressed=Some(pressed)
-            reach=Reach::Property(property.id)
+            reach=Some(Reach::Property(property.id))
             on_press=on_toggle
         />
     }
+    .into_any()
 }
 
 /// Whether a [`CommandButton`] shows its label beside its icon.
@@ -182,6 +190,7 @@ pub fn ColourField<C: PickedColour>(
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
+    .into_any()
 }
 
 /// How a [`ColourField`] lays out its choices.
@@ -250,6 +259,7 @@ pub fn FontField(
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
+    .into_any()
 }
 
 /// The direction of a stepper of a [`LengthField`].
@@ -524,6 +534,7 @@ pub fn Segmented<T: Copy + PartialEq + Send + Sync + 'static>(
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
+    .into_any()
 }
 
 /// A list of choices of a property, in the styled [`Select`](crate::Select).
@@ -547,6 +558,7 @@ pub fn SelectField<T: Copy + PartialEq + Send + Sync + 'static>(
             reach=Reach::Property(property.id)
         />
     }
+    .into_any()
 }
 
 /// The `data-reach` markers of every control under `root`, in document order:

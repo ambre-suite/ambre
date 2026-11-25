@@ -182,6 +182,10 @@ channel whose `meta` reads another name than the latest listing seals that name 
 (`ambre-spec-murmure-channels.md`, `MURMURE-682`). The new seal reaches every member, so a stale
 hint lasts until one member opens the channel.
 
+A member that only reads `meta` shows what `meta` reads and seals nothing, so its stale hint waits
+for a writer (`ambre-spec-sync.md`, `SYNC-318`). Its hint keeps the listed name, so the same client
+still reads it as stale once it can write `meta` (`ambre-spec-murmure-channels.md`, `MURMURE-729`).
+
 A channel keeps the message it shows, so back from a thread lands on its root (`MURMURE-168`).
 The pane names the region in focus, and the stylesheet alone decides which regions sit beside it.
 The member list of a space takes the panel a thread takes, beside the public channel it was opened
