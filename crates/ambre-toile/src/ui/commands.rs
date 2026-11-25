@@ -31,17 +31,18 @@ use crate::ui::menu;
 use crate::ui::menu_bar;
 use crate::ui::palette;
 
-/// Describe one command per line. A line names its title function, the
-/// identity it describes, its label, its icon, the chord it announces, its
-/// category and its home region (`CHROME-148`).
-///
-/// A macro because `Command::title` is a plain `fn` pointer: it captures
-/// nothing, so every command needs a function item of its own. Generating them
-/// from one line each is what makes the single declaration site real. A second
-/// label for a command cannot be written without a second line here.
+/// Describe one command per line. A line names its constant and the identity
+/// it describes. Its label follows in English, then in French. Its icon, its
+/// chord, its category and its home region come last (`CHROME-148`). A line
+/// may end with `=> "...", "..."`, the tooltip line of its icon in English
+/// then in French (`CHROME-185`). A second label for a command cannot be
+/// written without a second line here.
 macro_rules! describe {
-    ($($title_fn:ident: $id:expr, $label:literal, $fr:literal, $icon:expr, $chords:expr, $category:expr, $home:ident;)*) => {
-
+    (@description) => { None };
+    (@description $text:literal, $text_fr:literal) => {
+        Some(ambre_commands::TitleWords { en: $text, fr: $text_fr })
+    };
+    ($($title_fn:ident: $id:expr, $label:literal, $fr:literal, $icon:expr, $chords:expr, $category:expr, $home:ident $(=> $text:literal, $text_fr:literal)?;)*) => {
         /// Every command Toile contributes, described once. Every view of a
         /// command reads its label and its icon here (`UI-THREAD-019`).
         pub const COMMANDS: &[Command] = &[
@@ -52,6 +53,7 @@ macro_rules! describe {
                 keybindings: $chords,
                 category: $category,
                 home: Home::$home,
+                description: describe!(@description $($text, $text_fr)?),
             },)*
         ];
     };
@@ -63,11 +65,15 @@ const OBJECT: StaticKey<Categories> = StaticKey::<Categories>::new("object");
 const REACTION: StaticKey<Categories> = StaticKey::<Categories>::new("reaction");
 const SELECTION: StaticKey<Categories> = StaticKey::<Categories>::new("selection");
 const VIEW: StaticKey<Categories> = StaticKey::<Categories>::new("view");
-const TOOL: StaticKey<Categories> = StaticKey::<Categories>::new("tool");
+/// The tools of the pointer, homed in the creation bar (`CHROME-152`).
+const TOOL: StaticKey<Categories> = shared::TOOL;
+/// The commands that insert a new object, homed in the creation bar.
+const INSERT: StaticKey<Categories> = shared::INSERT;
 const PRESENT: StaticKey<Categories> = StaticKey::<Categories>::new("present");
 const FIND_REPLACE: StaticKey<Categories> = StaticKey::<Categories>::new("find");
 /// Bringing a file onto the board, and taking the board out as one.
-const FILE: StaticKey<Categories> = StaticKey::<Categories>::new("file");
+const FILE: StaticKey<Categories> = shared::FILE;
+const ACCOUNT: StaticKey<Categories> = shared::ACCOUNT;
 /// Commands that belong to the application shell rather than the board.
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 
@@ -112,7 +118,7 @@ describe! {
     DISTRIBUTE_V: menu::DISTRIBUTE_V, "Distribute vertically", "R\u{e9}partir verticalement", Some(StaticKey::<Icons>::new("align-vertical-distribute")), &[], OBJECT, ContextPanel;
     ADD_TO_FRAME: menu::ADD_TO_FRAME, "Add to frame", "Ajouter au cadre", Some(StaticKey::<Icons>::new("image-frame")), &[], OBJECT, ContextPanel;
     REMOVE_FROM_FRAME: menu::REMOVE_FROM_FRAME, "Remove from frame", "Retirer du cadre", Some(StaticKey::<Icons>::new("selection-drag")), &[], OBJECT, ContextPanel;
-    EXPORT_FRAME_PNG: menu::EXPORT_FRAME_PNG, "Export frame as PNG", "Exporter le cadre en PNG", Some(StaticKey::<Icons>::new("file-image-outline")), &[], FILE, ContextPanel;
+    EXPORT_FRAME_PNG: menu::EXPORT_FRAME_PNG, "Export frame as PNG", "Exporter le cadre en PNG", Some(StaticKey::<Icons>::new("file-image-outline")), &[], OBJECT, ContextPanel;
     SELECT_ALL: menu::SELECT_ALL, "Select all", "Tout s\u{e9}lectionner", Some(StaticKey::<Icons>::new("select-all")), &[KeyBinding::primary(KeyChar::A)], SELECTION, ContextPanel;
     REACT_THUMBSUP: menu::REACT_THUMBSUP, "React: thumbs up", "R\u{e9}agir\u{a0}: pouce lev\u{e9}", Some(StaticKey::<Icons>::new("thumb-up")), &[], REACTION, ContextPanel;
     REACT_HEART: menu::REACT_HEART, "React: heart", "R\u{e9}agir\u{a0}: c\u{153}ur", Some(StaticKey::<Icons>::new("heart")), &[], REACTION, ContextPanel;
@@ -126,13 +132,11 @@ describe! {
     ZOOM_RESET: menu_bar::ZOOM_RESET, "Zoom to 100%", "Zoom \u{e0} 100\u{a0}%", None, &[], VIEW, StatusBar;
     ZOOM_FIT: menu_bar::ZOOM_FIT, "Fit to content", "Ajuster au contenu", Some(StaticKey::<Icons>::new("fit-to-screen-outline")), &[], VIEW, StatusBar;
     ZOOM_TO_SELECTION: menu_bar::ZOOM_TO_SELECTION, "Zoom to selection", "Zoomer sur la s\u{e9}lection", Some(StaticKey::<Icons>::new("selection-search")), &[], VIEW, StatusBar;
-    POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", "Pointeur\u{a0}: automatique", None, &[], VIEW, AvatarMenu;
-    POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", "Pointeur\u{a0}: souris (la molette zoome)", None, &[], VIEW, AvatarMenu;
-    POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", "Pointeur\u{a0}: pav\u{e9} tactile (la molette d\u{e9}place)", None, &[], VIEW, AvatarMenu;
+    POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", "Pointeur\u{a0}: automatique", None, &[], ACCOUNT, AvatarMenu;
+    POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", "Pointeur\u{a0}: souris (la molette zoome)", None, &[], ACCOUNT, AvatarMenu;
+    POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", "Pointeur\u{a0}: pav\u{e9} tactile (la molette d\u{e9}place)", None, &[], ACCOUNT, AvatarMenu;
     PRESENT_START: menu_bar::PRESENT, "Start presentation", "Lancer la pr\u{e9}sentation", None, &[], PRESENT, StatusBar;
     IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", "Importer un fichier...", Some(StaticKey::<Icons>::new("file-import-outline")), &[], FILE, AmbreMenu;
-    EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", "Int\u{e9}grer une page web...", Some(StaticKey::<Icons>::new("web")), &[], FILE, CreationBar;
-    EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", "Int\u{e9}grer un document...", Some(StaticKey::<Icons>::new("file-document-outline")), &[], FILE, CreationBar;
     LINK_SET: menu_bar::LINK_SET, "Link...", "Lien...", Some(StaticKey::<Icons>::new("link-variant")), &[], OBJECT, ContextPanel;
     LINK_CLEAR: menu_bar::LINK_CLEAR, "Remove link", "Supprimer le lien", Some(StaticKey::<Icons>::new("link-variant-off")), &[], OBJECT, ContextPanel;
     SAVE_FILE: menu_bar::SAVE_FILE, "Save to a file (.ambre, not encrypted)", "Enregistrer dans un fichier (.ambre, non chiffr\u{e9})", Some(StaticKey::<Icons>::new("content-save")), &[], FILE, AmbreMenu;
@@ -146,13 +150,15 @@ describe! {
     TOOL_SELECT: palette::TOOL_SELECT, "Select", "S\u{e9}lection", Some(StaticKey::<Icons>::new("cursor-default")), &[letter(KeyChar::V)], TOOL, CreationBar;
     TOOL_PEN: palette::TOOL_PEN, "Pen", "Stylo", Some(StaticKey::<Icons>::new("vector-polyline")), &[letter(KeyChar::P)], TOOL, CreationBar;
     TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", "Forme", Some(StaticKey::<Icons>::new("shape-outline")), &[letter(KeyChar::R)], TOOL, CreationBar;
-    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", "Connecteur", Some(StaticKey::<Icons>::new("vector-line")), &[letter(KeyChar::C)], TOOL, CreationBar;
+    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", "Connecteur", Some(StaticKey::<Icons>::new("vector-line")), &[letter(KeyChar::C)], TOOL, CreationBar => "Draw a line that links two elements", "Tracer une ligne qui relie deux \u{e9}l\u{e9}ments";
     TOOL_DRAW: palette::TOOL_DRAW, "Draw", "Dessin", Some(StaticKey::<Icons>::new("draw")), &[letter(KeyChar::D)], TOOL, CreationBar;
     TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", "Note adh\u{e9}sive", Some(StaticKey::<Icons>::new("note-outline")), &[letter(KeyChar::N)], TOOL, CreationBar;
     TOOL_TEXT: palette::TOOL_TEXT, "Text", "Texte", Some(StaticKey::<Icons>::new("format-text")), &[letter(KeyChar::T)], TOOL, CreationBar;
     TOOL_COMMENT: palette::TOOL_COMMENT, "Comment", "Commentaire", Some(StaticKey::<Icons>::new("comment-outline")), &[letter(KeyChar::M)], TOOL, CreationBar;
-    TOOL_LASER: palette::TOOL_LASER, "Highlighter", "Surligneur", Some(StaticKey::<Icons>::new("cursor-pointer")), &[letter(KeyChar::L)], TOOL, CreationBar;
-    TOOL_HAND: palette::TOOL_HAND, "Hand", "Main", Some(StaticKey::<Icons>::new("hand-back-right")), &[letter(KeyChar::H)], TOOL, CreationBar;
+    TOOL_LASER: palette::TOOL_LASER, "Highlighter", "Surligneur", Some(StaticKey::<Icons>::new("cursor-pointer")), &[letter(KeyChar::L)], TOOL, CreationBar => "Point at the board for the other members; the trail fades", "Montrer un point du tableau aux autres membres\u{a0}; la trace s'efface";
+    TOOL_HAND: palette::TOOL_HAND, "Hand", "Main", Some(StaticKey::<Icons>::new("hand-back-right")), &[letter(KeyChar::H)], TOOL, CreationBar => "Drag to move the view of the board", "Faites glisser pour d\u{e9}placer la vue du tableau";
+    EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", "Int\u{e9}grer une page web...", Some(StaticKey::<Icons>::new("web")), &[], INSERT, CreationBar;
+    EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", "Int\u{e9}grer un document...", Some(StaticKey::<Icons>::new("file-document-outline")), &[], INSERT, CreationBar;
     FIND_OPEN: FIND, "Find", "Rechercher", None, &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE, AmbreMenu;
     COMMENTS_OPEN: menu_bar::COMMENTS, "Comments", "Commentaires", Some(StaticKey::<Icons>::new("comment-multiple-outline")), &[], VIEW, ContextPanel;
     PALETTE_OPEN: PALETTE, "Command palette", "Palette de commandes", None, &[KeyBinding::primary(KeyChar::K)], GENERAL, AmbreMenu;

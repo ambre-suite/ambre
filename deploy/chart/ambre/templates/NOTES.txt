@@ -1,0 +1,4 @@
+Ambre is deploying at https://{{ .Values.domain }}.
+
+The firewall of the node that runs the SFU opens {{ .Values.sfu.mediaPort }}/udp,
+and no other port of the SFU: the media of a call reaches that node straight.

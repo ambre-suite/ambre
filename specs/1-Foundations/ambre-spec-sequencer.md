@@ -51,14 +51,16 @@ sequence has already moved.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-036` | `FRAME` | Two instances MUST NOT drain one document's queued deltas at the same time. | this spec section 3; `SRV-021` | `ambre_server::redis_ops::redis_integration_tests::flush_lock_is_mutually_exclusive` -- the second acquirer is refused while the first holds it, on the database tier | none | verified |
-| `SRV-033` | `POST` | A delta given a number MUST reach the durable index. | audit `H1`; this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::a_refused_index_write_is_retried_until_the_row_lands` -- a trigger refuses the first two inserts, and the row lands on the third attempt with nothing dead-lettered | none | verified |
-| `SRV-034` | `POST` | A delta given a number MUST reach durable storage: its index row, a batch object or an object of its own. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` -- the queueing half, the document marked unflushed on append and cleared only once drained; `ambre_server::ws::handler::message::delivery_tests::a_refused_queue_leaves_the_frame_in_its_row` -- a large delta whose queue refuses every push takes its bytes into its index row, and a replay delivers it | none | verified |
-| `SRV-262` | `FAIL` | Given a dirty mark the store refuses after the push of a delta, the relay MUST keep the delta queued, log the miss and count it in its failures metric. | this spec section 3; `SRV-034`; `SRV-257`; `ZK-030` | `ambre_server::redis_ops::redis_integration_tests::a_refused_mark_keeps_the_delta_and_answers_the_miss` -- a user whose keys stop at the document pushes the delta, and the store answers the refused mark typed; `ambre_server::ws::handler::message::delivery_tests::a_missed_dirty_mark_is_counted` -- the same refusal under a large delta leaves it queued, dead-letters nothing and adds one to the `dirty_mark` failure. Database tier. The CI `test-db-cluster` job runs both over three primaries | none | verified |
+| `SRV-033` | `POST` | A delta given a number MUST reach the durable index, unless a delete has fenced its document. | audit `H1`; this spec section 3; `SRV-335` | `ambre_server::ws::handler::message::delivery_tests::a_refused_index_write_is_retried_until_the_row_lands` -- a trigger refuses the first two inserts, and the row lands on the third attempt with nothing dead-lettered | none | verified |
+| `SRV-034` | `POST` | A delta given a number MUST reach durable storage, unless a delete has fenced its document: its index row, a batch object or an object of its own. | audit `H1`; this spec section 3; `SRV-335` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a small delta in its row, a large one in an object the row names; `ambre_server::ws::handler::message::delivery_tests::a_refused_object_leaves_the_frame_in_its_row` -- a large delta whose object the store refuses takes its bytes into its index row, the refusal is counted, and a replay delivers it | none | verified |
+| `SRV-262` | `FAIL` | Given a dirty mark the store refuses in a sweep, the relay MUST keep the delta queued, log the miss and count it in its failures metric. | this spec section 3; `SRV-034`; `SRV-257`; `ZK-030` | `ambre_server::s3::tests::a_refused_mark_in_a_sweep_keeps_the_list_and_is_counted` -- a user whose keys stop at the document runs the sweep over a queued list: the list keeps its entry, and the `dirty_mark` failure grows. Database tier. The CI `test-db-cluster` job runs it over three primaries | none | verified |
 | `SRV-082` | `POST` | A durable write that failed MUST leave the whole delta where an operator can replay it. | audit `H1`; this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::an_index_write_that_never_lands_leaves_the_whole_frame` -- past every retry, the dead letter holds the number, the object key and the signed delta byte for byte, and its signature verifies | none | verified |
 | `SRV-035` | `FRAME` | A flush MUST NOT drop an entry it did not store. | this spec section 3 | `ambre_server::s3::tests::a_partial_flush_trims_only_what_it_stored` -- a batch failing at its fourth entry trims three, the unreadable one among them, and keeps the rest | none | verified |
 | `SRV-148` | `POST` | A delta under the inline size MUST be stored in its index row, in the same write as the row. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a small signed delta leaves its bytes in its row and no pending entry, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
-| `SRV-149` | `POST` | A delta over the inline size MUST be stored as an object of its own, which its index row names. | this spec section 3; `ambre-spec-object-store.md` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a delta past the inline size gets a row naming its object, and the pending entry the flush writes it from | none | verified |
-| `SRV-307` | `FAIL` | Given a loss of the ephemeral store, every delta the relay acknowledged MUST stay readable. | this spec section 3; `SRV-034`; `SRV-149` | not built | unbuilt -- lands with the `An oversized delta survives a loss of the ephemeral store` Story (`ambre-roadmap.md` E6). A delta over the inline size waits in the ephemeral store until the next flush, up to fifteen seconds, while its index row already names its object. A loss in that window leaves a row that names an object nobody wrote | unimplemented |
+| `SRV-149` | `POST` | A delta over the inline size MUST be stored as an object of its own, which its index row names. | this spec section 3; `ambre-spec-object-store.md` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a delta past the inline size gets a row naming its object, the object exists, and no pending entry holds it | none | verified |
+| `SRV-307` | `FAIL` | Given a loss of the ephemeral store, every delta the relay acknowledged MUST stay readable. | this spec section 3; `SRV-034`; `SRV-149` | `ambre_server::ws::handler::message::delivery_tests::a_large_delta_survives_a_loss_of_the_ephemeral_store` -- the object of a large delta exists once the relay handled it, no pending entry holds it, and a replay after every ephemeral key of the document is dropped delivers it; `ambre_server::ws::handler::message::delivery_tests::a_refused_object_leaves_the_frame_in_its_row` -- a refused object leaves the frame in the durable index. Database tier | none | verified |
+| `SRV-335` | `FRAME` | The relay MUST NOT write the object, the index row or the broadcast of a delta once it finds its document fenced. | this spec section 3; `SRV-034`; `ambre-spec-server.md`, `SRV-017`, `SRV-273`; `ambre-spec-object-store.md`, `SRV-057` | `ambre_server::ws::handler::message::delivery_tests::a_fenced_document_stores_and_sends_no_delta` -- a tombstone set after the number was given leaves an inline delta and a large one with no object, no row and no broadcast, and the author hears that the document is not found; `ambre_server::ws::handler::message::delivery_tests::a_delete_begun_during_the_object_put_takes_the_row_and_the_broadcast` -- a tombstone set while the object of a large delta is put leaves that object to the second sweep, and no row and no broadcast. Database tier | none | verified |
+| `SRV-336` | `FRAME` | The object write of a delta MUST take one request, given up past the wait of `ambre-spec-budgets.md section 3`. | this spec section 3; `SRV-034`; `SRV-307`; `ambre-spec-budgets.md section 3` | `ambre_server::ws::handler::message::delivery_tests::an_object_put_past_its_wait_leaves_the_frame_in_its_row` -- the object of a large delta is written once, and a write the store holds for twice the wait is given up within a second past the wait, its frame in the index row and the refusal counted. Database tier | none | verified |
 | `SRV-151` | `POST` | Past the inline cap, the relay MUST move the oldest inline deltas of the document into one batch object, and point their rows at it. | this spec section 3; `SRV-150` | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- of two hundred inline deltas the oldest 136 move to one batch their rows name, and the newest 64 stay; `ambre_server::hot_tail::tests::a_move_starts_at_three_quarters_of_either_bound` -- the move starts before the cap; `ambre_server::hot_tail::tests::a_move_keeps_a_quarter_of_the_cap` -- what stays | none | verified |
 | `SRV-152` | `POST` | A document with no write for the idle delay MUST have its inline deltas moved into one batch object. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::hot_tail::db_tests::an_idle_tail_moves_whole` -- a tail written a day ago moves whole, and one written since stays | none | verified |
 | `SRV-153` | `FRAME` | Moving deltas into a batch object MUST NOT change their numbers or their bytes. | this spec section 3 | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- the batch holds each number with its bytes unchanged; `ambre_server::hot_tail::tests::a_batch_keeps_each_number_and_frame` -- the encoding round trip; `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- a replay after a move sends the bytes it sent before | none | verified |
@@ -192,10 +194,10 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 82 `verified`, 1 `unimplemented`. The ordering, the storage and the replay hold.
-  So does each step of a segment's life, from its close to its fold, and the thread of a root. The
-  recovery paths are driven through real failures: a register that refuses inserts, a queue that
-  refuses pushes, an index that cannot be read.
+* **Verification.** 85 `verified`. The ordering, the storage and the replay hold. So does each step
+  of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
+  driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
+  index that cannot be read.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -260,14 +262,32 @@ them un-assigns the number.
 | Step | On failure |
 |---|---|
 | the number is assigned | the delta is refused, and nothing has moved (`SRV-006`) |
+| the tombstone is read, before anything is stored | a delete has begun: the delta takes no object, no row and no broadcast, and its author hears that the document is not found (`SRV-335`). A store that does not answer reads as no tombstone |
 | the durable index gains a row | tried three more times, a third of a second in all (`SRV-033`); past that, the whole delta goes to a dead-letter list for an operator (`SRV-082`) |
-| a delta without an inline home is queued for object storage, and the document marked unflushed | the delta moves into its index row, which drops the object key, and goes to the same dead-letter list (`SRV-034`, `SRV-082`). A refused mark alone keeps the delta queued: the relay logs and counts the miss, and the reconciling sweep finds the list (`SRV-262`) |
+| a delta without an inline home gets its object, before its index row names it | its index row takes the frame and names no object; the relay logs and counts the refusal (`SRV-034`). A store that does not answer within the wait of the delta object row of `ambre-spec-budgets.md section 3` counts as a refusal (`SRV-336`). The tombstone is read again once the object is written, before the row |
 | the delta is fanned out live | logged; a reconnecting client replays it from the index (`ambre-spec-broadcast.md`) |
+
+**A delete can begin after the number.** The clock script refuses a document whose tombstone is set
+(`ambre-spec-server.md`, `SRV-017`). A delete may set it once the script has run. So the relay reads
+the tombstone again before it stores the delta. A delta without an inline home reads it once more
+after its object write (`SRV-335`).
+
+Each read guarantees one thing: a tombstone set before it stops every write after it. A delete that
+begins after the last read still meets a row and a broadcast. The late-write sweeps remove the row
+and the object (`SRV-273`, `SRV-057`). That broadcast reaches only the subscribers of the document,
+who hold its key already. A reset of the ephemeral store loses the tombstone until the next pass
+sets it again. The sweeps then hold alone.
 
 **Where a delta lives.** A delta is a few hundred bytes, so one object per delta costs a request for
 almost nothing. A delta under the inline size lives in its index row (`SRV-148`), and a replay
 reads a page of rows in one query (`SRV-155`). An oversized delta keeps an object of its own
 (`SRV-149`).
+
+**No acknowledged delta lives in the ephemeral store alone** (`SRV-307`). The managed Redis of
+Scaleway does not guarantee a recovery after an incident. So the relay writes the object of an
+oversized delta before the row names it, and before the echo. The write costs one request to the
+object store on that delta alone, which the delta object row of `ambre-spec-budgets.md section 3`
+bounds (`SRV-336`). A refused write puts the frame in the row, which Postgres keeps.
 
 **The index is keyed by the document and the number.** No query reads any other key of a row. The
 number grows within a document, so an insert writes the last page of that document's range. A
@@ -296,7 +316,7 @@ with no index entry, when no index reads a column it changes. So no index reads 
 batch key.
 
 **What reads the primary key instead.** The tail count reads the range of the document past its
-newest batch row. A frame put back later in an older row (`SRV-034`) falls out of that count. The
+newest batch row. A frame put in a row whose object the store refused (`SRV-034`) falls out of that count. The
 trim asks whether a batch is still named within the range of its own document. The idle pass
 reads the whole table, once each pass period (`SRV-277`).
 
@@ -310,7 +330,10 @@ quarter inline, so a writer seldom meets the cap. The count and the insert are o
 writers racing at the cap may each see room, and pass it by one delta each. A lock per document
 would close that race at the price of three more round trips on every write.
 
-**The flush.** One task per instance, every fifteen seconds, over the documents marked unflushed
+**The flush.** The write path queues no delta now. The flush drains the lists an older relay
+queued.
+
+One task per instance, every fifteen seconds, over the documents marked unflushed
 rather than over the whole keyspace. Each document is drained under a lock of its own (`SRV-036`).
 The drain advances a single front counter over every entry it has finished with, stored or
 permanently unreadable. A trim therefore never passes an entry still owed a retry (`SRV-035`).
@@ -336,7 +359,10 @@ growing while one author writes alone (`SRV-132`).
 A confirmation carries the confirmer's signature and the digest of the blob checked. The
 signature covers the document, the snapshot, its horizon, its author and that digest. The relay
 refuses one that does not verify (`SRV-284`). It keeps another member's signature and serves it
-with the snapshot, since a cold open trusts nothing else (`AUTHOR-030`). The relay keeps no
+with the snapshot, since a cold open trusts nothing else (`AUTHOR-030`). It keeps and serves the
+log head a confirmer signed too (`AUTHOR-038`).
+
+The relay keeps no
 digest. A cold open computes it again from the blob it downloads, so a digest of another blob
 fails there (audit `W101`).
 
@@ -498,6 +524,7 @@ sees is how long a document takes to open.
 | The ordering check and the numbering are one step in the ephemeral store | checking in the process and numbering in the store | it is the same code with a race in it: two round trips leave a window in which a second delta from the same author passes the same check, and the whole anti-replay property rests on that window not existing. One script closes it without a transaction on the durable store |
 | The author clock hash is never expired | a lifetime on the hash | it trades an unbounded key for a permanent lockout: a reset to zero locks a legitimate author out of its own document for ever, because its own clock only moves forward. The hash is bounded by the membership, so the growth is bounded already |
 | The number is assigned before the delta is durable | assigning after the durable write | it makes every store failure a client failure with no retry, because a client cannot retry at the same clock. Assigning first and dead-lettering a failure keeps the sequence intact and turns a durability failure into an operator's task |
+| The object of an oversized delta is written before the echo | queueing it in the ephemeral store for the flush | the managed Redis may lose its data in an incident, and the queue held an acknowledged delta for up to fifteen seconds while its row already named the object |
 | One flush task per instance, over a marked set | a task per active document | it is a thousand idle tasks on a thousand open documents |
 | One flush task per instance, over a marked set | a keyspace scan every cycle | it costs a scan the store does not owe us, every cycle, whatever was written. A set of unflushed documents is one read |
 | The drain takes a lock per document | letting both instances drain | it is safe until the second instance exists: two instances draining one queue both trim by their own count, which removes entries a client queued in between, so a delta already numbered and already acknowledged would be gone. The write path never takes the lock, so collaboration is untouched |

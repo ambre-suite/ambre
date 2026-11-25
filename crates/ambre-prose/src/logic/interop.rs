@@ -2430,6 +2430,7 @@ mod tests {
             let block = pasted.root_blocks()[0];
             pasted.handle_converted(ProseCommand::Paste {
                 at: (block, Pos::<DocChar>::ZERO),
+                over: None,
                 text: String::new(),
                 html: Some(PAGE.to_owned()),
                 payload: None,

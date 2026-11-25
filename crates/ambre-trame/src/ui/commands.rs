@@ -24,11 +24,9 @@ use crate::ui::grid::CtxScope;
 /// Declare one command per line: the constant, its identity, its label, its
 /// icon, its default chord, its category and its home region (`CHROME-148`).
 ///
-/// A macro rather than 26 hand-written blocks, because `Command::title` is a
-/// plain `fn` pointer. It captures nothing, so every command needs a function
-/// item of its own. Generating them from one line each is what makes the single
-/// declaration site real. A second label for a command cannot be written
-/// without a second line here.
+/// Each line carries the English label, then the French one. One line per
+/// command is what makes the single declaration site real. A second label for
+/// a command cannot be written without a second line here.
 macro_rules! commands {
     ($($name:ident = $id:expr, $label:literal, $fr:literal, $icon:expr, $chords:expr, $category:expr, $home:ident;)*) => {
         $(pub const $name: StaticKey<Commands> = $id;)*
@@ -44,6 +42,7 @@ macro_rules! commands {
                 keybindings: $chords,
                 category: $category,
                 home: Home::$home,
+                description: None,
             },)*
         ];
     };
@@ -56,12 +55,15 @@ const SORT: StaticKey<Categories> = StaticKey::<Categories>::new("sort");
 const FILTER: StaticKey<Categories> = StaticKey::<Categories>::new("filter");
 const FIND_REPLACE: StaticKey<Categories> = StaticKey::<Categories>::new("find");
 const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard");
-const INTEROP: StaticKey<Categories> = StaticKey::<Categories>::new("interop");
+const INTEROP: StaticKey<Categories> = shared::FILE;
 /// The page setup the sheet stores for its PDF export (`TRAME-IO-022`).
 const PAGE: StaticKey<Categories> = StaticKey::<Categories>::new("page");
 /// The rows and columns that stay on screen while the rest scrolls
 /// (`TRAME-UI-029`).
 const VIEW: StaticKey<Categories> = StaticKey::<Categories>::new("view");
+/// The commands that add a new object to the sheet, homed in the creation bar
+/// (`CHROME-152`).
+const INSERT: StaticKey<Categories> = shared::INSERT;
 /// Commands that belong to the application shell rather than the document.
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 
@@ -122,6 +124,7 @@ commands! {
     UNFREEZE = StaticKey::<Commands>::new("trame.view.unfreeze"), "Unfreeze rows and columns", "Lib\u{e9}rer les lignes et les colonnes", None, &[], VIEW, ContextPanel;
     ZOOM_TO_SELECTION = StaticKey::<Commands>::new("trame.view.zoom_to_selection"), "Zoom to selection", "Zoomer sur la s\u{e9}lection", None, &[], VIEW, StatusBar;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", "Palette de commandes", None, &[KeyBinding::primary(KeyChar::K)], GENERAL, AmbreMenu;
+    INSERT_FUNCTION = StaticKey::<Commands>::new("trame.insert.function"), "Insert a function", "Ins\u{e9}rer une fonction", Some(StaticKey::<Icons>::new("function-variant")), &[], INSERT, CreationBar;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame

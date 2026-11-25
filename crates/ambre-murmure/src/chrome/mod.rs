@@ -1614,6 +1614,12 @@ impl CommandHandler for MurmureHandler {
         if id == PALETTE {
             return vec![ShellAction::OpenPalette];
         }
+        // The page holds the call, so the shell performs the verb, as the icon of the verb
+        // does (`MURMURE-731`).
+        let shown = self.relay.pane.get_untracked().shown_channel();
+        if let Some(verb) = crate::ui::commands::call_verb(id, shown) {
+            return vec![ShellAction::Call(verb)];
+        }
         // An action of a message acts on the target of the menu. With none,
         // as from the palette, it does nothing (`MURMURE-419`).
         match self.relay.act(id) {
@@ -2132,9 +2138,13 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
 
 /// The format bar of a composer, over its selection: the shared bar Prose
 /// shows, with the Murmure marks alone (`MURMURE-432`, `CHROME-105`). A
-/// press toggles its style and leaves the focus where it was.
+/// press toggles its style and leaves the focus where it was. The bar
+/// publishes its reach into `cover` (`CHROME-171`).
 #[component]
-pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
+pub fn MarkBarPanel(
+    relay: MurmureRelay,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+) -> impl IntoView {
     move || {
         relay.mark_bar.get().map(|bar| {
             let anchor = bar.at.on_page(canvas_origin(bar.region));
@@ -2158,10 +2168,12 @@ pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
                         on_press: Callback::new(move |()| relay.press_mark(style.clone())),
                         icon: None,
                         chord: None,
+                        description: None,
+                        reach: None,
                     }
                 })
                 .collect();
-            view! { <FormatBar anchor=anchor controls=controls /> }
+            view! { <FormatBar anchor=anchor controls=controls cover=cover /> }
         })
     }
 }

@@ -90,6 +90,15 @@ fn command_choices(ids: &[StaticKey<Commands>], labels: &[&str]) -> Vec<ChoiceVi
         .collect()
 }
 
+/// The icon choice of the command `id`. Its tooltip names the command as the
+/// registry describes it (`CHROME-186`).
+fn icon_choice(id: StaticKey<Commands>, icon: icondata::Icon) -> ChoiceView {
+    let name = registry::title(id, &ambre_chrome::language())
+        .map(ambre_core::Validated::into_string)
+        .unwrap_or_default();
+    ChoiceView::icon(name, icon).reaching(Reach::Command(id))
+}
+
 /// A pick that runs the command at its place in `ids`.
 fn run_place(
     ids: &'static [StaticKey<Commands>],
@@ -142,7 +151,7 @@ pub(super) fn fill(
     view! {
         <span class="ambre-kit-control" data-reach=reach(panel::FILL)>
             <ColorPopover
-                title="Fill colour"
+                title=label(panel::FILL)
                 icon=icondata::BiColorFillSolid
                 current=style.bg
                 default=Signal::derive(move || theme_bg_default(theme.get()))
@@ -248,10 +257,8 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 <SegmentBar
                     label=label(panel::ORIENTATION)
                     choices=vec![
-                        ChoiceView::icon("Portrait", icondata::LuRectangleVertical)
-                            .reaching(Reach::Command(registry::PAGE_PORTRAIT)),
-                        ChoiceView::icon("Landscape", icondata::LuRectangleHorizontal)
-                            .reaching(Reach::Command(registry::PAGE_LANDSCAPE)),
+                        icon_choice(registry::PAGE_PORTRAIT, icondata::LuRectangleVertical),
+                        icon_choice(registry::PAGE_LANDSCAPE, icondata::LuRectangleHorizontal),
                     ]
                     selected=place(&panel::ORIENTATION_COMMANDS, |s| Some(panel::orientation_choice(s.page.orientation)))
                     on_pick=run_place(&panel::ORIENTATION_COMMANDS, on_command)
@@ -363,7 +370,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
             <Field label="Colours">
                 <span class="ambre-kit-control" data-reach=reach(panel::TEXT_COLOUR)>
                     <ColorPopover
-                        title="Text colour"
+                        title=label(panel::TEXT_COLOUR)
                         icon=icondata::BiFontColorRegular
                         current=style.fg
                         default=Signal::derive(move || theme_fg_default(theme.get()))

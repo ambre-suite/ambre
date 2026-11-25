@@ -23,6 +23,7 @@
 //   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
 //   - context_panel -- the one frame of the context panel: sections, rail, dock
 //   - controls     -- the control primitives of the visual system, none generic
+//   - creation     -- the creation bar, one bar of what a page can add
 //   - gallery      -- the test page of every primitive in each state (feature `gallery`)
 //   - kit          -- the typed widgets a panel section is written from
 //   - menu         -- the key map every menu shares, and two-state ARIA values
@@ -44,6 +45,9 @@ mod composed;
 mod context_menu;
 mod context_panel;
 mod controls;
+/// Each floating surface measures what it covers of the canvas (`CHROME-171`).
+pub mod cover;
+mod creation;
 mod debounce;
 mod dialog;
 mod font;
@@ -52,6 +56,8 @@ mod format;
 mod gallery;
 mod handler;
 mod header;
+#[cfg(test)]
+mod hover_scan;
 mod kit;
 mod language;
 mod menu;
@@ -59,8 +65,10 @@ mod palette;
 mod passphrase;
 mod shortcut;
 mod status;
+mod tip;
 mod toast;
 
+pub use ambre_commands::CallVerb;
 pub use app_shell::{
     AppShell, CanvasCell, CanvasOverlay, ContextRegion, FormulaBar, Header, Panel, RowShown,
     ShellRegion, ShellRows, Sidebar, StatusBar, Tabs, Toolbar,
@@ -77,6 +85,7 @@ pub use controls::{
     ChoiceRow, ChoiceView, ColorSwatch, ControlSize, IconButton, IconLook, Readout, SegmentBar,
     Select, Slider, Stepper,
 };
+pub use creation::{CreationBar, CreationSlot, creation_entries};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, Dismissal, ModalHold};
 pub use font::{FONT_FAMILIES, FamilyChoice, FontPicker};
@@ -106,4 +115,5 @@ pub use passphrase::{
 };
 pub use shortcut::Kbd;
 pub use status::{Build, PerfChip, PerfDetail, StatusLabel, ZoomChip};
+pub use tip::{CommandTip, untipped_icons};
 pub use toast::{ToastHost, ToastKind, ToastVoice, Toasts};

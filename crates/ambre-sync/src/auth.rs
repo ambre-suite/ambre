@@ -249,7 +249,9 @@ impl SyncState {
             let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/auth/{provider}/callback"));
             let body = http::ProviderCallbackRequest { code, state };
-            let resp = match http::post_json::<_, http::ProviderCallbackResponse>(&url, &body).await
+            let resp = match http::post_json::<_, http::ProviderCallbackWire>(&url, &body)
+                .await
+                .map(http::ProviderCallbackResponse::from)
             {
                 Ok(resp) => resp,
                 Err(message) => {
@@ -610,6 +612,9 @@ impl SyncState {
         #[cfg(not(target_arch = "wasm32"))]
         self.roster_asks.clear();
         self.pending_opens.clear();
+        self.censuses.clear();
+        self.census_docs.clear();
+        self.census_signals.borrow_mut().clear();
         self.pinned_inviters.clear();
         self.murmure_roots.clear();
         self.typed_opens.clear();

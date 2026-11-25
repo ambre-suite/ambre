@@ -23,7 +23,6 @@ use crate::debounce::{DRAG_DEBOUNCE, Debouncer};
 use ambre_core::{Alpha, Rgb, Rgba};
 use leptos::html;
 use leptos::prelude::*;
-use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
 /// Curated swatch palette for the colour picker popover.
@@ -224,16 +223,15 @@ fn color_popover(
     on_cleanup(move || handle.remove());
     view! {
         <span class="ambre-color" node_ref=root_ref>
-            <button
-                aria-label=title
-                aria-haspopup="true"
-                aria-expanded=move || open.get().aria()
-                // Keep the canvas' focus: a button steals it on mousedown, which
-                // would clear the active selection before on:click can apply.
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = o.toggled())
+            // The icon button names the trigger in a tooltip under the pointer,
+            // the focus and a long press (`CHROME-187`, `CHROME-188`). It keeps
+            // the canvas' focus on mousedown, so the selection survives the press.
+            <crate::IconButton
+                icon=icon
+                label=title
+                expanded=Some(Signal::from(open))
+                on_press=Callback::new(move |()| open.update(|o| *o = o.toggled()))
             >
-                <Icon icon=icon />
                 // Thin strip tinted to the current colour (themed default when unset).
                 <span
                     class="swatch-strip"
@@ -241,7 +239,7 @@ fn color_popover(
                         current.get().unwrap_or(default.get()).to_string()
                     }
                 ></span>
-            </button>
+            </crate::IconButton>
             <Show when=move || open.get() == crate::Openness::Open fallback=|| ()>
                 <div class="ambre-color-popover">
                     // Reset entry: "Automatic" (text) / "No fill (transparent)" (fill).

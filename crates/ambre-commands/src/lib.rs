@@ -61,6 +61,15 @@ impl TitleWords {
             Locale::Fr => self.fr,
         })
     }
+
+    /// The same words as the description of a command (`CHROME-185`).
+    #[must_use]
+    pub fn describe(&self, locale: &Locale) -> ambre_core::Validated<CommandDescription> {
+        ambre_core::Validated::new(match locale {
+            Locale::En => self.en,
+            Locale::Fr => self.fr,
+        })
+    }
 }
 
 /// The label of a command in one locale, which a person reads in a menu or
@@ -70,6 +79,15 @@ pub enum CommandTitle {}
 impl ambre_core::Free for CommandTitle {}
 
 impl ambre_core::Displayed for CommandTitle {}
+
+/// One line that says what a command does where its name is not enough,
+/// which a person reads in the tooltip of its icon (`CHROME-185`).
+/// `Validated<CommandDescription>`: no rule bounds it.
+pub enum CommandDescription {}
+
+impl ambre_core::Free for CommandDescription {}
+
+impl ambre_core::Displayed for CommandDescription {}
 
 /// The name of a home region, which a person reads beside a command in the
 /// palette (`CHROME-157`). `Validated<RegionName>`: no rule bounds it.
@@ -95,6 +113,7 @@ impl ambre_core::Displayed for RegionName {}
 ///     icon: None,
 ///     keybindings: &[],
 ///     category: StaticKey::<Categories>::new("format"),
+///     description: None,
 /// };
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -133,6 +152,47 @@ impl Home {
     }
 }
 
+/// One verb on the call of the page (the Murmure calls spec, section 3, the call controls).
+/// Each icon of the call controls names one, and its command names the same one. A verb that
+/// sets a state names the state it sets, so a palette entry on a state already set does nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallVerb {
+    /// Start a call in this channel, or join the one that runs there.
+    Start(ambre_core::id::Id<ambre_core::id::Channel>),
+    /// Mute the microphone.
+    Mute,
+    /// Unmute the microphone.
+    Unmute,
+    /// Turn the camera on.
+    CameraOn,
+    /// Turn the camera off.
+    CameraOff,
+    /// Share the screen.
+    ShareScreen,
+    /// Stop the share of the screen.
+    StopSharing,
+    /// Widen the call to the whole channel region.
+    Fill,
+    /// Shrink the call back to a band.
+    Shrink,
+    /// Open or close the list of the participants.
+    Participants,
+    /// Open or close the panel of the devices.
+    Devices,
+    /// Show the page of the grid before.
+    PreviousPage,
+    /// Show the page of the grid after.
+    NextPage,
+    /// Show the channel of the call again.
+    BackToCall,
+    /// Leave the call.
+    HangUp,
+    /// Accept the call that rings.
+    Accept,
+    /// Decline the call that rings.
+    Decline,
+}
+
 /// Static description of a command. Apps build `const` tables of these and
 /// expose them through [`CommandSource`].
 pub struct Command {
@@ -150,6 +210,11 @@ pub struct Command {
     /// The one region the command lives in (`CHROME-148`). A required field,
     /// so a command without a home does not compile.
     pub home: Home,
+    /// One line the tooltip of the icon shows under the name, where the name
+    /// is not enough (`CHROME-185`). Its words in every language, as the
+    /// title, read through [`TitleWords::describe`]. `None` for a command its
+    /// name describes.
+    pub description: Option<TitleWords>,
 }
 
 impl Command {
@@ -337,7 +402,21 @@ pub const NOTHING_SELECTED: &str = "nothing selected";
 /// `UI-THREAD-011`).
 pub mod shared {
     use super::{Key, KeyBinding, KeyChar, ModifierKeys};
-    use ambre_core::{Commands, StaticKey};
+    use ambre_core::{Categories, Commands, StaticKey};
+
+    /// The group of every command that acts on the document as a file: save,
+    /// import, export, share. Its home is the Ambre menu (`CHROME-154`).
+    pub const FILE: StaticKey<Categories> = StaticKey::<Categories>::new("file");
+    /// The group of every command that acts on the account or a preference
+    /// of the person. Its home is the avatar menu (`CHROME-156`).
+    pub const ACCOUNT: StaticKey<Categories> = StaticKey::<Categories>::new("account");
+    /// The group of every command that inserts a new object: a picture, a
+    /// table, a chart, a comment. Its home is the creation bar (`CHROME-152`).
+    pub const INSERT: StaticKey<Categories> = StaticKey::<Categories>::new("insert");
+    /// The group of every tool of the pointer. A tool is the mode the next
+    /// press on the content takes, as the pen of a board. Its home is the
+    /// creation bar (`CHROME-152`).
+    pub const TOOL: StaticKey<Categories> = StaticKey::<Categories>::new("tool");
 
     /// The clipboard identities. One intent, one identity, in every
     /// application: a menu entry, a toolbar button and the browser's own event
@@ -497,9 +576,36 @@ pub enum TableDefect {
     Ungrouped(StaticKey<Commands>),
     /// The command names an icon with no name, which no icon set resolves.
     BlankIcon(StaticKey<Commands>),
+    /// The command declares a description with no words in a locale, so its
+    /// tooltip shows an empty line (`CHROME-185`).
+    BlankDescription(StaticKey<Commands>, Locale),
     /// Two entries declare one default chord. Seeding keeps the last one, so
     /// the first silently leaves the keyboard.
     SharedChord(KeyBinding, StaticKey<Commands>, StaticKey<Commands>),
+    /// The command acts on the file or on the account, and lives in another
+    /// region than the one its subject names (`CHROME-154`, `CHROME-156`).
+    HomedAway(StaticKey<Commands>, Home),
+    /// The command lives in the creation bar, yet neither inserts an object
+    /// nor arms a tool of the pointer (`CHROME-152`).
+    CreatesNothing(StaticKey<Commands>),
+}
+
+/// The one region the subject of `category` names, if it names one. A
+/// command on the document as a file lives in the Ambre menu. A command on
+/// the account of the person lives in the avatar menu. A command that inserts
+/// an object, or arms a tool of the pointer, lives in the creation bar
+/// (`ambre-spec-shell.md` section 2).
+#[must_use]
+pub fn subject_home(category: StaticKey<Categories>) -> Option<Home> {
+    if category == shared::FILE {
+        Some(Home::AmbreMenu)
+    } else if category == shared::ACCOUNT {
+        Some(Home::AvatarMenu)
+    } else if category == shared::INSERT || category == shared::TOOL {
+        Some(Home::CreationBar)
+    } else {
+        None
+    }
 }
 
 /// Every defect of `table`, in declaration order. An empty answer is a table
@@ -525,10 +631,24 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
         if cmd.icon.is_some_and(|icon| icon.as_str().trim().is_empty()) {
             defects.push(TableDefect::BlankIcon(cmd.id));
         }
+        if let Some(description) = cmd.description {
+            for locale in [Locale::Fr, Locale::En] {
+                if description.describe(&locale).as_str().trim().is_empty() {
+                    defects.push(TableDefect::BlankDescription(cmd.id, locale));
+                }
+            }
+        }
         for &kb in cmd.keybindings {
             if let Some(first) = chords.insert(kb, cmd.id) {
                 defects.push(TableDefect::SharedChord(kb, first, cmd.id));
             }
+        }
+        let subject = subject_home(cmd.category);
+        if subject.is_some_and(|home| home != cmd.home) {
+            defects.push(TableDefect::HomedAway(cmd.id, cmd.home));
+        }
+        if cmd.home == Home::CreationBar && subject != Some(Home::CreationBar) {
+            defects.push(TableDefect::CreatesNothing(cmd.id));
         }
     }
     defects
@@ -657,6 +777,7 @@ mod tests {
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: StaticKey::<Commands>::new("prose.format.italic"),
@@ -665,6 +786,7 @@ mod tests {
             keybindings: &[KeyBinding::primary(KeyChar::I)],
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
     ];
 
@@ -679,6 +801,7 @@ mod tests {
             keybindings: shared::REDO_CHORDS,
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: shared::COPY,
@@ -687,6 +810,7 @@ mod tests {
             keybindings: shared::COPY_CHORDS,
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: shared::PASTE,
@@ -695,6 +819,7 @@ mod tests {
             keybindings: shared::PASTE_CHORDS,
             category: FORMAT,
             home: Home::ContextPanel,
+            description: None,
         },
     ];
 
@@ -775,10 +900,86 @@ mod tests {
 
     const BLANK: crate::TitleWords = crate::TitleWords { en: "", fr: "" };
 
+    const BLANK_DESCRIPTION: crate::TitleWords = crate::TitleWords { en: " ", fr: " " };
+
     const ENGLISH_ONLY: crate::TitleWords = crate::TitleWords {
         en: "Bold",
         fr: " ",
     };
+
+    /// A command on the file outside the Ambre menu is a defect of the table.
+    /// So is a command on the account outside the avatar menu. A
+    /// command of another group may live in any region (`CHROME-154`,
+    /// `CHROME-156`).
+    #[test]
+    fn a_command_on_the_file_or_the_account_homed_away_is_a_defect() {
+        let save = StaticKey::<Commands>::new("t.file.save");
+        let theme = StaticKey::<Commands>::new("t.account.theme");
+        let bold = StaticKey::<Commands>::new("t.format.bold");
+        let entry = |id, category, home| Command {
+            id,
+            title: BOLD_TITLE,
+            icon: None,
+            keybindings: &[],
+            category,
+            home,
+            description: None,
+        };
+        let homed = [
+            entry(save, shared::FILE, Home::AmbreMenu),
+            entry(theme, shared::ACCOUNT, Home::AvatarMenu),
+            entry(bold, FORMAT, Home::AvatarMenu),
+        ];
+        assert_eq!(table_defects(&homed), []);
+        let away = [
+            entry(save, shared::FILE, Home::ContextPanel),
+            entry(theme, shared::ACCOUNT, Home::AmbreMenu),
+        ];
+        assert_eq!(
+            table_defects(&away),
+            [
+                TableDefect::HomedAway(save, Home::ContextPanel),
+                TableDefect::HomedAway(theme, Home::AmbreMenu),
+            ]
+        );
+    }
+
+    /// `CHROME-152`: a command that inserts an object or arms a tool lives in
+    /// the creation bar, and the bar homes no other command.
+    #[test]
+    fn the_creation_bar_homes_every_insert_and_tool_and_nothing_else() {
+        let picture = StaticKey::<Commands>::new("t.insert.picture");
+        let pen = StaticKey::<Commands>::new("t.tool.pen");
+        let bold = StaticKey::<Commands>::new("t.format.bold");
+        let entry = |id, category, home| Command {
+            id,
+            title: BOLD_TITLE,
+            icon: None,
+            keybindings: &[],
+            category,
+            home,
+            description: None,
+        };
+        let homed = [
+            entry(picture, shared::INSERT, Home::CreationBar),
+            entry(pen, shared::TOOL, Home::CreationBar),
+            entry(bold, FORMAT, Home::ContextPanel),
+        ];
+        assert_eq!(table_defects(&homed), []);
+        let away = [
+            entry(picture, shared::INSERT, Home::ContextPanel),
+            entry(pen, shared::TOOL, Home::StatusBar),
+            entry(bold, FORMAT, Home::CreationBar),
+        ];
+        assert_eq!(
+            table_defects(&away),
+            [
+                TableDefect::HomedAway(picture, Home::ContextPanel),
+                TableDefect::HomedAway(pen, Home::StatusBar),
+                TableDefect::CreatesNothing(bold),
+            ]
+        );
+    }
 
     /// A whole table has no defect, and each part of a description that goes
     /// missing is named (`UI-THREAD-019`, `UI-THREAD-037`).
@@ -798,6 +999,7 @@ mod tests {
                 keybindings: CHORD,
                 category: StaticKey::<Categories>::new(""),
                 home: Home::ContextPanel,
+                description: Some(BLANK_DESCRIPTION),
             },
             Command {
                 id: other,
@@ -806,6 +1008,7 @@ mod tests {
                 keybindings: CHORD,
                 category: FORMAT,
                 home: Home::ContextPanel,
+                description: None,
             },
             Command {
                 id: bold,
@@ -814,6 +1017,7 @@ mod tests {
                 keybindings: &[],
                 category: FORMAT,
                 home: Home::ContextPanel,
+                description: None,
             },
         ];
         assert_eq!(
@@ -823,6 +1027,8 @@ mod tests {
                 TableDefect::Unlabelled(bold, Locale::En),
                 TableDefect::Ungrouped(bold),
                 TableDefect::BlankIcon(bold),
+                TableDefect::BlankDescription(bold, Locale::Fr),
+                TableDefect::BlankDescription(bold, Locale::En),
                 TableDefect::Unlabelled(other, Locale::Fr),
                 TableDefect::SharedChord(KeyBinding::primary(KeyChar::B), bold, other),
                 TableDefect::DescribedTwice(bold),
@@ -884,6 +1090,7 @@ mod tests {
             keybindings: &[],
             category: StaticKey::<Categories>::new("format"),
             home: Home::ContextPanel,
+            description: None,
         },
         Command {
             id: SAVE,
@@ -892,6 +1099,7 @@ mod tests {
             keybindings: &[],
             category: StaticKey::<Categories>::new("file"),
             home: Home::AmbreMenu,
+            description: None,
         },
     ];
 

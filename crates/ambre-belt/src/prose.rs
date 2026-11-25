@@ -437,7 +437,8 @@ mod tests {
     /// caret, with the focus on Cut, its first entry. Escape closes it.
     /// Over the last letter selected, the menu opens on Cut again, and Enter
     /// runs it. The letter leaves the count, the menu closes, and the focus
-    /// returns to the input pipe each time.
+    /// returns to the input pipe each time. Over the whole text the arrows
+    /// reach Bold (`CHROME-214`), and Enter runs it.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -505,6 +506,32 @@ mod tests {
             )
             .await;
         wait_counted(&page, "5 with spaces").await;
+
+        // Over the whole text, the arrows reach Bold (`CHROME-214`).
+        chord(&page, &[CONTROL], "a").await;
+        chord(&page, &[SHIFT], F10).await;
+        for _ in 0..4 {
+            press(&page, &[DOWN]).await;
+        }
+        page.browser
+            .wait_for(
+                "the focus on Bold",
+                "const a = document.activeElement; \
+                 return !!a && !!a.closest('.ambre-ctx-menu') && a.textContent.includes('Bold');",
+                STEP,
+            )
+            .await;
+        press(&page, &[ENTER]).await;
+        page.browser
+            .wait_for(
+                "the menu closed after Bold, and the focus back on the input pipe",
+                CLOSED,
+                STEP,
+            )
+            .await;
+        wait_pressed(&page, "Bold", "true").await;
+        let text = export_markdown(&page).await;
+        assert_eq!(text.trim(), "**Hello**", "{text}");
     }
 
     /// Signs a second user in, in a second browser, and shares the document of
@@ -784,10 +811,11 @@ mod tests {
         );
     }
 
-    /// `SRV-310`: the stack that `deploy/compose/compose.yml` starts on one host serves the
-    /// suite. The page is cross-origin isolated, and two members sign in. The second joins the
-    /// document of the first from the invite link, and both read one text. The stack runs apart,
-    /// behind its TLS front, at `SELFHOST_ORIGIN` (`just selfhost-test`).
+    /// `SRV-310`, `SRV-309`: the stack that `deploy/compose/compose.yml` starts on one host, or
+    /// that the chart of `deploy/chart/` deploys on a cluster, serves the suite. The page is
+    /// cross-origin isolated, and two members sign in. The second joins the document of the first
+    /// from the invite link, and both read one text. The stack runs apart, behind its TLS front,
+    /// at `SELFHOST_ORIGIN` (`just selfhost-test`, `just chart-test`).
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "needs the self-hosted stack of deploy/compose; run just selfhost-test"]
     async fn the_self_hosted_stack_serves_two_members_one_document() {

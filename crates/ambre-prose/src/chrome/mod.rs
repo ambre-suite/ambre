@@ -63,8 +63,12 @@ pub struct ProseSignals {
     /// The reply being typed in each thread's field, by thread. It outlives
     /// the card, so a thread that moves keeps it (`PROSE-UI-231`).
     pub drafts: RwSignal<HashMap<Id<Comment>, String>>,
-    /// The suggestion under the pointer, for the popover.
+    /// The suggestion the popover sits on: the one under the pointer, else
+    /// the one at the caret (`PROSE-UI-148`, `PROSE-UI-272`).
     pub hovered: RwSignal<Option<HoveredSuggestion>>,
+    /// The suggestion at the caret, which the context panel and the palette
+    /// accept or reject (`PROSE-UI-273`).
+    pub at_caret: RwSignal<Option<HoveredSuggestion>>,
     /// The spelling popover a press on a misspelled word opened
     /// (`PROSE-UI-248`).
     pub spelling: RwSignal<Option<SpellingPopover>>,
@@ -102,6 +106,10 @@ pub struct ProseSignals {
     /// A page format a control of the context panel asked for, until the
     /// view drains it into one command (`PROSE-UI-252`).
     pub page_write: RwSignal<Option<crate::doc::PageFormat>>,
+    /// Whether this session suggests, as the Logic thread last reported it.
+    /// The control of the panel and the status chip read it
+    /// (`PROSE-UI-275`).
+    pub mode: RwSignal<crate::events::EditMode>,
     /// A text, paragraph or default font write a control of the context
     /// panel asked for, until the view drains it into one command
     /// (`PROSE-UI-098`).
@@ -138,6 +146,7 @@ impl ProseSignals {
             threads: RwSignal::new(Vec::new()),
             drafts: RwSignal::new(HashMap::new()),
             hovered: RwSignal::new(None),
+            at_caret: RwSignal::new(None),
             spelling: RwSignal::new(None),
             intent: RwSignal::new(None),
             over_link: RwSignal::new(LinkHover::Elsewhere),
@@ -152,6 +161,7 @@ impl ProseSignals {
             history: RwSignal::new(History::default()),
             page: RwSignal::new(None),
             page_write: RwSignal::new(None),
+            mode: RwSignal::new(crate::events::EditMode::Editing),
             text_write: RwSignal::new(None),
             fonts: RwSignal::new(None),
             prompt: RwSignal::new(None),
@@ -349,8 +359,8 @@ fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView 
     }
 }
 
-/// The accept and reject buttons over the suggestion under the pointer, and
-/// over no other (`PROSE-UI-148`).
+/// The accept and reject buttons over the suggestion under the pointer, or
+/// at the caret, and over no other (`PROSE-UI-148`, `PROSE-UI-272`).
 #[component]
 pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
     move || {
@@ -474,9 +484,12 @@ pub fn ProseSpellingPopover(signals: ProseSignals) -> impl IntoView {
 ///
 /// It holds no document state: it renders what the view published, and a
 /// control hands its command id back to the view (`PROSE-UI-057`,
-/// `PROSE-UI-098`).
+/// `PROSE-UI-098`). It publishes its reach into `cover` (`CHROME-171`).
 #[component]
-pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
+pub fn ProseFormatBar(
+    signals: ProseSignals,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
+) -> impl IntoView {
     // The text typed in the field of the bar. It outlives a rebuild of the
     // bar, which each new reading of the selection causes. `None` shows the
     // text the field opens on.
@@ -510,7 +523,7 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
             .as_ref()
             .map_or(ambre_commands::Reading::Uniform(None), |m| m.values.kind);
         Some(view! {
-            <FormatBar anchor=anchor controls=controls>
+            <FormatBar anchor=anchor controls=controls cover=cover>
                 <span class="ambre-format-sep" aria-hidden="true"></span>
                 {bar_kind_list(signals, kind)}
                 {bar_comment(signals)}
@@ -568,7 +581,7 @@ fn bar_comment(signals: ProseSignals) -> impl IntoView {
                 label=label
                 size=ambre_chrome::ControlSize::Large
                 look=ambre_chrome::IconLook::Ghost
-                reach=ambre_commands::Reach::Command(crate::commands::COMMENT)
+                reach=Some(ambre_commands::Reach::Command(crate::commands::COMMENT))
                 on_press=Callback::new(move |()| {
                     signals.open_prompt(crate::commands::COMMENT);
                 })
@@ -650,7 +663,8 @@ fn bar_prompt(
 }
 
 /// The glyph a command of the page declares, resolved to its asset.
-pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Icon> {
+#[must_use]
+pub fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Icon> {
     Some(match command.icon?.as_str() {
         "format-bold" => icondata::BsTypeBold,
         "format-italic" => icondata::BsTypeItalic,
@@ -660,24 +674,62 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
         "format-superscript" => icondata::MdiFormatSuperscript,
         "format-subscript" => icondata::MdiFormatSubscript,
         "format-clear" => icondata::MdiFormatClear,
+        "file-document-edit-outline" => icondata::MdiFileDocumentEditOutline,
+        "format-text" => icondata::MdiFormatText,
+        "image-outline" => icondata::MdiImageOutline,
+        "table-plus" => icondata::MdiTablePlus,
+        "border-horizontal" => icondata::MdiBorderHorizontal,
         "link" => icondata::MdiLink,
         "comment-outline" => icondata::MdiCommentOutline,
         _ => return None,
     })
 }
 
-/// One control, announced by its command's title.
+/// The suggestion-mode chip of the status bar, shown while this session
+/// suggests (`PROSE-UI-275`). The context panel folds, and the status bar
+/// never does, so the mode stays in view. The chip is a reach of the
+/// command, never a second home: a press turns the mode off.
+#[component]
+pub fn ProseModeChip(signals: ProseSignals) -> impl IntoView {
+    let command = ambre_commands::find(crate::commands::COMMANDS, crate::commands::SUGGEST_CHANGES);
+    let on_command = Callback::new(move |id| {
+        if let Some(intent) = crate::view::annotate::review_intent(id, None) {
+            signals.intent.set(Some(intent));
+        }
+    });
+    move || {
+        let command = command?;
+        (signals.mode.get() == crate::events::EditMode::Suggesting).then(|| {
+            view! {
+                <span class="statusbar-mode" role="status">
+                    <ambre_chrome::CommandButton
+                        command=command
+                        icon=icon_of(command)
+                        on_command=on_command
+                        pressed=Signal::derive(|| Pressed::On)
+                        labelled=ambre_chrome::Labelled::Text
+                    />
+                </span>
+            }
+        })
+    }
+}
+
+/// One control, announced by its command's title, chord and description
+/// (`CHROME-186`). An id the table does not describe shows an empty label.
 fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
-    let command = ambre_commands::find(crate::commands::COMMANDS, id);
-    let label = command
-        .map(|command| command.title.pick(&ambre_chrome::language()).into_string())
-        .unwrap_or_default();
-    FormatControl {
-        label,
-        pressed,
-        on_press: Callback::new(move |()| signals.format.set(Some(id))),
-        icon: command.and_then(icon_of),
-        chord: command.and_then(ambre_commands::Command::chord),
+    let on_press = Callback::new(move |()| signals.format.set(Some(id)));
+    match ambre_commands::find(crate::commands::COMMANDS, id) {
+        Some(command) => FormatControl::of(command, icon_of(command), pressed, on_press),
+        None => FormatControl {
+            label: String::new(),
+            pressed,
+            on_press,
+            icon: None,
+            chord: None,
+            description: None,
+            reach: None,
+        },
     }
 }
 

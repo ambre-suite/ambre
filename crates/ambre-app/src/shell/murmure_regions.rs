@@ -96,7 +96,7 @@ impl Frame {
         let invite_link = RwSignal::new(None);
         let handle = mount_to(inner.body().unwrap(), move || {
             view! {
-                <MurmureShell relay=relay send=send invite_link=invite_link>
+                <MurmureShell relay=relay send=send invite_link=invite_link cover=RwSignal::new(ambre_client_core::cover::Cover::default())>
                     <span class="title">"Ambre"</span>
                 </MurmureShell>
             }
@@ -557,6 +557,102 @@ async fn the_call_controls_name_themselves_and_take_the_focus() {
     phase.set(CallPhase::Idle);
 }
 
+/// The icons alone of `root`: each reaches a command of the Murmure table, and the probe of
+/// untipped icons reads none (`CHROME-185`, `MURMURE-730`). The count of the icons read.
+fn every_icon_reaches_a_call_command(root: &web_sys::Element) -> u32 {
+    use ambre_chrome::commands::Reach;
+    use ambre_murmure::ui::commands::COMMANDS;
+    assert_eq!(
+        ambre_chrome::untipped_icons(root, COMMANDS),
+        Vec::<String>::new()
+    );
+    let icons = root.query_selector_all("button.ambre-icon-button").unwrap();
+    for at in 0..icons.length() {
+        let icon: web_sys::Element = icons.item(at).unwrap().unchecked_into();
+        let marker = icon.get_attribute("data-reach").unwrap_or_default();
+        assert!(
+            COMMANDS
+                .iter()
+                .any(|c| Reach::Command(c.id).matches_marker(&marker)),
+            "{}",
+            icon.outer_html()
+        );
+    }
+    icons.length()
+}
+
+/// Each icon of the call controls, of the call bubble and of the ring reaches a command of the
+/// Murmure table (`MURMURE-730`). Its tooltip names that command (`CHROME-185`, `CHROME-186`). A
+/// toggle names the command its press runs now: mute reads Unmute once muted (`CHROME-256`).
+#[wasm_bindgen_test]
+async fn each_icon_of_the_call_names_its_command_in_a_tooltip() {
+    use super::call_bar::{CallFloat, RingAlert};
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
+    use ambre_murmure::ui::call_ring::{Incoming, Ring};
+    let frame = Frame::new(1025, channel()).await;
+    let (phase, participants) = (crate::call::phase(), crate::call_volumes::participants());
+    let bar = || {
+        frame
+            .query(".murmure-channel-header .murmure-call")
+            .unwrap()
+    };
+    assert_eq!(
+        every_icon_reaches_a_call_command(&bar()),
+        2,
+        "start and the devices"
+    );
+
+    phase.set(CallPhase::InCall(Microphone::Live));
+    participants.set((0..12).map(|_| Id::<User>::mint()).collect());
+    crate::call_stage::roster().set(ambre_chrome::Openness::Open);
+    leptos::task::tick().await;
+    // Participants, two pages, fill, camera, share, mute, hang up, the devices and a pin each.
+    assert_eq!(every_icon_reaches_a_call_command(&bar()), 21);
+    let mute = |attribute: &str| {
+        frame
+            .query(".murmure-channel-header .murmure-call-mute")
+            .and_then(|b| b.get_attribute(attribute))
+            .unwrap_or_default()
+    };
+    assert_eq!(mute("aria-label"), "Mute");
+    frame.click(".murmure-call-mute").await;
+    assert_eq!(mute("aria-label"), "Unmute");
+    assert_eq!(mute("aria-pressed"), "true");
+    every_icon_reaches_a_call_command(&bar());
+
+    // The bubble away from the channel of the call, and the ring.
+    let root = frame.inner.create_element("div").unwrap();
+    frame.inner.body().unwrap().append_child(&root).unwrap();
+    let cover = RwSignal::new(ambre_client_core::cover::Cover::default());
+    let relay = frame.relay;
+    let away = Id::<Channel>::mint();
+    crate::call::where_from().set(Some((away, crate::host::now())));
+    crate::call_ring::ring().set(Ring::Incoming(Incoming {
+        call: Id::<ambre_core::id::Call>::mint(),
+        channel: away,
+        caller: None,
+        until: Instant::<Authored>::new(u64::MAX),
+    }));
+    let float_phase = Signal::from(phase.clone());
+    let handle = mount_to(root.clone().unchecked_into(), move || {
+        view! {
+            <CallFloat pane=relay.pane phase=float_phase relay=relay cover=cover />
+            <RingAlert relay=relay />
+        }
+    });
+    leptos::task::tick().await;
+    // Mute, camera, share, the way back and hang up; accept and decline.
+    assert_eq!(every_icon_reaches_a_call_command(&root), 7);
+
+    drop(handle);
+    root.remove();
+    crate::call_ring::ring().set(Ring::Quiet);
+    crate::call::where_from().set(None);
+    crate::call_stage::roster().set(ambre_chrome::Openness::Closed);
+    participants.set(Vec::new());
+    phase.set(CallPhase::Idle);
+}
+
 /// The ring alert of a call (`MURMURE-641`, `MURMURE-646`). A ring cue of a public channel
 /// rings nothing. A ring cue of the direct message shows the alert. Its title reads as an
 /// alert. Accept and decline are buttons with an accessible name, and each takes the focus. A
@@ -768,7 +864,8 @@ async fn the_participants_button_names_itself_and_lists_each_participant() {
         "a pin button takes the focus"
     );
     let pin_read = |attribute: &str| pin.get_attribute(attribute).unwrap_or_default();
-    assert_eq!(pin_read("aria-label"), "Pin A participant");
+    // The pin is titled by its command, and its list item names the participant.
+    assert_eq!(pin_read("aria-label"), "Pin");
     assert_eq!(pin_read("aria-pressed"), "false");
     let first = participants.get_untracked()[0];
     pin.click();
@@ -779,10 +876,7 @@ async fn the_participants_button_names_itself_and_lists_each_participant() {
         .unwrap()
         .dyn_into()
         .unwrap();
-    assert_eq!(
-        pin.get_attribute("aria-label").unwrap_or_default(),
-        "Unpin A participant"
-    );
+    assert_eq!(pin.get_attribute("aria-label").unwrap_or_default(), "Unpin");
     assert_eq!(
         pin.get_attribute("aria-pressed").unwrap_or_default(),
         "true"
@@ -2223,10 +2317,11 @@ async fn the_call_floats_away_from_its_channel_and_brings_it_back() {
         root.set_class_name("float-root");
         frame.inner.body().unwrap().append_child(&root).unwrap();
         let phase = RwSignal::new(CallPhase::InCall(Microphone::Live));
+        let cover = RwSignal::new(ambre_client_core::cover::Cover::default());
         let (pane, relay) = (frame.relay.pane, frame.relay);
         crate::call::where_from().set(Some((acme.sales, crate::host::now())));
         let handle = mount_to(root.clone().unchecked_into(), move || {
-            view! { <CallFloat pane=pane phase=Signal::from(phase) relay=relay /> }
+            view! { <CallFloat pane=pane phase=Signal::from(phase) relay=relay cover=cover /> }
         });
         // The header of another channel offers no call control: the float holds them
         // (`MURMURE-728`).
@@ -2284,4 +2379,85 @@ async fn the_call_floats_away_from_its_channel_and_brings_it_back() {
         drop(bar);
         drop(handle);
     }
+}
+
+/// Wait for the page to lay out and paint twice, so a surface has measured
+/// itself.
+async fn two_frames() {
+    leptos::task::tick().await;
+    for _ in 0..2 {
+        let next = js_sys::Promise::new(&mut |resolve, _| {
+            web_sys::window()
+                .unwrap()
+                .request_animation_frame(&resolve)
+                .unwrap();
+        });
+        wasm_bindgen_futures::JsFuture::from(next).await.unwrap();
+    }
+}
+
+/// `MURMURE-698`, `CHROME-171`: the call bubble publishes the box it covers.
+/// It measures the box again once a drag rests it in another corner, and
+/// clears it when it leaves.
+#[wasm_bindgen_test]
+async fn the_call_bubble_publishes_its_box_and_clears_it_when_it_leaves() {
+    use super::call_bar::CallFloat;
+    use ambre_client_core::cover::{Cover, Covered, Surface};
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
+    let acme = Acme::new();
+    let frame = Frame::with(1025, MurmureRelay::new()).await;
+    frame.absorb(acme.members(&[])).await;
+    frame.absorb(acme.catalogue()).await;
+    frame.relay.pane.set(MurmurePane::channel(acme.board));
+    let root = frame.inner.create_element("div").unwrap();
+    frame.inner.body().unwrap().append_child(&root).unwrap();
+    let phase = RwSignal::new(CallPhase::InCall(Microphone::Live));
+    let cover = RwSignal::new(Cover::default());
+    let (pane, relay) = (frame.relay.pane, frame.relay);
+    crate::call::where_from().set(Some((acme.sales, crate::host::now())));
+    let handle = mount_to(root.clone().unchecked_into(), move || {
+        view! { <CallFloat pane=pane phase=Signal::from(phase) relay=relay cover=cover /> }
+    });
+    two_frames().await;
+    let float = root.query_selector(".murmure-call-float").unwrap().unwrap();
+    let published = || match cover.get_untracked().of(Surface::CallBubble) {
+        Some(Covered::Fixed(at)) => Some(at),
+        _ => None,
+    };
+    let near = |a: ambre_core::Px<ambre_core::Css>, b: f64| (f64::from(a.get()) - b).abs() < 0.5;
+    let rect = float.get_bounding_client_rect();
+    let at = published().expect("the bubble publishes its box");
+    assert!(near(at.top_left.x, rect.left()) && near(at.bottom_right.y, rect.bottom()));
+
+    // A drag that ends at the top-left corner rests the bubble there.
+    let grip = root.query_selector(".murmure-float-grip").unwrap().unwrap();
+    let pointer = |kind: &str, x: i32, y: i32| {
+        let init = web_sys::PointerEventInit::new();
+        init.set_pointer_type("mouse");
+        init.set_bubbles(true);
+        init.set_client_x(x);
+        init.set_client_y(y);
+        web_sys::PointerEvent::new_with_event_init_dict(kind, &init).unwrap()
+    };
+    grip.dispatch_event(&pointer("pointerdown", 900, 500))
+        .unwrap();
+    float.dispatch_event(&pointer("pointerup", 10, 10)).unwrap();
+    two_frames().await;
+    let moved = float.get_bounding_client_rect();
+    assert!(moved.top() < rect.top(), "the bubble rests at the top");
+    let at = published().expect("the bubble keeps its box");
+    assert!(near(at.top_left.y, moved.top()) && near(at.top_left.x, moved.left()));
+
+    // The way back shows the channel of the call, and the bubble leaves.
+    let grip: web_sys::HtmlElement = grip.unchecked_into();
+    grip.click();
+    two_frames().await;
+    assert!(
+        root.query_selector(".murmure-call-float")
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(published(), None, "a bubble that leaves covers nothing");
+    crate::call::where_from().set(None);
+    drop(handle);
 }

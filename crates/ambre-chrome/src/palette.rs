@@ -338,6 +338,7 @@ mod tests {
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: StaticKey::<Categories>::new("format"),
             home: ambre_commands::Home::ContextPanel,
+            description: None,
         },
         Command {
             id: StaticKey::<Commands>::new("t.sort.asc"),
@@ -346,6 +347,7 @@ mod tests {
             keybindings: &[],
             category: StaticKey::<Categories>::new("sort"),
             home: ambre_commands::Home::ContextPanel,
+            description: None,
         },
         Command {
             id: StaticKey::<Commands>::new("t.interop.export"),
@@ -354,6 +356,7 @@ mod tests {
             keybindings: &[],
             category: StaticKey::<Categories>::new("interop"),
             home: ambre_commands::Home::AmbreMenu,
+            description: None,
         },
     ];
 

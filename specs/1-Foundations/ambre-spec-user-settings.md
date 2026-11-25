@@ -310,7 +310,8 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
 * **The context panel is not specified here.** Its side, its width and its fold are named in the
   catalogue. The rows that read them are written with the panel itself.
 * **No rule says what a new exchange key does to the settings.** A user's new exchange key needs a
-  path for every document: `A member's new exchange key enters the log` Story (`ambre-roadmap.md` MVP).
+  path for every document: `A user's new exchange key keeps the settings` Story (`ambre-roadmap.md`
+  MVP).
 
 ---
 

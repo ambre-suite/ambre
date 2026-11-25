@@ -36,6 +36,15 @@ use crate::ui::menu;
 use crate::ui::panel;
 use crate::ui::style::StyleModel;
 
+/// The name a colour trigger shows in its tooltip: the label the property
+/// registry declares, as the context panel shows it (`CHROME-186`).
+fn property_title(id: StaticKey<ambre_core::Properties>) -> String {
+    panel::property(id)
+        .title
+        .pick(&ambre_chrome::language())
+        .into_string()
+}
+
 /// The floating selection toolbar. `bar` is the per-frame published placement +
 /// flags (`None` hides it). `model` is the selection's common style: it seeds
 /// the text colour, and is the same model the context panel reads.
@@ -48,20 +57,18 @@ pub fn SelectionToolbar(
     model: RwSignal<Option<StyleModel>>,
     on_command: Callback<StaticKey<Commands>>,
     on_style: Callback<StyleEdit>,
-    /// Where the bar publishes how far it reaches above the selection
-    /// (`ZOOM-011`). A bar nothing fits around publishes nothing.
-    #[prop(optional)]
-    cover: Option<RwSignal<crate::ui::cover::Cover>>,
+    /// Where the bar, the board's context bar, publishes how far it reaches
+    /// above the selection (`CHROME-170`, `ZOOM-011`).
+    cover: RwSignal<ambre_client_core::cover::Cover>,
 ) -> impl IntoView {
+    use ambre_client_core::cover::Surface;
     let node = NodeRef::<leptos::html::Div>::new();
-    if let Some(cover) = cover {
-        super::cover::watch_bar(node, move || bar.get_untracked().map(|b| b.at.y), cover);
-        Effect::new(move |_| {
-            if bar.with(Option::is_none) {
-                super::cover::clear_bar(cover);
-            }
-        });
-    }
+    ambre_chrome::cover::watch_above(node, move || bar.get_untracked().map(|b| b.at.y), cover);
+    Effect::new(move |_| {
+        if bar.with(Option::is_none) {
+            ambre_chrome::cover::clear(cover, Surface::ContextBar);
+        }
+    });
     let fill = RwSignal::new(None::<Rgba>);
     let text_color = RwSignal::new(None::<Rgba>);
     Effect::new(move |_| {
@@ -84,24 +91,21 @@ pub fn SelectionToolbar(
     });
 
     // A command button routing through the shared sink, as the context menu
-    // does. The tooltip and the glyph are the ones the command declares
-    // (`UI-THREAD-019`).
+    // does. The tooltip, its chord and its description and the glyph are the
+    // ones the command declares (`UI-THREAD-019`, `CHROME-186`).
     let cmd_button = move |command: StaticKey<Commands>| {
-        let label = registry::title(command, &ambre_chrome::language())
-            .map(ambre_core::Validated::into_string)
-            .unwrap_or_default();
         let icon = registry::icon(command).and_then(icons::resolve);
-        view! {
-            <button
-                data-reach=Reach::Command(command).marker()
-                aria-label=label.clone()
-                title=label
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| on_command.run(command)
-            >
-                {icon.map(|ic| view! { <leptos_icons::Icon icon=ic /> })}
-            </button>
-        }
+        ambre_commands::find(registry::COMMANDS, command).map(|described| {
+            view! {
+                <ambre_chrome::CommandButton
+                    command=described
+                    icon=icon
+                    size=ambre_chrome::ControlSize::Large
+                    look=ambre_chrome::IconLook::Ghost
+                    on_command=on_command
+                />
+            }
+        })
     };
 
     // A "Mixed" hint beside a colour that differs across the selection
@@ -128,7 +132,7 @@ pub fn SelectionToolbar(
                         >
                             <span data-reach=Reach::Property(panel::FILL).marker()>
                                 <ColorPopover
-                                    title="Fill"
+                                    title=property_title(panel::FILL)
                                     icon=icondata::MdiFormatColorFill
                                     current=fill
                                     default=Signal::derive(|| Rgba::from_bits(0xffff_ffff))
@@ -139,7 +143,7 @@ pub fn SelectionToolbar(
                             {mixed_hint(b.mixed.fill.is_mixed())}
                             <span data-reach=Reach::Property(panel::TEXT_COLOUR).marker()>
                                 <ColorPopover
-                                    title="Text colour"
+                                    title=property_title(panel::TEXT_COLOUR)
                                     icon=icondata::MdiFormatColorText
                                     current=text_color
                                     default=Signal::derive(|| Rgba::from_bits(0x1a1a_1aff))
