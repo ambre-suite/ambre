@@ -24,7 +24,8 @@ use crate::view::cache::{RunCache, RunKey};
 use crate::view::column::PageColumn;
 use crate::view::paint::Frame;
 use crate::view::walk::{
-    Highlights, PageItem, PagePaint, PagePalette, PageView, PageWalk, Placed, ThemeInks, to_rect,
+    Highlights, MarkFills, PageItem, PagePaint, PagePalette, PageView, PageWalk, Placed, ThemeInks,
+    to_rect,
 };
 
 /// The colours of a print: the paper's ink and rules, whatever the theme the
@@ -110,6 +111,7 @@ impl ProseUiState {
             height,
             pages: &frame.pages,
             pictures: &self.pictures,
+            marks: MarkFills::Walked,
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
