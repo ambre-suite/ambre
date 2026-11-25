@@ -5082,3 +5082,5 @@ ambre-toile | src/chrome/floatbar.rs | crate::chrome::floatbar | property_title(
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | CallIcon(class) | param | &'static str	free-text	the class an icon of the call gives its button for the stylesheet and the tests, as IconButton(class)
 ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | ERASURE_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-sync | src/erasure.rs | crate::erasure | verifies() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Held::names() | ret | bool	generic	predicate: does the member hold the signing key and the exchange key an entry names; a guard of the walk reads it, and it selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::holds_other_keys() | ret | bool	generic	predicate: does the log keep the member present under another key pair than the one the relay served; the invite refuses on it, and it selects no mode
