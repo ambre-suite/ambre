@@ -804,15 +804,20 @@ impl SyncState {
     ///
     /// The census opens each document of the channel not open here first,
     /// so the departure caps this user in each one (`SYNC-312`). `named`
-    /// lists the documents the sealed `meta` names (`SYNC-320`).
+    /// lists the documents the sealed `meta` names (`SYNC-320`), and
+    /// `threads` the threads they name (`SYNC-321`).
     pub(crate) fn handle_leave_channel(
         &mut self,
         channel_id: Id<Channel>,
         named: Vec<Id<Document>>,
+        threads: Vec<Id<Document>>,
     ) {
         self.begin_removal(
             crate::census::Removal::LeaveChannel { channel_id },
-            Some(named),
+            Some(crate::census::Named {
+                documents: named,
+                threads,
+            }),
         );
     }
 
@@ -2178,7 +2183,7 @@ pub(crate) mod tests {
             ),
         );
 
-        state.handle_leave_channel(channel_id, vec![meta]);
+        state.handle_leave_channel(channel_id, vec![meta], Vec::new());
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
             result: Err(crate::http::HttpError::Local(

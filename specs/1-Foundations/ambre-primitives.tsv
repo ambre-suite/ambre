@@ -5080,3 +5080,5 @@ ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping 
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::sweep_arrival() | ret | bool	generic	state flag/predicate
 ambre-toile | src/chrome/floatbar.rs | crate::chrome::floatbar | property_title() | ret | String	free-text	the label a person reads in the tooltip of a colour trigger
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | CallIcon(class) | param | &'static str	free-text	the class an icon of the call gives its button for the stylesheet and the tests, as IconButton(class)
+ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | ERASURE_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
+ambre-sync | src/erasure.rs | crate::erasure | verifies() | ret | bool	generic	predicate result

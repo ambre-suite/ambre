@@ -803,12 +803,13 @@ fn a_removal_reads_the_thread_the_amendments_of_a_segment_record() {
         .apply_remote(a.amendments, (&amendments).into())
         .expect("kept");
     assert_eq!(bob.sweep_ready(a.amendments), Ok(None));
-    let crate::SweepStep::Done(named) = bob.sweep_step() else {
+    let crate::SweepStep::Done(swept) = bob.sweep_step() else {
         panic!("every document is read");
     };
-    for document_id in [segment, a.amendments, thread] {
-        assert!(named.contains(&document_id), "{named:?}");
+    for document_id in [segment, a.amendments] {
+        assert!(swept.documents.contains(&document_id), "{swept:?}");
     }
+    assert_eq!(swept.threads, [thread]);
     assert!(!bob.holds(a.amendments));
 
     let mut bob = peer_of(&a.alice);
