@@ -951,7 +951,9 @@ chart-check:
 # Between the two, two probe pods find each store and the relay refused
 # (`SRV-352`). Before the install, each node holds an address inside the
 # blocks of the test values, where the web server reaches the signalling of the
-# SFU (`SRV-361`). The cluster is deleted on exit, and its state printed first
+# SFU (`SRV-361`). Last, the recipe writes another link key into the Secret,
+# and the restarted web pod stops before Caddy and names both keys
+# (`SRV-430`). The cluster is deleted on exit, and its state printed first
 # on a failure.
 chart-test:
     #!/usr/bin/env bash
@@ -970,12 +972,16 @@ chart-test:
     python3 scripts/chart.py probe kubectl $kube
     node=$(kubectl $kube get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
     for t in prose::tests::the_self_hosted_stack_serves_two_members_one_document murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp; do sleep 61; BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost SELFHOST_MEDIA_HOST="$node" cargo test -p ambre-belt -- --ignored --exact "$t"; done
+    python3 scripts/chart.py link-key --plant kubectl $kube
 
 # `SRV-356`: the chart test of a release, on a kind cluster of its own. It
 # verifies the provenance of each image of LIST by its digest, against the tag
 # REF and the commit SHA, then pulls it, then installs the chart and waits for
-# the relay to answer through the web server. The released client signs in by no
-# bare name (`ZK-045`), so the browser tier stays on `just chart-test`.
+# the relay. The released client signs in by no bare name (`ZK-045`), so the
+# browser tier stays on `just chart-test`. The released web image pins the
+# link key of the production relay, and the test holds no seed of that key.
+# Under the fresh key of its Secret, its web pod must stop and name both keys
+# (`SRV-430`), as it does for a self-hoster who runs the published image.
 chart-test-release LIST REF SHA:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -986,9 +992,9 @@ chart-test-release LIST REF SHA:
     trap 'status=$?; [ $status -eq 0 ] || { kubectl $kube get pods -o wide; kubectl $kube describe pods | tail -n 80; }; kind delete cluster --name ambre-chart; exit $status' EXIT
     kind load docker-image --name ambre-chart ambre-relay:local ambre-sfu:local ambre-web:local ambre-init:local
     sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
-    helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
-    for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
-    curl -skf -o /dev/null https://localhost/api/auth/config
+    helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml
+    kubectl $kube rollout status deployment/ambre-relay --timeout 15m
+    python3 scripts/chart.py link-key kubectl $kube
 
 # `SRV-354`, `SRV-355`, `SRV-356`: each job that pushes an image attests its
 # digest and alone holds the signing token, and the chart test of a release

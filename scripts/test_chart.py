@@ -301,6 +301,98 @@ class NodesTest(unittest.TestCase):
         self.assertTrue(values["networkPolicy"]["nodeCidrs"])
 
 
+LINK = "11" * 32
+OTHER = "22" * 32
+
+
+def web() -> dict:
+    """A web workload whose init container compares the pinned key (`SRV-430`)."""
+    obj = workload("web", "ghcr.io/x/web:1.0.0")
+    ref = {"secretKeyRef": {"name": "ambre", "key": "thread-link-key"}}
+    init = container(
+        "link-key",
+        "ghcr.io/x/web:1.0.0",
+        env=[{"name": "THREAD_LINK_KEY", "valueFrom": ref}],
+        command=["/bin/sh", "-c", "cmp /etc/ambre/thread-link-key"],
+    )
+    obj["spec"]["template"]["spec"]["initContainers"] = [init]
+    return obj
+
+
+class LinkKeyTest(unittest.TestCase):
+    """`SRV-430`: the web pod compares its pinned key before Caddy starts."""
+
+    def init(self, obj: dict) -> dict:
+        return obj["spec"]["template"]["spec"]["initContainers"][0]
+
+    def test_a_web_pod_that_compares_its_key_holds(self) -> None:
+        self.assertEqual(chart.check_link_key([*stack(), web()]), [])
+
+    def test_a_web_pod_with_no_init_container_fails(self) -> None:
+        obj = web()
+        del obj["spec"]["template"]["spec"]["initContainers"]
+        self.assertIn("no init container", " ".join(chart.check_link_key([obj])))
+
+    def test_an_init_container_of_another_image_fails(self) -> None:
+        obj = web()
+        self.init(obj)["image"] = "busybox:1"
+        self.assertIn("another image", " ".join(chart.check_link_key([obj])))
+
+    def test_an_init_container_that_reads_no_pinned_key_fails(self) -> None:
+        obj = web()
+        self.init(obj)["command"] = ["/bin/true"]
+        self.assertIn("does not read", " ".join(chart.check_link_key([obj])))
+
+    def test_a_key_of_another_source_or_an_optional_one_fails(self) -> None:
+        obj = web()
+        ref = self.init(obj)["env"][0]["valueFrom"]["secretKeyRef"]
+        ref["optional"] = True
+        self.assertIn("is optional", " ".join(chart.check_link_key([obj])))
+        ref.pop("optional")
+        ref["key"] = "thread-link-seed"
+        self.assertIn("does not come from", " ".join(chart.check_link_key([obj])))
+
+    def test_a_render_with_no_web_server_fails(self) -> None:
+        self.assertIn("0 web workloads", " ".join(chart.check_link_key(stack())))
+
+
+def pods(init: dict, web_state: dict) -> dict:
+    """The web pods of a cluster, as `kubectl get pods -o json` prints them."""
+    status = {
+        "initContainerStatuses": [{"name": "link-key", **init}],
+        "containerStatuses": [{"name": "web", "ready": False, "state": web_state}],
+    }
+    return {"items": [{"metadata": {"name": "ambre-web-1"}, "status": status}]}
+
+
+FAILED = {"state": {"waiting": {"reason": "CrashLoopBackOff"}}, "lastState": {"terminated": {"exitCode": 1}}}
+WAITING = {"waiting": {"reason": "PodInitializing"}}
+LOG = f"link key: the client pins {LINK}, and thread-link-key of the Secret names {OTHER}"
+
+
+class LinkKeyRefusalTest(unittest.TestCase):
+    """`SRV-430`: the verdict of `chart.py link-key` on a cluster."""
+
+    def test_a_failed_init_whose_log_names_both_keys_holds(self) -> None:
+        self.assertEqual(chart.link_key_faults(pods(FAILED, WAITING), LOG, LINK, OTHER), [])
+
+    def test_a_web_server_that_runs_fails(self) -> None:
+        running = pods({"state": {"terminated": {"exitCode": 0}}}, {"running": {}})
+        text = " ".join(chart.link_key_faults(running, LOG, LINK, OTHER))
+        self.assertIn("runs under another key", text)
+        self.assertIn("failed", text)
+
+    def test_a_log_that_names_one_key_fails(self) -> None:
+        text = " ".join(chart.link_key_faults(pods(FAILED, WAITING), f"the client pins {LINK}", LINK, OTHER))
+        self.assertIn("the key of the Secret", text)
+
+    def test_the_pinned_key_in_the_secret_proves_nothing(self) -> None:
+        self.assertIn("proves nothing", " ".join(chart.link_key_faults(pods(FAILED, WAITING), LOG, LINK, LINK)))
+
+    def test_a_cluster_with_no_web_pod_fails(self) -> None:
+        self.assertIn("no web pod", " ".join(chart.link_key_faults({"items": []}, LOG, LINK, OTHER)))
+
+
 class ProbeTest(unittest.TestCase):
     TARGETS = {"ambre-postgres:5432": False, "ambre-web:443": True}
 
