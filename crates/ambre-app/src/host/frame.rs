@@ -568,7 +568,7 @@ impl FrameHost {
 
         let mut plan = self.view.plan_repaint(raf_timestamp, hud_tick);
         // The mini video of the call bubble draws over the overlay of any application. So the
-        // overlay repaints at each frame it shows a picture (`MURMURE-699`, `CALL-015`).
+        // overlay repaints at each frame it shows a picture (`CALL-015`).
         if crate::call_stage::mini_repaints() {
             plan.overlay = LayerRepaint::Redraw;
         }
@@ -664,7 +664,7 @@ impl FrameHost {
                         },
                     );
                     // Last, the mini video of the call bubble, under the box the bubble
-                    // published, above everything the application drew (`MURMURE-698`).
+                    // published, above everything the application drew (the Murmure calls spec, section 3).
                     crate::call_stage::paint_mini(&mut surface);
                 }
             }

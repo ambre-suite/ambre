@@ -3901,13 +3901,13 @@ pub(crate) mod tests {
         }
     }
 
-    /// `MURMURE-699`, `MURMURE-698`: Ada and Bob are in a call from #general, and Ada sends her
+    /// `MURMURE-699`, `MURMURE-698`: Ada and Bob are in a call from #general. Ada sends her
     /// camera while the fake microphone of Chrome beeps, so she speaks. Bob opens #random, and
     /// the call floats over it as a bubble. A press on its faces opens the mini video.
     ///
     /// Bob's canvas draws Ada's video inside the box the bubble published: two readbacks differ,
     /// and every moved pixel lies in that box. A shot of the whole page, cut to the box, moves
-    /// too. The box of the bubble holds only still words, so those moved pixels are the canvas
+    /// too. The box of the bubble holds only still words. So those moved pixels are the canvas
     /// seen through it, and no outline or shadow of the bubble covers them. No video element
     /// enters the page (`CALL-015`).
     ///

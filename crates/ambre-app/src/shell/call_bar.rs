@@ -681,10 +681,10 @@ pub(super) fn RingAlert() -> impl IntoView {
 /// mute and hang up. A drag of the bubble moves it, and its release rests it in the nearest
 /// corner. Nothing here writes into a channel or changes the choice of videos.
 ///
-/// A press on the faces of the bubble opens its mini video (`MURMURE-699`). Over a picture, the
-/// box of the mini video paints nothing. The render runtime draws the picture on the canvas below
-/// it (`CALL-015`). So the bubble measures what it covers and publishes it at each
-/// change of its place or of its size (`MURMURE-698`).
+/// A press on the faces of the bubble opens its mini video. Over a picture, the box of the mini
+/// video paints nothing. The render runtime draws the picture on the canvas below it
+/// (`CALL-015`). So the bubble publishes what it covers at each move and each resize (the
+/// Murmure calls spec, section 3).
 #[component]
 pub(super) fn CallFloat(
     /// The pane the user is in, which names the shown channel.

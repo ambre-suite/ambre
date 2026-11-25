@@ -2301,7 +2301,7 @@ async fn two_frames() {
 /// `MURMURE-698`: the bubble publishes the box it covers, and the box of its mini video once a
 /// press on its faces opens it. The faces are a button with its name and its pressed state
 /// (`MURMURE-693`). Over a picture, the mini box is the topmost element at its centre and paints
-/// nothing, so the canvas below shows through (`MURMURE-699`, `CALL-015`). The way back clears
+/// nothing, so the canvas below shows through (`MURMURE-699`). The way back clears
 /// the cover. Under the phone width, the pill publishes no mini video.
 #[wasm_bindgen_test]
 async fn the_bubble_publishes_what_it_covers_and_the_box_of_its_mini_video() {
