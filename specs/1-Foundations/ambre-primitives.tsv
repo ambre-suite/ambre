@@ -5123,3 +5123,7 @@ ambre-murmure | src/logic/delta.rs | crate::logic::delta | receipt_set() | ret |
 ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | LINK_DOMAIN | const | &[u8]	generic	domain-separation tag of the link receipt transcript
 ambre-sync | src/erasure.rs | crate::erasure | holds() | ret | bool	generic	predicate answer: whether a signature verifies, selects no mode
 ambre-sync | src/erasure.rs | crate::erasure | linked() | ret | bool	generic	predicate answer: whether a link receipt proves the thread, selects no mode
+ambre-sync | src/erasure.rs | crate::erasure | linked_under() | ret | bool	generic	predicate answer: whether a key signed a receipt of the thread, selects no mode
+ambre-sync | src/erasure.rs | crate::erasure | LINK_KEY_SLOT_MARKER | const | [u8;16]	foreign-api	the bytes the patch of scripts/link_key.py searches the wasm for; a FixedBytes guarantees no byte layout
+ambre-sync | src/erasure.rs | crate::erasure | LinkKeySlot.marker | field | [u8;16]	foreign-api	the marker in the repr(C) layout the patch of scripts/link_key.py reads in the wasm; no code reads it
+ambre-sync | src/erasure.rs | crate::erasure | LinkKeySlot.key | field | [AtomicU8;32]	foreign-api	the std atomic, so no optimisation folds the bytes a patch writes; key() types them as FixedBytes<PublicKey>
