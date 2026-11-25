@@ -64,7 +64,7 @@ pub(crate) fn page_palette(theme: Theme) -> PagePalette {
 /// Where the canvas's top-left corner sits on the page. The chrome moves the
 /// view's positions onto the page by it. A canvas pixel is a CSS pixel
 /// (`CANVAS-032`), so the offset is the whole conversion.
-fn canvas_origin() -> Point<Px<Css>> {
+pub(crate) fn canvas_origin() -> Point<Px<Css>> {
     web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())

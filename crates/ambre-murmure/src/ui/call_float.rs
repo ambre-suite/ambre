@@ -6,9 +6,16 @@
 //! in a corner of the content (`MURMURE-696`, `MURMURE-703`), and a pill sits under the header on a
 //! phone (`MURMURE-697`). This module decides when it shows, where the bubble rests and what its clock
 //! reads. The page draws it in its DOM.
+//!
+//! A press on the faces of the bubble opens its mini video (`MURMURE-699`). The render runtime of
+//! the page draws that video, never an element over the canvas (`CALL-015`). So the bubble
+//! publishes the box of its mini video, and the runtime places the picture by that box, in each
+//! application alike.
 
 use ambre_core::id::{Channel, Id};
-use ambre_core::{FracMs, Px, Size, TimeSpan, View};
+use ambre_core::index::Pos;
+use ambre_core::{Css, FracMs, Point, Px, Size, TimeSpan, VideoSlots, View};
+use ambre_draw::Rect;
 
 use crate::ui::call_controls::CallPhase;
 
@@ -73,6 +80,71 @@ impl Corner {
     }
 }
 
+/// Whether the bubble shows its mini video, which a press on its faces sets (`MURMURE-699`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mini {
+    /// The bubble shows the faces alone.
+    #[default]
+    Folded,
+    /// The bubble shows the mini video under its faces.
+    Open,
+}
+
+impl Mini {
+    /// The state after a press on the faces.
+    #[must_use]
+    pub const fn toggled(self) -> Self {
+        match self {
+            Self::Folded => Self::Open,
+            Self::Open => Self::Folded,
+        }
+    }
+}
+
+/// The box of the mini video of the bubble, as the bubble last measured it, in CSS pixels of the
+/// window. The render runtime draws the picture through it (`MURMURE-699`). A box of no size
+/// holds no picture, so none exists.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MiniBox {
+    /// The box on the page, of a size above zero.
+    page: Rect,
+}
+
+impl MiniBox {
+    /// The box at `page`, or `None` for a box of no size: a box the stylesheet hides.
+    #[must_use]
+    pub fn on_page(page: Rect) -> Option<Self> {
+        (page.width() > 0.0 && page.height() > 0.0).then_some(Self { page })
+    }
+
+    /// The box on a canvas whose top left corner sits at `origin` on the page. A canvas pixel is
+    /// a CSS pixel (`CANVAS-032`), so the offset is the whole conversion.
+    #[must_use]
+    pub fn on_canvas(self, origin: Point<Px<Css>>) -> Rect {
+        let (dx, dy) = (f64::from(origin.x.get()), f64::from(origin.y.get()));
+        self.page - ambre_draw::Vec2::new(dx, dy)
+    }
+}
+
+/// The received videos the mini video of the bubble chooses from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Received {
+    /// The slot of the received screen, while one arrives.
+    pub screen: Option<Pos<VideoSlots>>,
+    /// The slot that carries the camera of the member who spoke last, while one does.
+    pub speaker: Option<Pos<VideoSlots>>,
+}
+
+impl Received {
+    /// The slot the mini video draws: the screen first, then the camera of the member who spoke
+    /// last. A speaker whose camera no slot carries leaves the faces alone, and the page asks the
+    /// SFU for nothing more (`MURMURE-699`, `MURMURE-702`).
+    #[must_use]
+    pub fn mini(self) -> Option<Pos<VideoSlots>> {
+        self.screen.or(self.speaker)
+    }
+}
+
 /// The clock of the bubble and of the pill: the minutes and the seconds of `elapsed`, as
 /// `mm:ss`, then `h:mm:ss` past an hour.
 #[must_use]
@@ -122,6 +194,41 @@ mod tests {
         assert_eq!(Corner::nearest(at(700.0, 400.0), area), Corner::BottomRight);
         assert_eq!(Corner::default(), Corner::BottomRight);
         assert_eq!(Corner::TopLeft.word(), "top-left");
+    }
+
+    /// `MURMURE-699`: the mini video draws a received screen first, then the camera of the member
+    /// who spoke last, and nothing while neither arrives.
+    #[test]
+    fn the_mini_video_draws_the_screen_then_the_speaker() {
+        let slot = Pos::<VideoSlots>::new;
+        let both = Received {
+            screen: Some(slot(9)),
+            speaker: Some(slot(2)),
+        };
+        assert_eq!(both.mini(), Some(slot(9)));
+        let speaker = Received {
+            screen: None,
+            speaker: Some(slot(2)),
+        };
+        assert_eq!(speaker.mini(), Some(slot(2)));
+        assert_eq!(Received::default().mini(), None);
+        assert_eq!(Mini::default(), Mini::Folded);
+        assert_eq!(Mini::Folded.toggled(), Mini::Open);
+        assert_eq!(Mini::Open.toggled(), Mini::Folded);
+    }
+
+    /// `MURMURE-699`: the mini video lands on the canvas at its box on the page, less the corner
+    /// of the canvas. A box of no size holds no picture.
+    #[test]
+    fn the_mini_video_lands_at_its_box_less_the_corner_of_the_canvas() {
+        let origin = Point::new(Px::<Css>::new(40.0), Px::<Css>::new(96.0));
+        let mini = MiniBox::on_page(Rect::new(701.0, 450.0, 959.0, 595.0)).expect("a box");
+        assert_eq!(
+            mini.on_canvas(origin),
+            Rect::new(661.0, 354.0, 919.0, 499.0)
+        );
+        assert_eq!(MiniBox::on_page(Rect::new(10.0, 10.0, 10.0, 40.0)), None);
+        assert_eq!(MiniBox::on_page(Rect::new(10.0, 10.0, 40.0, 10.0)), None);
     }
 
     /// The clock reads minutes and seconds, then hours past an hour.
