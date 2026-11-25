@@ -374,6 +374,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A paste over a selection is one undo item | MVP | a paste over a text selection in Prose takes the selection out and then pastes, as two commands. The first undo puts the paste back and leaves the selected text deleted. Done when one undo takes back the paste and the text it replaced, and `CHROME-184` reads `verified` |
 | `[x]` An undo across a split at a join restores both blocks | MVP | a delete across two blocks, then a split at the join, then two undos, read `helloworld ond` where the two blocks `hello world` and `second` stood. A paste of several lines across two blocks takes the same path, so `CHROME-184` leaves that case out. Done when the undo history of `ambre-crdt` replays that sequence back to both blocks, and a row binding it reads `verified` |
 | `[x]` An undo of the author's own typing over restored text takes it back | MVP | delete a word, type a letter, delete it, then undo three times: the text reads `hello xworld`. After an undo puts text back, the guard of `UNDO-018` treats the author's own typing over it as a peer's and keeps it. Done when that sequence ends on the original text, and a row binding it reads `verified` |
+| `[ ]` A font the panel names reaches the text | MVP | a font label other than Sans, Serif or Monospace, such as Georgia, resolves to Sans, because no face ships for it. The panel shows the label and the text does not change. Done when the panel offers only the fonts a face ships for, or a row states the face each label falls back to and the panel shows it, and reads `verified` |
 
 ### Murmure
 
@@ -669,6 +670,8 @@ row reads `V1`.
 | `[ ]` A block gesture that writes nothing says so | V1 | a block property that applies to no block of the selection, such as an indent of the first item of a run, writes nothing and reports no refusal. Done when such a gesture reports its refusal and a row reads `verified` |
 | `[ ]` A selection write that fails halfway writes nothing | V1 | a store error in the middle of a write over a selection leaves the blocks before it written and uncommitted. The format path of the selection has the same flaw. Done when a failed write leaves the document as it was and a row reads `verified` |
 | `[ ]` A nested item that leaves its list alone | V1 | a nested list item that leaves its list without its parent stays a paragraph inside the parent item. No rule says whether it rises to the top level. Done when a row states where it lands and reads `verified` |
+| `[ ]` A transparent ink stays transparent | V1 | a mark ink of `#00000000` draws in the ink of the page, because the default brush of the shaper is transparent too. Done when a row states what a transparent ink draws and reads `verified` |
+| `[ ]` The contrast of a marked ink on the paper | V1 | `PROSE-UI-255` holds the contrast of the page ink alone. A colour mark can draw text the paper hides. Done when a row states the contrast a marked ink holds, or what the panel warns, and reads `verified` |
 
 ### Murmure
 
