@@ -375,14 +375,17 @@ impl MembershipEntry {
     /// Whether the entry's shape is one a log can hold: the first entry alone
     /// lacks a previous digest. A signature of another length does not
     /// decode.
-    #[must_use]
     ///
-    /// Document caps stand on a revoke alone, and none names the document of
-    /// the log, whose cap is [`MembershipEntry::cap`] (`SYNC-311`).
+    /// The cap, the document caps and the floor stand on a revoke alone
+    /// (`SYNC-340`). No document cap names the document of the log, whose
+    /// cap is [`MembershipEntry::cap`] (`SYNC-311`).
+    #[must_use]
     pub fn well_formed(&self) -> bool {
         (self.position == Seq::ZERO) == self.previous.is_none()
-            && ((self.document_caps.is_empty() && self.elsewhere == Elsewhere::Uncapped)
-                || self.act == MembershipAct::Revoke)
+            && (self.act == MembershipAct::Revoke
+                || (self.cap.is_none()
+                    && self.document_caps.is_empty()
+                    && self.elsewhere == Elsewhere::Uncapped))
             && self
                 .document_caps
                 .iter()
@@ -649,6 +652,29 @@ mod tests {
         let mut invite = entry();
         invite.elsewhere = Elsewhere::Zero;
         assert!(!invite.well_formed(), "a floor on an invite");
+    }
+
+    /// Holds `SYNC-340` at the shape. A cap stands on a revoke alone. On any
+    /// other act, the entry is malformed. Without a cap, each act is well
+    /// formed.
+    #[test]
+    fn a_cap_stands_on_a_revoke_alone() {
+        let acts = [
+            MembershipAct::Create,
+            MembershipAct::Invite,
+            MembershipAct::Revoke,
+            MembershipAct::ChangeRole,
+            MembershipAct::SelfJoin,
+        ];
+        for act in acts {
+            let mut uncapped = entry();
+            uncapped.act = act;
+            assert!(uncapped.well_formed(), "{act:?} with no cap");
+            let mut capped = uncapped.clone();
+            capped.cap = Some(Seq::<DeltaAuthor>::new(2));
+            let revoke = act == MembershipAct::Revoke;
+            assert_eq!(capped.well_formed(), revoke, "{act:?} with a cap");
+        }
     }
 
     /// An ownerless log opens with its creation, and leaves the creator and
