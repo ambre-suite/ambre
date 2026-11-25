@@ -438,7 +438,7 @@ impl TrackIn {
     /// The layers of the track at `now`, from the lowest measured bitrate up.
     ///
     /// A camera layer that sent nothing for the silence of the meter is not offered. The
-    /// choice then moves its receivers to a layer that still sends (`CALL-162`). The screen keeps
+    /// choice then moves its receivers to a layer that still sends (`CALL-164`). The screen keeps
     /// its one layer: a still screen sends nothing for seconds, and its slot must hold.
     fn offered(&self, now: Instant) -> Vec<Offered> {
         let mut offered: Vec<Offered> = self

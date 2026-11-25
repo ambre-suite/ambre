@@ -787,7 +787,7 @@ fn a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker() {
     }
 }
 
-/// `CALL-162`: the speaker stops its top layer, as a browser short of CPU does. Each receiver
+/// `CALL-164`: the speaker stops its top layer, as a browser short of CPU does. Each receiver
 /// then gets its middle layer within the layer expiry budget, on each path of [`SEEDS`].
 #[test]
 fn a_top_layer_that_stops_hands_its_receivers_the_layer_below() {

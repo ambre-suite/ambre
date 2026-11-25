@@ -1295,6 +1295,7 @@ mod tests {
                 channel_id,
                 meta,
                 last: None,
+                call: None,
             }],
         };
         state.handle_logic_event(listed("old board"));
@@ -1353,6 +1354,7 @@ mod tests {
                 channel_id,
                 meta,
                 last: None,
+                call: None,
             }],
         };
         let ready = |state: &mut LogicState, role: ambre_bus::Role| {
@@ -1694,6 +1696,7 @@ mod tests {
                 channel_id: channels[0].channel_id,
                 meta: Id::<Meta>::mint(),
                 last: None,
+                call: None,
             }],
         });
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();

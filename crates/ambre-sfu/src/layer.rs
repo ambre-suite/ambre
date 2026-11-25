@@ -214,7 +214,7 @@ pub struct Meter {
 const WINDOW: Duration = Duration::from_millis(500);
 
 /// How long a camera layer may send nothing before it leaves the layer choice, from the SFU
-/// layer expiry row of `ambre-spec-budgets.md section 3` (`CALL-162`). Two windows: a still
+/// layer expiry row of `ambre-spec-budgets.md section 3` (`CALL-164`). Two windows: a still
 /// camera still sends a picture well inside that time.
 pub const SILENCE: Duration = Duration::from_secs(1);
 
@@ -260,7 +260,7 @@ impl Meter {
 
     /// The last bitrate measured, or none once the layer sent nothing for [`SILENCE`] at `now`.
     /// A layer that stops then leaves the choice, and the receiver gets a layer that still
-    /// sends (`CALL-162`).
+    /// sends (`CALL-164`).
     pub fn live_rate(&self, now: Instant) -> Option<Bitrate> {
         (now.saturating_duration_since(self.last) < SILENCE).then_some(self.rate)
     }

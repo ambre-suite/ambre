@@ -1285,6 +1285,36 @@ return answer
     Ok(CallRoster::Live(seated))
 }
 
+/// The live call each key of `channels` names, in the order asked, as one read of the store
+/// (`CALL-162`). `None` where the key is absent or holds no call identifier. It writes nothing.
+///
+/// # Errors
+/// A store error.
+pub async fn channel_calls(
+    redis: &Client,
+    channels: &[Id<Channel>],
+) -> Result<Vec<Option<Id<ambre_core::id::Call>>>, AppError> {
+    if channels.is_empty() {
+        return Ok(Vec::new());
+    }
+    let keys: Vec<String> = channels
+        .iter()
+        .map(|channel| {
+            crate::redis_keys::ChannelCallKey::of(channel)
+                .as_str()
+                .to_owned()
+        })
+        .collect();
+    let held = redis
+        .mget::<Vec<Option<String>>>(keys)
+        .await
+        .map_err(|e| AppError::Redis(crate::error::FaultText::of("channel calls", e)))?;
+    Ok(held
+        .into_iter()
+        .map(|call| Id::<ambre_core::id::Call>::parse_str(&call?).ok())
+        .collect())
+}
+
 /// Stores an opaque presence blob in Redis and sets a TTL.
 ///
 /// The blob is the encrypted ephemeral ciphertext -- the server never

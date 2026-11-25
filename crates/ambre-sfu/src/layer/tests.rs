@@ -86,7 +86,7 @@ fn the_meter_reads_the_rate_of_its_packets() {
     assert!((900.0..1100.0).contains(&kbps), "measured {kbps} kbit/s");
 }
 
-/// `CALL-162`: a layer that sends nothing for the silence of the meter has no live rate. One
+/// `CALL-164`: a layer that sends nothing for the silence of the meter has no live rate. One
 /// packet after the silence starts it again from nothing.
 #[test]
 fn a_silent_layer_has_no_live_rate_until_it_sends_again() {

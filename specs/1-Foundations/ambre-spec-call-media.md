@@ -176,7 +176,7 @@ The downlink estimate of a receiver falls below what the SFU forwards it.
 | `CALL-038` | `POST` | Given a receiver whose downlink estimate falls below what it receives, the SFU MUST forward it a lower layer within the delay of `ambre-spec-budgets.md section 3`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_capped_receiver_drops_a_layer_within_the_budget` -- eight seeded runs at 150 ms of round trip and 2 % loss; `ambre_sfu::congestion::tests::the_target_falls_under_a_new_cap_within_a_second` -- the controller alone | none | verified |
 | `CALL-043` | `FRAME` | A layer drop for one receiver MUST NOT change the layer another receiver gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_layer_drop_for_one_receiver_leaves_another_receiver_on_its_layer` -- eight seeded runs | none | verified |
 | `CALL-044` | `FRAME` | A random loss of 10 % or less on the downlink of a receiver MUST NOT lower the layer it gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_of_twenty_keeps_the_top_layer_up_to_ten_percent_loss` -- a call of twenty at 150 ms of round trip, 2 % and 10 % of loss; `ambre_sfu::congestion::tests::the_target_holds_under_random_loss_up_to_ten_percent` -- a modelled link at 2 %, 5 % and 10 % | none | verified |
-| `CALL-162` | `POST` | Given a camera layer that sends no packet for the silence of the SFU layer expiry row of `ambre-spec-budgets.md section 3`, the SFU MUST forward each of its receivers a layer that still sends, within the delay of that row. | this spec section 3, the SFU; `CALL-039` | `ambre_sfu::sim::tests::a_top_layer_that_stops_hands_its_receivers_the_layer_below` -- eight seeded runs at 150 ms of round trip and 2 % loss: the speaker stops its top layer, and both receivers get its middle layer; `ambre_sfu::layer::tests::a_silent_layer_has_no_live_rate_until_it_sends_again` -- the meter alone | none | verified |
+| `CALL-164` | `POST` | Given a camera layer that sends no packet for the silence of the SFU layer expiry row of `ambre-spec-budgets.md section 3`, the SFU MUST forward each of its receivers a layer that still sends, within the delay of that row. | this spec section 3, the SFU; `CALL-039` | `ambre_sfu::sim::tests::a_top_layer_that_stops_hands_its_receivers_the_layer_below` -- eight seeded runs at 150 ms of round trip and 2 % loss: the speaker stops its top layer, and both receivers get its middle layer; `ambre_sfu::layer::tests::a_silent_layer_has_no_live_rate_until_it_sends_again` -- the meter alone | none | verified |
 
 ### 1.7 Raise a layer again
 
@@ -205,6 +205,7 @@ A member of the channel, in the call or not, asks the relay for the seats of a c
 | `CALL-070` | `POST` | The relay MUST answer a member of the channel with the signed join of each seat of the call, or with no state once it holds none. | this spec section 3, the roster; `ZK-022` | `ambre_server::ws::handler::call::tests::a_member_out_of_the_call_reads_the_signed_join_of_each_seat` -- database tier | none | verified |
 | `CALL-071` | `FAIL` | Given an asker who is no member of the channel, or a call of another channel, the relay MUST answer as for a call it holds no state of. | this spec section 3, the roster; `CALL-019` | `ambre_server::ws::handler::call::tests::a_stranger_or_another_channel_reads_a_running_call_as_gone` -- database tier | none | verified |
 | `CALL-072` | `FRAME` | An ask MUST NOT change the state of the call in the ephemeral store. | this spec section 3, the roster; `ZK-024` | `ambre_server::ws::handler::call::tests::an_ask_changes_nothing_of_the_store` -- database tier: the keys of the call, their fields and their expiry read the same | none | verified |
+| `CALL-162` | `POST` | The listing of the channels of a member MUST name the live call of each of those channels, and of no other channel. | this spec section 3, the roster; `CALL-160`; `ZK-056` | `ambre_server::ws::handler::call::tests::a_member_reads_the_live_call_of_its_own_channels_alone` -- database tier: a channel with no call names none, and a stranger reads none; `ambre_sync::channels::tests::the_live_call_of_a_listed_channel_rides_its_meta` -- the client reads it with the `meta` of its channel | none | verified |
 
 ### 1.10 Mute a call
 
@@ -273,7 +274,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 163 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 164 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -515,6 +516,10 @@ a call of another channel, read the same answer as a call the relay holds none o
 The route reads the state of the call and writes nothing (`CALL-072`, `ZK-024`). The reader
 checks each join against the membership log of the channel, as a participant does
 (`MURMURE-596`).
+
+**The live calls of a user.** `GET /api/channels` names the live call of each channel it lists,
+from the key of each channel (`CALL-160`, `CALL-162`). It reads the keys in one read more, and
+writes nothing (`ZK-056`).
 
 **The client of a call** runs in the Sync worker. It reads the membership log of the channel,
 then opens the call socket. The log counts only once it stands on a root of the client, as an
@@ -949,7 +954,7 @@ that holds no whole header, since the next packet could complete it under anothe
   audio slot moves at the next packet. The SFU shifts the fields the same way (`CALL-048`).
 * The receiver reads the sender of each chunk from its key identifier. So no signal names the
   sender of a slot.
-* A camera layer that sends no packet for 1 s leaves the layer choice (`CALL-162`). A browser
+* A camera layer that sends no packet for 1 s leaves the layer choice (`CALL-164`). A browser
   short of CPU stops its top layer, and a receiver on it would see a frozen picture. The layer
   comes back with its next packet, measured again from nothing. The screen keeps its one
   layer, since a still screen sends nothing for seconds.

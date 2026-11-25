@@ -13,6 +13,7 @@
 // ============================================================================
 
 use ambre_commands::{Locale, Property, Reach};
+use ambre_core::index::Pos;
 use ambre_core::{Commands, Count, Mm, PanelSections, PrintLength, Properties, StaticKey};
 
 use crate::commands;
@@ -256,13 +257,37 @@ ambre_core::define_flag! {
     }
 }
 
+/// The selection the context panel showed when a control was picked: its
+/// two ends, in flow order.
+///
+/// The view publishes it every frame, and a pick copies it into its write.
+/// A caret that moves before the outbox frees then moves no write
+/// (`PROSE-UI-281`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PickedSelection {
+    /// The end that comes first in the flow.
+    pub anchor: (crate::events::BlockId, Pos<crate::message::DocChar>),
+    /// The end that comes last in the flow.
+    pub focus: (crate::events::BlockId, Pos<crate::message::DocChar>),
+}
+
 /// What a control of the text, paragraph or default styles sections asks
 /// for, until the view turns it into one command (`PROSE-UI-098`).
 ///
-/// The panel holds no selection: the view adds the one it holds, so a
-/// write always reaches the selection the panel shows.
+/// The write carries the selection the panel showed at the pick. The view
+/// writes over that selection, never over the one it holds when the outbox
+/// frees (`PROSE-UI-281`).
 #[derive(Clone, Debug, PartialEq)]
-pub enum TextWrite {
+pub struct TextWrite {
+    /// What the control asks for.
+    pub value: TextValue,
+    /// The selection at the pick, or `None` when the panel showed none.
+    pub selection: Option<PickedSelection>,
+}
+
+/// The value a control of the context panel writes.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TextValue {
     /// A font, or `None` for the block's own.
     Font(Option<ambre_core::FontFamily>),
     /// A size, or `None` for the block's own.
