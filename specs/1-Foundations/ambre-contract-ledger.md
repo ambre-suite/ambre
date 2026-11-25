@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5221 rows: 4830 shipped, of which 14 loose. 391 unbuilt.**
+**5234 rows: 4844 shipped, of which 14 loose. 390 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1814 | 583 | 1003 | 849 | 567 | 4816 |
+| `verified` | 1822 | 583 | 1003 | 851 | 571 | 4830 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 144 | 42 | 20 | 20 | 165 | 391 |
+| `unimplemented` | 143 | 42 | 20 | 20 | 165 | 390 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -60,7 +60,7 @@
 | `ambre-spec-launcher.md` | 55 | 55 | 55 |  |  |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-membership.md` | 124 | 124 | 124 |  |  |
+| `ambre-spec-membership.md` | 126 | 126 | 126 |  |  |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 25 | 24 | 24 |  | 1 |
@@ -73,16 +73,16 @@
 | `ambre-spec-residency.md` | 32 | 32 | 32 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 31 | 31 | 31 |  |  |
-| `ambre-spec-sequencer.md` | 89 | 89 | 89 |  |  |
-| `ambre-spec-server.md` | 144 | 137 | 136 | 1 | 7 |
+| `ambre-spec-sequencer.md` | 90 | 90 | 90 |  |  |
+| `ambre-spec-server.md` | 147 | 140 | 139 | 1 | 7 |
 | `ambre-spec-session.md` | 54 | 54 | 54 |  |  |
-| `ambre-spec-shell.md` | 102 | 97 | 97 |  | 5 |
+| `ambre-spec-shell.md` | 102 | 98 | 98 |  | 4 |
 | `ambre-spec-sync.md` | 91 | 90 | 90 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-undo.md` | 25 | 25 | 25 |  |  |
-| `ambre-spec-user-settings.md` | 45 | 45 | 45 |  |  |
+| `ambre-spec-user-settings.md` | 46 | 46 | 46 |  |  |
 | `ambre-spec-zero-knowledge.md` | 56 | 55 | 54 | 1 | 1 |
 | `ambre-spec-zoom.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
@@ -156,7 +156,7 @@
 | `ambre-spec-prose-import-export.md` | 104 | 104 | 104 |  |  |
 | `ambre-spec-prose-inline-styles.md` | 31 | 29 | 29 |  | 2 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
-| `ambre-spec-prose-page-rendering.md` | 26 | 25 | 25 |  | 1 |
+| `ambre-spec-prose-page-rendering.md` | 27 | 26 | 26 |  | 1 |
 | `ambre-spec-prose-pagination.md` | 59 | 59 | 59 |  |  |
 | `ambre-spec-prose-pdf-export.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-prose-ruler.md` | 9 | 9 | 9 |  |  |
@@ -166,7 +166,7 @@
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 47 | 47 | 47 |  |  |
 | `ambre-spec-prose-text-editing.md` | 45 | 45 | 45 |  |  |
-| `ambre-spec-prose-toolbar.md` | 37 | 37 | 37 |  |  |
+| `ambre-spec-prose-toolbar.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-track-changes.md` | 45 | 43 | 43 |  | 2 |
 | `ambre-spec-prose-undo.md` | 6 | 6 | 6 |  |  |
 | `ambre-spec-prose-viewport.md` | 24 | 24 | 24 |  |  |
@@ -191,7 +191,7 @@
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-murmure-sidebar.md` | 22 | 5 | 5 |  | 17 |
 | `ambre-spec-murmure-spaces.md` | 41 | 36 | 36 |  | 5 |
-| `ambre-spec-murmure-threads.md` | 29 | 23 | 23 |  | 6 |
+| `ambre-spec-murmure-threads.md` | 33 | 27 | 27 |  | 6 |
 | `ambre-spec-murmure-typing-presence.md` | 16 | 14 | 14 |  | 2 |
 | `ambre-spec-murmure-unread.md` | 18 | 18 | 18 |  |  |
 
@@ -229,7 +229,7 @@
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176,228,288 |
-| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..284,289..291,298..304,306..317,319..329 |
+| `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..212,214..215,217..222,225..227,229..247,260,262..263,266..268,272..274,279,282..284,289..291,298..304,306..317,319..331 |
 | `ambre-spec-message-bus.md` | BUS-001..046 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628,636..637 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
@@ -254,11 +254,11 @@
 | `ambre-spec-murmure-pins.md` | MURMURE-338..347 |
 | `ambre-spec-murmure-reactions.md` | MURMURE-091..097 |
 | `ambre-spec-murmure-schema.md` | MURMURE-001..020,157,437,566,582 |
-| `ambre-spec-murmure-search.md` | MURMURE-147..151,313..316,318..322,336..337,478,496,732 |
+| `ambre-spec-murmure-search.md` | MURMURE-147..151,313..316,318..322,336..337,478,496,736 |
 | `ambre-spec-murmure-segments.md` | MURMURE-062..077,153,222,238..239,263,435..436,481..483 |
 | `ambre-spec-murmure-sidebar.md` | MURMURE-275..289,298,720..725 |
 | `ambre-spec-murmure-spaces.md` | MURMURE-031..045,234..237,247..250,254,258,301..304,317,466,479..480,487,583..585,635,671..673 |
-| `ambre-spec-murmure-threads.md` | MURMURE-105..112,260..261,290..295,415,484..485,497,532..533,538..539,545..548,588 |
+| `ambre-spec-murmure-threads.md` | MURMURE-105..112,260..261,290..295,415,484..485,497,532..533,538..539,545..548,588,732..735 |
 | `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297,515..518,521,536..537 |
 | `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499,587 |
 | `ambre-spec-newtypes.md` | NEWTYPE-001 |
@@ -281,7 +281,7 @@
 | `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..102,111..129 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311,313,337..338 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
-| `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210,236,255,280 |
+| `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210,236,255,280,283 |
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123,125,127..128,136..143 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039,103..104 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076,228..230,257 |
@@ -292,7 +292,7 @@
 | `ambre-spec-prose-table-of-contents.md` | PROSE-FEAT-003,060..062,113..118,291..292; PROSE-UI-082..083 |
 | `ambre-spec-prose-tables.md` | PROSE-009,040; PROSE-FEAT-017,044..051,227..256,293..294; PROSE-UI-147,179..181 |
 | `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116,124; PROSE-UI-004..005,027..030,134..143,176..178,182..185,197..204,206,208,213..216 |
-| `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104,188..192,252..254,258..267,271,277..279,281 |
+| `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104,188..192,252..254,258..267,271,277..279,281..282 |
 | `ambre-spec-prose-track-changes.md` | PROSE-FEAT-004,010..011,082..089,257..277,300..304; PROSE-UI-051..052,148,272..276 |
 | `ambre-spec-prose-undo.md` | PROSE-133..135; PROSE-UI-045,073..074 |
 | `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212,217..218,250..251,256 |
@@ -301,8 +301,8 @@
 | `ambre-spec-residency.md` | RESID-001..032 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259,287,297 |
-| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307,335..336,347,349,353,359 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318,339,346,348,351..352,354..358 |
+| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307,335..336,347,349,353,359,363 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318,339,346,348,351..352,354..358,360..362 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303,319..333,337..338,340..345 |
 | `ambre-spec-shell.md` | CHROME-148..198,207..257 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271,275,277..278,281,292..296,305,318 |
@@ -368,6 +368,6 @@
 | `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154,286..288,290..291,298..301 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064,067 |
 | `ambre-spec-undo.md` | UNDO-001..025 |
-| `ambre-spec-user-settings.md` | SETTINGS-001..045 |
+| `ambre-spec-user-settings.md` | SETTINGS-001..046 |
 | `ambre-spec-zero-knowledge.md` | ZK-001..056 |
 | `ambre-spec-zoom.md` | ZOOM-001..011 |

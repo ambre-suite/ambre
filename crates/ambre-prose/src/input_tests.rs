@@ -1523,6 +1523,24 @@ fn the_bar_shows_over_a_selection_and_goes_with_it() {
     assert!(!rig.ui.toolbar().visible());
 }
 
+/// `CHROME-180`, `PROSE-UI-282`: the comment of the creation bar opens the
+/// comment field over a selection. With a caret alone, it opens nothing,
+/// and a command that is no field opens nothing either.
+#[test]
+fn the_comment_of_the_creation_bar_opens_its_field_over_a_selection_alone() {
+    use crate::commands::{BOLD, COMMENT, LINK};
+    use crate::view::toolbar::BarPrompt;
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    assert_eq!(rig.ui.prompt(COMMENT), None, "no caret");
+    rig.ui.set_caret((block, Pos::<DocChar>::new(3)));
+    assert_eq!(rig.ui.prompt(COMMENT), None, "a caret alone");
+    rig.select(block, 0, 5);
+    assert_eq!(rig.ui.prompt(COMMENT), Some(BarPrompt::Comment));
+    assert_eq!(rig.ui.prompt(LINK), Some(BarPrompt::Link));
+    assert_eq!(rig.ui.prompt(BOLD), None);
+}
+
 /// `CHROME-241`: the subtitle of the panel counts the words of the selected
 /// text, across blocks, and none with no selection.
 #[test]

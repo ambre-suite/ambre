@@ -59,6 +59,8 @@ GARAGE_KEY_ID=GK$(hex 12)
 GARAGE_KEY_SECRET=$(hex 32)
 JWT_SIGNING_SEED=$(hex 32)
 CALL_ADMISSION_SEED=$admission_seed
+# The seed of the thread link receipts (\`SRV-363\`).
+THREAD_LINK_SEED=$(hex 32)
 SFU_ADMISSION_KEY=$admission_key
 TURN_SECRET=$(hex 32)
 # The bearer token a scrape of the relay metrics presents (\`SRV-318\`).

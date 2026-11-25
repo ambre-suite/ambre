@@ -30,7 +30,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-098` | `INV` | The bar MUST NOT have a path into the document of its own: every control MUST reach it through a command the plane already declares. | this spec section 5 | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection`; `ambre_prose::tests::chrome_ui::a_control_press_hands_its_command_back_and_keeps_the_focus` -- wasm tier: a click on each control writes its declared command id, and its press keeps the focus | none | verified |
 | `PROSE-UI-192` | `INV` | One gesture on a control MUST be taken back by one undo, whatever the number of blocks it covers. | derived | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
 | `PROSE-UI-258` | `OBS` | The selection MUST report to the context panel a reading of each value it edits, and a value two parts of the selection disagree on MUST read mixed. | this spec section 3; `CHROME-210` | `ambre_prose::logic::selection::tests::the_reading_reports_each_value_and_mixed_where_parts_disagree`; `ambre_prose::tests::chrome_panel::with_a_selection_the_panel_shows_each_text_and_paragraph_control` -- wasm tier, each control reads its value; `ambre_prose::tests::chrome_panel::a_mixed_paragraph_reads_mixed_in_the_panel` -- wasm tier | none | verified |
-| `PROSE-UI-262` | `OBS` | The bar MUST show, in order, bold, italic, underline, the link, a paragraph style list and a comment control; a comment from it MUST open a thread over the part of the selection in its first block. | this spec section 3; `CHROME-208` | `ambre_prose::tests::chrome_ui::the_format_bar_follows_the_mockup_and_opens_its_fields` -- wasm tier, the order of the controls, the list and the two fields; `ambre_prose::input_tests::a_comment_from_the_bar_anchors_in_the_first_block_of_the_selection` | none | verified |
+| `PROSE-UI-262` | `OBS` | The bar MUST show, in order, bold, italic, underline, the link and a paragraph style list; a comment from its field MUST open a thread over the part of the selection in its first block. | this spec section 3; `CHROME-208`; `CHROME-180` | `ambre_prose::tests::chrome_ui::the_format_bar_follows_the_mockup_and_opens_its_fields` -- wasm tier, the order of the controls, no comment control, the list and the two fields; `ambre_prose::input_tests::a_comment_from_the_bar_anchors_in_the_first_block_of_the_selection` | none | verified |
+| `PROSE-UI-282` | `OBS` | With no text selected, the comment of the creation bar MUST open no field. | this spec section 3; `CHROME-180`; `PROSE-FEAT-295` | `ambre_prose::input_tests::the_comment_of_the_creation_bar_opens_its_field_over_a_selection_alone` -- no caret and a caret alone open nothing, a selection opens the comment field; `ambre_prose::tests::chrome_panel::the_comment_of_the_creation_bar_reaches_the_view` -- wasm tier, the press lands where the view drains a control's id | none | verified |
 | `PROSE-UI-263` | `OBS` | A quote MUST be laid out italic and set in from the left, unless the paragraph names a left indent of its own. | this spec section 3; `ambre-spec-prose-schema.md section 5` | `ambre_prose::logic::selection::tests::a_quote_is_laid_out_italic_and_set_in` | none | verified |
 | `PROSE-UI-253` | `OBS` | With no text selected, the context panel MUST show the page format, the orientation and the four margins the document holds. | `ambre-spec-prose-schema.md section 3`; `CHROME-163` | `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_page_the_layout_holds` -- wasm tier, the paper, the orientation and the four margins of a landscape page; `ambre_prose::logic::bands::tests::a_page_write_sets_the_whole_format_and_one_undo_takes_it_back` -- the layout carries the format the panel reads | none | verified |
 
@@ -84,7 +85,7 @@ status values are normative in `ambre-spec-template.md`.
   recomposition and no layout pass (`ambre-spec-ui.md section 4`).
 * **Boundary.** none: the bar reads view state and emits commands. It holds no key, opens no
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
-* **Verification.** 37 `verified`. Every row runs on the host against the view state and the Logic
+* **Verification.** 38 `verified`. Every row runs on the host against the view state and the Logic
   thread, with no browser. The wasm tier adds the bar and the panel elements: their controls, their
   order and the value each hands to the view. The glyphs take the size, the font, the colour and the
   highlight the panel writes (`PROSE-UI-210`, `PROSE-UI-280`).
@@ -171,7 +172,7 @@ keyboard chord invokes. That id resolves to one command of the plane
 | the alignment, line spacing and indent controls of the panel | `SetSelectionParagraph`, naming the one property |
 | the paragraph style list, the heading, quote, body and list chips | `SetSelectionKind`, on every paragraph, heading and list item the selection covers |
 | the two indent steps of the panel | `IndentSelection`: a list item changes level, another block moves 36 pt of left indent (`PROSE-UI-267`) |
-| the comment control | opens the comment field; Enter sends `AddComment` over the part of the selection in its first block |
+| the comment of the creation bar | opens the comment field under the bar, over a selection alone; Enter sends `AddComment` over the part of the selection in its first block |
 | the body font and the heading font, with no selection | `SetDefaultFont`, naming the font; the Body font entry of the heading picker sends no family, which deletes the key |
 
 Each of these commands writes every block it reaches, then commits once, so one undo takes the
@@ -203,8 +204,11 @@ the Logic thread reports about it. The bar never remembers a mark across a selec
 **Code:** `crates/ambre-prose/src/view/toolbar.rs` for the state and the commands a control sends,
 `crates/ambre-prose/src/logic/marks.rs` for the fold. `crates/ambre-prose/src/logic/selection.rs`
 holds the writes over a selection, and `ProseFormatBar` in `crates/ambre-prose/src/chrome/mod.rs`
-the element. The bar shows bold, italic, underline, the link, the paragraph style list and
-the comment (`PROSE-UI-262`). Strike-through, inline code and the colours live in the panel.
+the element. The bar shows bold, italic, underline, the link and the paragraph style list
+(`PROSE-UI-262`). Strike-through, inline code and the colours live in the panel. A thread is a
+new object, so its command lives in the creation bar, and its field opens under this bar
+(`CHROME-180`). With no text selected, no bar shows, and the press opens nothing
+(`PROSE-UI-282`).
 
 ---
 
@@ -238,7 +242,7 @@ respecified here (`ambre-spec-chrome.md`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No control opens a suggestion.** The comment control opens a thread
+* **No control opens a suggestion.** The comment of the creation bar opens a thread
   (`PROSE-UI-262`); a suggestion is still started by the mode alone
   (`features/ambre-spec-prose-track-changes.md section 6`).
 * **A remote edit does not move a waiting write.** The view moves its caret through a remote

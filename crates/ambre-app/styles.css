@@ -1178,7 +1178,7 @@ body {
     background: var(--bg);
 }
 
-/* The search box of the command bar, its results under it (MURMURE-732).
+/* The search box of the command bar, its results under it (MURMURE-736).
    The box closes the bar on its right end. The results hang from the bar,
    never from the box: the box moves along the bar, and a list anchored on it
    crossed the left edge of the window at 1440 px. The bar wraps on a phone:

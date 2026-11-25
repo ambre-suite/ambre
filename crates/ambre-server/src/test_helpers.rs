@@ -92,7 +92,8 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
         config: Arc::new(Config::default()),
         jwt: Arc::new(
             JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(TEST_JWT_SEED))
-                .with_admission(&crate::jwt::JwtSeed::from_array(TEST_ADMISSION_SEED)),
+                .with_admission(&crate::jwt::JwtSeed::from_array(TEST_ADMISSION_SEED))
+                .with_link(&crate::jwt::JwtSeed::dev_link()),
         ),
         oidc_clients: empty_oidc_clients(),
     })
@@ -123,7 +124,8 @@ pub async fn second_instance(base: &AppState) -> Arc<AppState> {
         config: Arc::clone(&base.config),
         jwt: Arc::new(
             JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(TEST_JWT_SEED))
-                .with_admission(&crate::jwt::JwtSeed::from_array(TEST_ADMISSION_SEED)),
+                .with_admission(&crate::jwt::JwtSeed::from_array(TEST_ADMISSION_SEED))
+                .with_link(&crate::jwt::JwtSeed::dev_link()),
         ),
         oidc_clients: Arc::clone(&base.oidc_clients),
     })

@@ -461,9 +461,9 @@ async fn the_spelling_popover_lists_the_corrections_and_hands_back_a_pick() {
 }
 
 /// `PROSE-UI-262`: the bar shows, in order, bold, italic, underline, the
-/// link, the paragraph style list and the comment. The list hands its pick
-/// to the view; the comment and the link open a field whose Enter hands its
-/// text to the view.
+/// link and the paragraph style list, and no comment, which the creation bar
+/// homes. The list hands its pick to the view. The comment and the link
+/// open a field whose Enter hands its text to the view.
 #[wasm_bindgen_test]
 async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
     use ambre_prose::view::panel::{PanelKind, TextValue};
@@ -527,10 +527,13 @@ async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
         ))
     );
 
-    // The comment opens its field; Enter hands the text to the view.
-    one(&root, "[aria-label=\"Comment\"]")
-        .expect("the comment")
-        .click();
+    // The comment of the creation bar opens its field under the bar; Enter
+    // hands the text to the view.
+    assert!(
+        one(&root, "[aria-label=\"Comment\"]").is_none(),
+        "the bar holds no comment"
+    );
+    signals.prompt.set(Some(BarPrompt::Comment));
     leptos::task::tick().await;
     assert_eq!(signals.prompt.get_untracked(), Some(BarPrompt::Comment));
     let field: web_sys::HtmlInputElement = one(&root, ".ambre-format-prompt")

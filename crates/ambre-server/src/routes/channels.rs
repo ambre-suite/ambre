@@ -697,12 +697,15 @@ pub struct RegisterThreadRequest {
 }
 
 /// The thread document of a root after a registration, and whether it is
-/// the caller's. `false` means an earlier one registered another.
+/// the caller's. `false` means an earlier one registered another. The
+/// receipt is the relay's signature over the link (`SRV-363`).
 #[derive(serde::Serialize)]
 pub struct ThreadJson {
     #[serde(with = "ambre_core::serde_id::text")]
     pub thread: Id<Document>,
     pub created: ambre_core::Creation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
 }
 
 /// `POST /api/channels/{id}/threads`: register the caller's document as the
@@ -710,7 +713,10 @@ pub struct ThreadJson {
 ///
 /// The caller writes to the channel, and owns the document, as at a close.
 /// A registration that lost its race answers the winner's document
-/// (`SRV-214`), and the caller deletes its own.
+/// (`SRV-214`), and the caller deletes its own. Either answer carries the
+/// relay's receipt of the link it holds (`SRV-363`). The receipt signs the
+/// channel and the thread, which the relay already stores, so it learns
+/// nothing new.
 pub async fn register_thread(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -738,6 +744,7 @@ pub async fn register_thread(
     Ok(axum::Json(ThreadJson {
         thread: held,
         created,
+        receipt: state.jwt.sign_link(channel_id, held),
     }))
 }
 
@@ -1158,6 +1165,7 @@ mod tests {
             json(serde_json::to_string(&ThreadJson {
                 thread: document,
                 created: Creation::Created,
+                receipt: None,
             })),
             format!(r#"{{"thread":"{document}","created":true}}"#)
         );
@@ -1189,6 +1197,19 @@ mod tests {
         act: MembershipAct,
         role: Role,
     ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
+        shaped_entry(document, position, who, act, role, |_| {})
+    }
+
+    /// The entry [`signed_entry`] writes, with `shape` applied to it before
+    /// `who` signs it.
+    fn shaped_entry(
+        document: Id<Document>,
+        position: u64,
+        who: Id<User>,
+        act: MembershipAct,
+        role: Role,
+        shape: crate::routes::tests::handler_tests::SlotPart,
+    ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
         use ed25519_dalek::Signer;
         let key = signing_key_of(who);
         let mut entry = ambre_protocol::MembershipEntry {
@@ -1212,6 +1233,7 @@ mod tests {
             elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
+        shape(&mut entry);
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
             key.sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
@@ -1913,6 +1935,58 @@ mod tests {
         .await;
         assert_eq!(status(answer), StatusCode::BAD_REQUEST);
         assert_eq!(role_on(&state, meta, alice).await, None);
+    }
+
+    /// Holds `SRV-360` at the self-join. A self-join with any part of the
+    /// slot of the cap adds no member and no entry. The same entry with no
+    /// cap lands.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_self_join_with_a_cap_adds_no_member(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        let meta = channel.meta.document_id();
+        open_log(&state, meta, bob).await;
+        let Joinable { role, .. } = joinable(&state, &session(alice), &channel.id)
+            .await
+            .expect("joinable");
+        let request = |entry| {
+            Json::new(JoinChannelRequest {
+                doc_key_enc: ambre_core::Encoded::new([1; 48].to_vec()),
+                entry: Some(entry),
+            })
+        };
+
+        for (name, part) in crate::routes::tests::handler_tests::CAP_SLOT {
+            let entry = shaped_entry(meta, 1, alice, MembershipAct::SelfJoin, role, part);
+            let answer = join_channel(
+                State(state.clone()),
+                session(alice),
+                OpaquePathId::new(channel.id),
+                request(entry),
+            )
+            .await;
+            assert_eq!(
+                status(answer),
+                StatusCode::BAD_REQUEST,
+                "a self-join with {name}"
+            );
+            assert_eq!(role_on(&state, meta, alice).await, None, "{name}");
+            assert_eq!(log_length(&state, meta).await, 1, "{name}");
+        }
+        let entry = signed_entry(meta, 1, alice, MembershipAct::SelfJoin, role);
+        let answer = join_channel(
+            State(state.clone()),
+            session(alice),
+            OpaquePathId::new(channel.id),
+            request(entry),
+        )
+        .await;
+        assert_eq!(status(answer), StatusCode::NO_CONTENT);
+        assert_eq!(log_length(&state, meta).await, 2);
     }
 
     /// The head of the log of `meta` reaches a caller the self-join would
@@ -4146,6 +4220,79 @@ mod tests {
             .expect("query")
             .expect("a member of the channel reaches its thread");
         assert_eq!(row.role, Role::Editor);
+    }
+
+    /// `SRV-363`: a registration answers the relay's receipt of the link it
+    /// holds, under the link key alone. The winner and the late writer get a
+    /// receipt of the same thread. It verifies over no other thread and no
+    /// other channel. It verifies neither as an erasure nor under the
+    /// access-token key.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_registration_answers_a_receipt_of_the_link_it_holds(pool: sqlx::PgPool) {
+        use ambre_protocol::thread_erasure::{DEV_LINK_KEY, erasure_transcript, link_transcript};
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        grant(&state, channel.meta.document_id(), bob, Role::Editor).await;
+        let root = Id::<Message>::mint();
+        let mine = document(&state, alice).await;
+        let theirs = document(&state, bob).await;
+        let first = thread(&state, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+        let late = thread(&state, bob, &channel, root, theirs)
+            .await
+            .expect("thread");
+
+        let verifies =
+            |key: [u8; 32], transcript: ambre_protocol::SignedTranscript, answer: &ThreadJson| {
+                let receipt = answer.receipt.expect("a receipt");
+                ed25519_dalek::VerifyingKey::from_bytes(&key)
+                    .and_then(|key| {
+                        key.verify_strict(
+                            transcript.as_bytes(),
+                            &ed25519_dalek::Signature::from_bytes(receipt.as_array()),
+                        )
+                    })
+                    .is_ok()
+            };
+        let link_key = *DEV_LINK_KEY.as_array();
+        for answer in [&first, &late] {
+            assert!(verifies(
+                link_key,
+                link_transcript(channel.id, mine),
+                answer
+            ));
+            assert!(!verifies(
+                link_key,
+                link_transcript(channel.id, theirs),
+                answer
+            ));
+            assert!(!verifies(
+                link_key,
+                link_transcript(Id::<id::Channel>::mint(), mine),
+                answer
+            ));
+            assert!(!verifies(
+                link_key,
+                erasure_transcript(channel.id, mine),
+                answer
+            ));
+            assert!(!verifies(
+                crate::jwt::JwtSeed::from_array(crate::test_helpers::TEST_JWT_SEED)
+                    .verifying_key_bytes(),
+                link_transcript(channel.id, mine),
+                answer
+            ));
+        }
+        assert_eq!(
+            crate::jwt::JwtSeed::dev_link().verifying_key_bytes(),
+            link_key,
+            "the dev seed signs under the key a dev client pins"
+        );
     }
 
     /// `who` posts the erasure of `thread` in `channel`, signed by `signer`

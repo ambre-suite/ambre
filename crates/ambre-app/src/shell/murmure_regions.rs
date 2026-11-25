@@ -1974,7 +1974,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
 }
 
 /// The results of a search stay inside the window at every width, the
-/// phone included (`MURMURE-732`). Anchored on the box, they crossed the
+/// phone included (`MURMURE-736`). Anchored on the box, they crossed the
 /// left edge of a window of 1440 px. An invite link widens the bar past a
 /// phone, and the open field then scrolled the page sideways.
 #[wasm_bindgen_test]

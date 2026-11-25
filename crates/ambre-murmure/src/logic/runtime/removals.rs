@@ -93,11 +93,13 @@ impl<D> Runtime<D> {
                 let document_id = meta.document_id();
                 for removal in self.removals.remove(&channel_id).unwrap_or_default() {
                     let (named, threads) = (swept.documents.clone(), swept.threads.clone());
+                    let receipts = swept.receipts.clone();
                     self.ask(match removal {
                         Removal::Leave => SyncCommand::LeaveChannel {
                             channel_id,
                             named,
                             threads,
+                            receipts,
                         },
                         Removal::Revoke { id, user_id, .. } => SyncCommand::RevokeFromChannel {
                             id,
@@ -105,6 +107,7 @@ impl<D> Runtime<D> {
                             user_id,
                             named,
                             threads,
+                            receipts,
                         },
                     });
                 }

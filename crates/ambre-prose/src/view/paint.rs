@@ -22,8 +22,8 @@ use crate::view::cache::RunKey;
 use crate::view::caret::Spot;
 use crate::view::hit::{Fragment, cell_frame};
 use crate::view::walk::{
-    BlockPaint, CellPaint, Highlights, Insertion, MarkFills, PageItem, PagePaint, PageView,
-    PageWalk, PicturePaint, Placed, draw_shape, fill_marks, to_rect,
+    BlockPaint, CellPaint, Highlights, Insertion, PageItem, PagePaint, PageView, PageWalk,
+    PicturePaint, Placed, Underlays, draw_shape, fill_cells, fill_marks, to_rect,
 };
 pub use crate::view::walk::{PAPER, PagePalette, Paper, ThemeInks};
 
@@ -286,9 +286,10 @@ impl ProseUiState {
     /// Paint the pages the canvas shows, and one more on each side
     /// (`PROSE-UI-007`).
     ///
-    /// The sheets come first, then the selections under the glyphs. The walk
-    /// draws each block's glyphs and inline highlights (`PROSE-UI-117`), then
-    /// the bands and the footnotes (`PROSE-UI-115`). The local caret and the
+    /// The sheets come first, then the cell fills and the highlight marks,
+    /// then the selections under the glyphs. The walk draws each block's
+    /// glyphs and inline highlights (`PROSE-UI-117`), then the bands and the
+    /// footnotes (`PROSE-UI-115`). The local caret and the
     /// composition follow, and the carets of the other peers come last
     /// (`PROSE-UI-118`).
     pub fn paint<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette) {
@@ -309,6 +310,13 @@ impl ProseUiState {
         for page in &frame.pages {
             paint_sheet(surface, palette, page.top, width, height);
         }
+        // The cell fills go under the selections, so an opaque fill never
+        // hides them (`PROSE-UI-283`).
+        for page in &frame.pages {
+            surface.push_transform(Affine::translate((0.0, page.top.get())));
+            fill_cells(surface, page);
+            surface.pop_transform();
+        }
         for block in &frame.blocks {
             surface.push_transform(Affine::translate((0.0, block.top.get())));
             surface.push_clip(block.placed.clip);
@@ -325,7 +333,7 @@ impl ProseUiState {
             height,
             pages: &frame.pages,
             pictures: &self.pictures,
-            marks: MarkFills::Underlaid,
+            underlays: Underlays::Underlaid,
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
@@ -1919,6 +1927,52 @@ mod tests {
         assert!(fill < selected && selected < text);
     }
 
+    /// `PROSE-UI-283`: a cell fill goes under the selection of the text it
+    /// holds, so an opaque fill never hides the selection. The screen draws
+    /// it once, and a print, which has no selection, draws it from its walk.
+    #[test]
+    fn a_cell_fill_goes_under_the_selection_and_a_print_still_fills_it() {
+        use crate::logic::tables::tests::first_block_of;
+        let (mut state, first_cell, _) = styled_table();
+        style(&mut state, first_cell, |command| {
+            if let ProseCommand::SetCellStyle { bg, .. } = command {
+                *bg = Some(ambre_core::Rgb::from_bits(0x00ff_8800));
+            }
+        });
+        let block = block_id(first_block_of(&state, first_cell));
+        let mut ui = view_of(&mut state);
+        ui.cursor = Some(CursorPosition {
+            block_id: block,
+            offset: Pos::<DocChar>::new(1),
+            anchor: Some((block, Pos::<DocChar>::ZERO)),
+        });
+        let orange = Color::from_rgba8(0xff, 0x88, 0x00, 0xff);
+        let selection = palette().accent.multiply_alpha(0.2);
+        let filled = |op: &DrawOp| matches!(op, DrawOp::FillRect { color, .. } if *color == orange);
+        let surface = paint(&mut ui);
+        assert_eq!(
+            surface.count(filled),
+            Count::<ambre_draw::testing::Ops>::of(1),
+            "drawn once, by the screen"
+        );
+        let fill = first(&surface, filled);
+        let selected = first(
+            &surface,
+            |op| matches!(op, DrawOp::FillRect { color, .. } if *color == selection),
+        );
+        let text = first(&surface, glyphs);
+        assert!(fill < selected && selected < text);
+
+        let mut printed = RecordingSurface::new();
+        ui.print_page(&mut printed, Pos::<crate::events::Page>::ZERO);
+        assert_eq!(
+            printed.count(filled),
+            Count::<ambre_draw::testing::Ops>::of(1),
+            "a print fills the cell from its walk"
+        );
+        assert!(first(&printed, filled) < first(&printed, glyphs));
+    }
+
     /// `PROSE-UI-208`: a draft typed right after an underlined word is
     /// drawn underlined, one line running from the word through the draft.
     #[test]
@@ -2478,7 +2532,7 @@ mod tests {
                 height: Px::<Surface>::new(f64::from(ui.shaped.layout.page_height.get())),
                 pages: &frame.pages,
                 pictures: &ui.pictures,
-                marks: crate::view::walk::MarkFills::Underlaid,
+                underlays: crate::view::walk::Underlays::Underlaid,
             };
             let mut runs = RunCache::default();
             let mut walked = RecordingSurface::new();

@@ -45,6 +45,7 @@ stringData:
   s3-secret-access-key: "$(hex 32)"
   jwt-signing-seed: "$(hex 32)"
   call-admission-seed: "$admission_seed"
+  thread-link-seed: "$(hex 32)"
   sfu-admission-key: "$admission_key"
   metrics-token: "$(hex 32)"
 YAML

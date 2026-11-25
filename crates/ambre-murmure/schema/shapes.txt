@@ -34,6 +34,8 @@ amendments:meta/schema_version: i64
 amendments:meta: map
 amendments:peers/{id}: binary
 amendments:peers: map
+amendments:receipts/{id}: string
+amendments:receipts: map
 amendments:threads/{id}: string
 amendments:threads: map
 meta:channel/name: string
@@ -88,6 +90,7 @@ segment:messages/*/notice: string
 segment:messages/*/reactions/{id}: i64
 segment:messages/*/reactions: map
 segment:messages/*/thread: string
+segment:messages/*/thread_receipt: string
 segment:messages/*/ts: i64
 segment:messages/*: map
 segment:messages: list

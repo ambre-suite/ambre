@@ -338,7 +338,7 @@ async fn the_format_bar_announces_the_registry_labels() {
     let ids = ambre_prose::commands::BAR_MARKS
         .map(|(id, _)| id)
         .into_iter()
-        .chain([ambre_prose::commands::LINK, ambre_prose::commands::COMMENT]);
+        .chain([ambre_prose::commands::LINK]);
     for id in ids {
         let command = ambre_commands::find(ambre_prose::commands::COMMANDS, id)
             .expect("the control is described");
@@ -1102,4 +1102,23 @@ async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
         Some(TextValue::DefaultFont(DefaultFont::Heading(None)))
     );
     root.remove();
+}
+
+/// `CHROME-180`, `PROSE-UI-282`: the comment of the creation bar lands where
+/// a control of the format bar leaves its id, and sends nothing itself. The
+/// view then opens its field over a selection alone.
+#[wasm_bindgen_test]
+fn the_comment_of_the_creation_bar_reaches_the_view() {
+    use ambre_chrome::CommandHandler;
+    use ambre_prose::commands::COMMENT;
+    let signals = ProseSignals::new();
+    let handler = chrome::ProseHandler {
+        format: signals.format,
+        at_caret: signals.at_caret,
+        intent: signals.intent,
+        now: || Instant::<Authored>::new(0),
+        zone: ambre_prose::message::TimeZone::default,
+    };
+    assert!(handler.on_command(COMMENT).is_empty());
+    assert_eq!(signals.format.get_untracked(), Some(COMMENT));
 }
