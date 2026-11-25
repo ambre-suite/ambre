@@ -112,17 +112,17 @@ pub fn CreationBar(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_commands::Locale;
     use ambre_core::Categories;
 
-    fn title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-        ambre_core::Validated::new("Entry")
-    }
+    const TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+        en: "Entry",
+        fr: "Entry",
+    };
 
     const fn entry(id: &'static str, home: Home) -> Command {
         Command {
             id: StaticKey::<Commands>::new(id),
-            title,
+            title: TITLE,
             icon: None,
             keybindings: &[],
             category: StaticKey::<Categories>::new("t"),

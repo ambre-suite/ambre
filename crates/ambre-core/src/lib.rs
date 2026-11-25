@@ -32,6 +32,7 @@ pub mod __serde {
 /// (`ambre-spec-residency.md`).
 pub mod activity;
 pub mod authorship;
+mod base64;
 pub mod bounded;
 pub mod calendar;
 pub mod call;

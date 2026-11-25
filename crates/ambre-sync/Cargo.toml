@@ -48,7 +48,6 @@ ruzstd   = { workspace = true }
 hex      = { workspace = true }
 # Each query value is percent-encoded whole (`SYNC-179`).
 percent-encoding = { workspace = true }
-base64   = { workspace = true }
 getrandom = { workspace = true }
 
 wasm-bindgen = { workspace = true }

@@ -3101,22 +3101,103 @@ pub(crate) mod tests {
     /// The width the camera opens at: the top size of the call video row.
     const TOP_WIDTH: u64 = 1280;
 
-    /// The width `page` encodes its layer `rid` at now, 0 before its first frame. A headless
-    /// engine whose encoder lacks the CPU scales the camera down, so every layer shrinks
-    /// together (the call video row of `ambre-spec-budgets.md section 1`).
-    async fn sent_width(page: &Page, rid: &str) -> u64 {
-        video_stats(page).await["sent"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|s| s["rid"].as_str() == Some(rid))
-            .and_then(|s| s["width"].as_u64())
-            .unwrap_or(0)
+    /// The layers of one sender, from the top down: the order the SFU climbs them in.
+    const LAYERS: [&str; 3] = ["h", "m", "l"];
+
+    /// What one sender encodes on each layer, read over the polls of one wait.
+    ///
+    /// A headless engine whose encoder lacks the CPU scales the camera down, so every layer
+    /// shrinks together (the call video row of `ambre-spec-budgets.md section 1`). It also
+    /// drops frames of its top layer. Chrome reports a width of 0 for a layer with no frame in
+    /// the last 800 ms. The SFU still forwards the frames that layer encodes. So a layer keeps
+    /// the last width it encoded at, and counts as sent once it encodes a frame during the wait.
+    #[derive(Debug, Default)]
+    struct Sent {
+        /// Per layer: its rid, its frame count at the first poll, at the last poll, and the
+        /// last width it encoded at.
+        layers: Vec<(String, u64, u64, u64)>,
     }
 
-    /// Waits until `page` decodes exactly two videos: the top layer of `top`, and the lowest
-    /// layer of `low`. Each reads the width its sender encodes it at now. Each grew past `frames`
-    /// more pictures than `before` held. Answers the stats id of the top layer.
+    impl Sent {
+        /// Takes one reading of [`video_stats`] of the sender.
+        fn read(&mut self, stats: &Value) {
+            for s in stats["sent"].as_array().into_iter().flatten() {
+                let Some(rid) = s["rid"].as_str() else {
+                    continue;
+                };
+                let frames = s["frames"].as_u64().unwrap_or(0);
+                let width = s["width"].as_u64().unwrap_or(0);
+                match self.layers.iter_mut().find(|l| l.0 == rid) {
+                    Some(layer) => {
+                        layer.2 = frames;
+                        if width > 0 {
+                            layer.3 = width;
+                        }
+                    }
+                    None => self.layers.push((rid.to_owned(), frames, frames, width)),
+                }
+            }
+        }
+
+        /// The last width the layer `rid` encoded at, 0 when it encoded no frame during the
+        /// wait.
+        fn width(&self, rid: &str) -> u64 {
+            self.layers
+                .iter()
+                .find(|l| l.0 == rid && l.2 > l.1)
+                .map_or(0, |l| l.3)
+        }
+
+        /// The width of the top layer the sender encodes during the wait: the layer the SFU
+        /// forwards to the receiver of a speaker. 0 before a layer encodes a frame.
+        fn top(&self) -> u64 {
+            LAYERS
+                .iter()
+                .map(|rid| self.width(rid))
+                .find(|w| *w > 0)
+                .unwrap_or(0)
+        }
+    }
+
+    /// The stats id of the top layer when `stats` of a receiver decode exactly two videos: one
+    /// at `top_width` and one at `low_width`. Each grew past `frames` more pictures than
+    /// `before` held. None otherwise, so a size the SFU did not choose never matches.
+    fn top_and_low_in(
+        stats: &Value,
+        before: &Value,
+        frames: u64,
+        top_width: u64,
+        low_width: u64,
+    ) -> Option<String> {
+        let received = stats["received"].as_array().cloned().unwrap_or_default();
+        let grew = |entry: &Value| {
+            let id = entry["id"].as_str().unwrap_or_default();
+            let was = before["received"]
+                .as_array()
+                .and_then(|r| r.iter().find(|b| b["id"].as_str() == Some(id)))
+                .and_then(|b| b["frames"].as_u64())
+                .unwrap_or(0);
+            entry["frames"].as_u64().unwrap_or(0) >= was + frames
+        };
+        let at = |width: u64| {
+            received
+                .iter()
+                .filter(|r| width > 0 && r["width"].as_u64() == Some(width) && grew(r))
+                .collect::<Vec<_>>()
+        };
+        let (top, low) = (at(top_width), at(low_width));
+        let apart = top_width != low_width || top.len() == 2;
+        (received.len() == 2 && !top.is_empty() && !low.is_empty() && apart).then(|| {
+            top.first()
+                .and_then(|t| t["id"].as_str())
+                .unwrap_or_default()
+                .to_owned()
+        })
+    }
+
+    /// Waits until `page` decodes exactly two videos: the top layer `top` encodes, and the
+    /// lowest layer of `low`. Each reads the last width its sender encoded it at. Each grew past
+    /// `frames` more pictures than `before` held. Answers the stats id of the top layer.
     async fn top_and_low(
         page: &Page,
         before: &Value,
@@ -3125,48 +3206,120 @@ pub(crate) mod tests {
         low: &Page,
     ) -> String {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        let (mut top_sent, mut low_sent) = (Sent::default(), Sent::default());
         loop {
-            let (top_width, low_width) = (sent_width(top, "h").await, sent_width(low, "l").await);
+            top_sent.read(&video_stats(top).await);
+            low_sent.read(&video_stats(low).await);
+            let (top_width, low_width) = (top_sent.top(), low_sent.width("l"));
             let stats = video_stats(page).await;
-            let received = stats["received"].as_array().cloned().unwrap_or_default();
-            let grew = |entry: &Value| {
-                let id = entry["id"].as_str().unwrap_or_default();
-                let was = before["received"]
-                    .as_array()
-                    .and_then(|r| r.iter().find(|b| b["id"].as_str() == Some(id)))
-                    .and_then(|b| b["frames"].as_u64())
-                    .unwrap_or(0);
-                entry["frames"].as_u64().unwrap_or(0) >= was + frames
-            };
-            let at = |width: u64| {
-                received
-                    .iter()
-                    .filter(|r| width > 0 && r["width"].as_u64() == Some(width) && grew(r))
-                    .collect::<Vec<_>>()
-            };
-            let (top, low) = (at(top_width), at(low_width));
-            let apart = top_width != low_width || top.len() == 2;
-            if received.len() == 2 && !top.is_empty() && !low.is_empty() && apart {
+            if let Some(id) = top_and_low_in(&stats, before, frames, top_width, low_width) {
                 assert_eq!(
                     stats["opened"],
                     json!(true),
                     "a video without its transform"
                 );
-                return top
-                    .first()
-                    .and_then(|t| t["id"].as_str())
-                    .unwrap_or_default()
-                    .to_owned();
+                return id;
             }
             if std::time::Instant::now() >= deadline {
                 panic!(
                     "within 60 s, the page decoded {stats:#}, not the top layer at \
-                     {top_width} and the lowest at {low_width}, and logged {:#?}",
+                     {top_width} and the lowest at {low_width}, as the senders encode \
+                     {top_sent:?} and {low_sent:?}, and logged {:#?}",
                     page.browser.console().await
                 );
             }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
+    }
+
+    /// The `sent` of [`video_stats`]: each layer with its frame count and width.
+    fn sent_stats(layers: &[(&str, u64, u64)]) -> Value {
+        let sent: Vec<Value> = layers
+            .iter()
+            .map(|(rid, frames, width)| {
+                json!({ "rid": rid, "frames": frames, "width": width, "limit": "cpu" })
+            })
+            .collect();
+        json!({ "sent": sent })
+    }
+
+    /// The `received` of [`video_stats`]: each video with its frame count and width.
+    fn received_stats(videos: &[(&str, u64, u64)]) -> Value {
+        let received: Vec<Value> = videos
+            .iter()
+            .map(|(id, frames, width)| json!({ "id": id, "frames": frames, "width": width }))
+            .collect();
+        json!({ "received": received, "opened": true })
+    }
+
+    /// The run of `main` at `f525473b5`: Chrome starves the top encoder, so the top layer
+    /// reads a width of 0 between two of its frames. The top layer keeps the width it last
+    /// encoded at, and the receiver of the speaker matches it.
+    #[test]
+    fn a_top_layer_short_of_cpu_keeps_the_width_it_last_encoded_at() {
+        let mut sent = Sent::default();
+        sent.read(&sent_stats(&[
+            ("l", 2000, 240),
+            ("m", 1996, 480),
+            ("h", 700, 960),
+        ]));
+        sent.read(&sent_stats(&[
+            ("l", 2348, 240),
+            ("m", 2344, 480),
+            ("h", 832, 0),
+        ]));
+        assert_eq!(sent.top(), 960, "{sent:?}");
+        assert_eq!(sent.width("l"), 240, "{sent:?}");
+        let before = received_stats(&[("ada", 1000, 960), ("carol", 1900, 240)]);
+        let now = received_stats(&[("ada", 1126, 960), ("carol", 2064, 240)]);
+        assert_eq!(
+            top_and_low_in(&now, &before, 30, sent.top(), sent.width("l")),
+            Some("ada".to_owned())
+        );
+    }
+
+    /// A top layer with no frame during the wait is not sent. The top moves to the next layer
+    /// down, which the SFU then forwards to the receiver of the speaker.
+    #[test]
+    fn a_top_layer_that_encodes_nothing_hands_the_top_to_the_next_layer() {
+        let mut sent = Sent::default();
+        sent.read(&sent_stats(&[
+            ("l", 2000, 240),
+            ("m", 1996, 480),
+            ("h", 832, 960),
+        ]));
+        sent.read(&sent_stats(&[
+            ("l", 2348, 240),
+            ("m", 2344, 480),
+            ("h", 832, 0),
+        ]));
+        assert_eq!(sent.top(), 480, "{sent:?}");
+        let mut fresh = Sent::default();
+        fresh.read(&sent_stats(&[("h", 832, 960)]));
+        assert_eq!(fresh.top(), 0, "one reading proves no frame: {fresh:?}");
+    }
+
+    /// A receiver that decodes a size the SFU did not choose never matches. The cases: the
+    /// speaker below its top, the other above its lowest, both at one size, a stopped video.
+    #[test]
+    fn a_size_the_sfu_did_not_choose_never_matches() {
+        let before = received_stats(&[("ada", 1000, 960), ("carol", 1900, 240)]);
+        let wrong = [
+            received_stats(&[("ada", 1126, 480), ("carol", 2064, 240)]),
+            received_stats(&[("ada", 1126, 960), ("carol", 2064, 480)]),
+            received_stats(&[("ada", 1126, 240), ("carol", 2064, 240)]),
+            received_stats(&[("ada", 1126, 960), ("carol", 2064, 960)]),
+            received_stats(&[("ada", 1010, 960), ("carol", 2064, 240)]),
+            received_stats(&[("ada", 1126, 960)]),
+        ];
+        for now in wrong {
+            assert_eq!(top_and_low_in(&now, &before, 30, 960, 240), None, "{now:#}");
+        }
+        assert_eq!(
+            top_and_low_in(&before, &before, 30, 0, 240),
+            None,
+            "no top layer sent"
+        );
     }
 
     /// `CALL-008`, `CALL-096`, `CALL-099` and the video half of `CALL-001`, `CALL-011` and

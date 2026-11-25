@@ -570,6 +570,21 @@ mod tests {
         DocumentKey,
         Id<Snapshot>,
     ) {
+        released_after(applied, |_| {})
+    }
+
+    /// A state with one open document that `write` fed, released at
+    /// `applied`.
+    fn released_after(
+        applied: Seq<Relay>,
+        write: impl FnOnce(&SyncDocumentState),
+    ) -> (
+        SyncState,
+        ambre_bus::conduit::Receiver<LogicEvent>,
+        Id<Document>,
+        DocumentKey,
+        Id<Snapshot>,
+    ) {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(
             sink,
@@ -585,6 +600,7 @@ mod tests {
             crate::Existence::OnRelay,
         );
         doc.last_seq = Seq::<Relay>::new(9);
+        write(&doc);
         let snapshot = doc.current_snapshot_id;
         state.documents.insert(document_id, doc);
         state.session_nonces.insert(document_id, NONCE);
@@ -940,20 +956,20 @@ mod tests {
 
     /// Holds `SYNC-304` at a reopen. The evicted session applied Bob's
     /// clock 2, and a revoke capped him at 1 while the document was light.
-    /// The reopen resumes from the local copy, so the open that walks the
-    /// cap reads the document again. A walk with no cap reads nothing.
+    /// The light subscription keeps the clocks of the session. The reopen
+    /// resumes from the local copy, so the open that walks the cap reads
+    /// the document again. A walk with no cap reads nothing.
     #[test]
     fn a_reopen_past_a_revoke_cap_reads_the_document_again() {
         use crate::membership_log::Writers;
         let bob = FixedBytes::<PublicKey>::from_array([0x52; 32]);
         for (cap, reread) in [(Some(1), true), (Some(2), false), (None, false)] {
-            let (mut state, rx, document_id, doc_key, snapshot_id) =
-                released(ambre_bus::Seq::<ambre_bus::Relay>::new(9));
             // The clocks the evicted session applied travel with its light
             // subscription.
-            if let Some(light) = state.light.get_mut(&document_id) {
-                light.applied.clocks.insert(bob, Seq::<DeltaAuthor>::new(2));
-            }
+            let (mut state, rx, document_id, doc_key, snapshot_id) =
+                released_after(ambre_bus::Seq::<ambre_bus::Relay>::new(9), |doc| {
+                    doc.note_applied(&bob, Seq::<DeltaAuthor>::new(2));
+                });
             assert_eq!(state.take_light(document_id), Some(Seq::<Relay>::new(9)));
             drain(&rx);
             let writers = Writers::capped(

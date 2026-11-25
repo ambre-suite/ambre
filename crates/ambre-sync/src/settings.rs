@@ -117,6 +117,51 @@ mod tests {
         assert_eq!(transport.calls().len(), 1, "one read, no claim");
     }
 
+    /// `SETTINGS-045`: the exchange key derives from the Master Seed, and a
+    /// recovery or a new device unlocks the same seed. So the self-wrap of the
+    /// creation opens on that device with no re-wrap, and the seed of another
+    /// account opens nothing.
+    #[test]
+    fn the_settings_self_wrap_opens_under_the_key_a_recovery_derives() {
+        let seed = MasterSeed::generate();
+        let words = seed.recovery_words();
+        let author = sharing::Author {
+            user_id: Id::<User>::mint(),
+            signing_key: seed.derive_signing_key(),
+        };
+        let first = seed.derive_exchange_key();
+        let document = Id::<Document>::mint();
+        let doc_key = DocumentKey::generate();
+        let (doc_key_enc, _entry) =
+            sharing::creation(document, &doc_key, &first, &author).expect("a creation");
+        let registered = sharing::own_exchange_key(&first);
+        drop((seed, first));
+
+        let recovered = MasterSeed::from_recovery_words(&words).expect("the words of the account");
+        let derived = recovered.derive_exchange_key();
+        assert_eq!(
+            sharing::own_exchange_key(&derived),
+            registered,
+            "a recovery derives the exchange key the relay registered"
+        );
+        let row = [(&registered, &doc_key_enc, None)];
+        let (opened, anchor) =
+            sharing::unwrap_own(&derived, document, row).expect("the self-wrap opens");
+        assert_eq!(opened.id(), doc_key.id(), "the same document key");
+        assert!(
+            anchor.is_some(),
+            "the anchor of the creation rides the wrap"
+        );
+
+        let stranger = MasterSeed::generate().derive_exchange_key();
+        let stranger_pub = sharing::own_exchange_key(&stranger);
+        let row = [(&stranger_pub, &doc_key_enc, Some(&registered))];
+        assert!(
+            sharing::unwrap_own(&stranger, document, row).is_err(),
+            "another seed opens nothing"
+        );
+    }
+
     /// `SETTINGS-008`: an account with none claims one, and
     /// opens whichever document the relay answers, its own or another
     /// device's.

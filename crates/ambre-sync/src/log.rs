@@ -186,7 +186,9 @@ macro_rules! debug {
 
 pub(crate) use {debug, error, info, warning};
 
+// The capture reads `tracing`, which the worker never links (`SYNC-305`).
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod tests {
     use super::console::{self, Printed};
     use super::{Level, emit};

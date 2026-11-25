@@ -804,15 +804,20 @@ impl SyncState {
     ///
     /// The census opens each document of the channel not open here first,
     /// so the departure caps this user in each one (`SYNC-312`). `named`
-    /// lists the documents the sealed `meta` names (`SYNC-320`).
+    /// lists the documents the sealed `meta` names (`SYNC-320`), and
+    /// `threads` the threads they name (`SYNC-321`).
     pub(crate) fn handle_leave_channel(
         &mut self,
         channel_id: Id<Channel>,
         named: Vec<Id<Document>>,
+        threads: Vec<Id<Document>>,
     ) {
         self.begin_removal(
             crate::census::Removal::LeaveChannel { channel_id },
-            Some(named),
+            Some(crate::census::Named {
+                documents: named,
+                threads,
+            }),
         );
     }
 
@@ -1238,6 +1243,7 @@ fn listed_keys(
                 channel_id: entry.channel_id,
                 meta: entry.meta_id,
                 last: entry.meta_last,
+                call: entry.call,
             };
             Some((listed, key))
         })
@@ -2178,7 +2184,7 @@ pub(crate) mod tests {
             ),
         );
 
-        state.handle_leave_channel(channel_id, vec![meta]);
+        state.handle_leave_channel(channel_id, vec![meta], Vec::new());
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
             result: Err(crate::http::HttpError::Local(
@@ -2399,6 +2405,7 @@ pub(crate) mod tests {
             channel_id: private,
             meta,
             last: Some(ambre_core::Seq::<ambre_core::Relay>::new(6)),
+            call: None,
         };
         let key = DocumentKey::generate();
         let listing = |(channels, spaces, peers), names, keys| MemberListing {
@@ -2471,6 +2478,36 @@ pub(crate) mod tests {
         );
     }
 
+    /// The live call the listing names for a channel reaches the Logic thread with its `meta`
+    /// (`CALL-162`). So a channel never opened shows a call that started before its watch.
+    #[test]
+    fn the_live_call_of_a_listed_channel_rides_its_meta() {
+        let own = exchange_key(1);
+        let own_pub = crate::sharing::own_exchange_key(&own);
+        let key = DocumentKey::generate();
+        let (meta, call) = (Id::<Meta>::mint(), Id::<ambre_core::id::Call>::mint());
+        let json = serde_json::json!({
+            "channels": [{
+                "channel_id": Id::<Channel>::mint().to_string(),
+                "space_id": null,
+                "public": false,
+                "meta_id": meta.to_string(),
+                "doc_key_enc": ambre_crypto::ecdh::wrap_document_key(
+                    &own, &own_pub, meta.document_id(), &key,
+                ).unwrap(),
+                "wrapper_exchange_pub_key": null,
+                "call": call.to_string(),
+            }],
+            "spaces": [],
+        });
+        let answer: http::MemberChannelsResponse = serde_json::from_value(json).unwrap();
+        let listed = listed_keys(&answer, &own);
+        assert_eq!(
+            listed.iter().map(|(m, _)| m.call).collect::<Vec<_>>(),
+            [Some(call)]
+        );
+    }
+
     /// `SYNC-171`: each name the listing carries opens under the user's
     /// wrapped key of its meta. A name sealed for another document opens to
     /// none, and so does an empty one. A meta never named shows none.
@@ -2501,6 +2538,7 @@ pub(crate) mod tests {
                     wrapper_exchange_pub_key: None,
                     peers: Vec::new(),
                     meta_last: None,
+                    call: None,
                 }
             };
         let (named, elsewhere, cleared, bare) = (

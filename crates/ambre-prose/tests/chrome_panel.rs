@@ -342,7 +342,7 @@ async fn the_format_bar_announces_the_registry_labels() {
     for id in ids {
         let command = ambre_commands::find(ambre_prose::commands::COMMANDS, id)
             .expect("the control is described");
-        let expected = (command.title)(&ambre_commands::Locale::En);
+        let expected = command.title.pick(&ambre_commands::Locale::En);
         let found = root
             .query_selector(&format!("[aria-label=\"{expected}\"]"))
             .unwrap();
@@ -847,7 +847,7 @@ async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
     use ambre_chrome::commands::Reading;
     use ambre_prose::events::{Align, ListStyle, ParagraphStyle};
     use ambre_prose::message::{HeadingLevel, ParagraphKind, SelectionValues};
-    use ambre_prose::view::panel::{self, TextWrite};
+    use ambre_prose::view::panel::{self, PickedSelection, TextValue};
     let signals = ProseSignals::new();
     selection_with(
         signals,
@@ -905,23 +905,38 @@ async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
         Some("true")
     );
 
+    // A pick carries the selection the view published (`PROSE-UI-281`).
+    let block = ambre_prose::events::BlockId::new(
+        ambre_core::PeerId::new(1),
+        ambre_core::OpCounter::new(0),
+    );
+    let picked = PickedSelection {
+        anchor: (block, ambre_core::index::Pos::new(0)),
+        focus: (block, ambre_core::index::Pos::new(5)),
+    };
+    signals.selection.set(Some(picked));
     radio(&root, "Justified").click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Paragraph(ParagraphStyle {
+        signals.text_write.get_untracked().and_then(|w| w.selection),
+        Some(picked),
+        "the write keeps the selection of its pick"
+    );
+    assert_eq!(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Paragraph(ParagraphStyle {
             align: Some(Align::Justify),
             ..ParagraphStyle::default()
         }))
     );
     radio(&root, "Quote").click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Kind(ParagraphKind::Quote))
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Kind(ParagraphKind::Quote))
     );
     radio(&root, "Numbered list").click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Kind(ParagraphKind::List(ListStyle::Ordered(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Kind(ParagraphKind::List(ListStyle::Ordered(
             ambre_prose::message::OrderedStyle::Decimal
         ))))
     );
@@ -932,8 +947,8 @@ async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
         .dyn_into()
         .unwrap();
     more.click();
-    let left = match signals.text_write.get_untracked() {
-        Some(TextWrite::Paragraph(style)) => style.indent_left,
+    let left = match signals.text_write.get_untracked().map(|w| w.value) {
+        Some(TextValue::Paragraph(style)) => style.indent_left,
         _ => None,
     }
     .expect("an indent is one paragraph write")
@@ -950,8 +965,8 @@ async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
         .unwrap();
     button.click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Indent(ambre_prose::message::IndentStep::In))
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Indent(ambre_prose::message::IndentStep::In))
     );
     // The link opens the field of the bar; nothing is written yet.
     signals.text_write.set(None);
@@ -967,7 +982,7 @@ async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
         signals.prompt.get_untracked(),
         Some(ambre_prose::view::toolbar::BarPrompt::Link)
     );
-    assert_eq!(signals.text_write.get_untracked(), None);
+    assert_eq!(signals.text_write.get_untracked().map(|w| w.value), None);
     root.remove();
 }
 
@@ -1039,7 +1054,7 @@ async fn with_no_selection_the_panel_shows_the_default_fonts() {
 #[wasm_bindgen_test]
 async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
     use ambre_prose::message::DefaultFont;
-    use ambre_prose::view::panel::TextWrite;
+    use ambre_prose::view::panel::TextValue;
     let signals = ProseSignals::new();
     signals.fonts.set(Some(ambre_prose::doc::DocFonts {
         body: ambre_core::FontFamily::from_label("Lora"),
@@ -1067,8 +1082,8 @@ async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
     );
     option(3).click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::DefaultFont(DefaultFont::Heading(Some(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::DefaultFont(DefaultFont::Heading(Some(
             ambre_core::FontFamily::Serif
         ))))
     );
@@ -1083,8 +1098,8 @@ async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
     );
     option(1).click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::DefaultFont(DefaultFont::Heading(None)))
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::DefaultFont(DefaultFont::Heading(None)))
     );
     root.remove();
 }

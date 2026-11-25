@@ -153,7 +153,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             view! {
                 <IconButton
                     icon=icon
-                    label=(c.title)(&ambre_chrome::commands::Locale::En).into_string()
+                    label=c.title.pick(&ambre_chrome::language()).into_string()
                     chord=c.chord()
                     reach=Some(ambre_chrome::commands::Reach::Command(id))
                     on_press=Callback::new(move |()| on_command.run(id))
@@ -525,7 +525,7 @@ fn grounds(look: RwSignal<crate::ui::grid::BoardLook>) -> AnyView {
         .collect();
     view! {
         <Select
-            label=(prop(panel::BACKGROUND).title)(&ambre_chrome::commands::Locale::En).into_string()
+            label=prop(panel::BACKGROUND).title.pick(&ambre_chrome::language()).into_string()
             choices=choices
             selected=Signal::derive(move || {
                 let ground = look.with(|l| l.ground);

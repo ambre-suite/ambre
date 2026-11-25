@@ -60,9 +60,19 @@ pub enum SweepStep {
     Open(Id<Document>),
     /// A document is on its way: the read goes on once it is ready.
     Wait,
-    /// Every document is read: the documents the sealed state of the channel
-    /// names, each once. The read ends.
-    Done(Vec<Id<Document>>),
+    /// Every document is read: what the sealed state of the channel names.
+    /// The read ends.
+    Done(Swept),
+}
+
+/// What the read of the threads a removal names found, each document once.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Swept {
+    /// The segments and amendments the `meta` names (`SYNC-320`).
+    pub documents: Vec<Id<Document>>,
+    /// The threads those name and the `meta` does not (`SYNC-321`). Only a
+    /// thread may pass a listing under an owner's erasure (`SYNC-322`).
+    pub threads: Vec<Id<Document>>,
 }
 
 impl ChannelState {
@@ -120,13 +130,13 @@ impl ChannelState {
             }
             sweep.swept.insert(segment);
         }
-        let mut named = amending::named_documents(&self.meta.doc);
-        for thread in sweep.threads.drain(..) {
-            if !named.contains(&thread) {
-                named.push(thread);
-            }
-        }
-        SweepStep::Done(named)
+        let documents = amending::named_documents(&self.meta.doc);
+        let threads = sweep
+            .threads
+            .drain(..)
+            .filter(|thread| !documents.contains(thread))
+            .collect();
+        SweepStep::Done(Swept { documents, threads })
     }
 
     /// Whether `document_id` is open for the read of the threads a removal

@@ -18,7 +18,7 @@
 // focus would steal it from the canvas text pipe (the format bar hazard).
 // ============================================================================
 
-use ambre_commands::{Command, Locale, Property, Reach, Reading};
+use ambre_commands::{Command, Property, Reach, Reading};
 use ambre_core::FontFamily;
 use ambre_core::{Board, Commands, Mm, PrintLength, Px, Radians, StaticKey, StoredBoard};
 use leptos::prelude::*;
@@ -31,12 +31,12 @@ use ambre_core::index::Pos;
 /// The label of a command, from its description and never a literal
 /// (`UI-THREAD-036`).
 fn command_label(command: &Command) -> String {
-    (command.title)(&Locale::En).into_string()
+    command.title.pick(&crate::language()).into_string()
 }
 
 /// The label of a property, from its description.
 fn property_label(property: &Property) -> String {
-    (property.title)(&Locale::En).into_string()
+    property.title.pick(&crate::language()).into_string()
 }
 
 /// The hint a control shows beside a mixed value.

@@ -223,6 +223,9 @@ pub struct Synth {
     screen_mid: Mid,
     pub speaking: bool,
     pub video_on: bool,
+    /// How many camera layers the participant sends, from the lowest: fewer than the three
+    /// when a browser short of CPU stops its top layer.
+    pub layers_sent: usize,
     /// Whether the participant shares its screen.
     pub sharing: bool,
     next_screen: Instant,
@@ -286,6 +289,7 @@ impl Synth {
             screen_mid,
             speaking: false,
             video_on: true,
+            layers_sent: LAYERS.len(),
             sharing: false,
             next_screen: now,
             screen_seq: 0,
@@ -381,7 +385,7 @@ impl Synth {
         while self.next_picture <= now {
             let at = self.next_picture;
             if self.video_on {
-                for layer in 0..LAYERS.len() {
+                for layer in 0..self.layers_sent.min(LAYERS.len()) {
                     self.send_picture(now, at, layer);
                 }
             }

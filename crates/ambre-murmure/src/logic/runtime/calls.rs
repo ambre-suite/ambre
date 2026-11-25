@@ -85,10 +85,14 @@ impl<D> Runtime<D> {
     }
 
     /// The relay answered who is in `call`. The view shows it, and a call the relay holds no
-    /// state of is asked about no more (the Murmure calls spec).
+    /// state of is asked about no more (the Murmure calls spec). That call leaves a channel
+    /// this thread does not hold (`MURMURE-691`).
     pub fn call_roster(&mut self, call: Id<Call>, channel: Id<Channel>, members: CallMembers) {
         if members == CallMembers::Gone {
             self.call_asks.entry(channel).or_default().gone.insert(call);
+            if self.unheld_calls.get(&channel) == Some(&call) {
+                self.unheld_calls.remove(&channel);
+            }
         }
         self.emit(UiEvent::Channel {
             channel_id: channel,
@@ -96,10 +100,67 @@ impl<D> Runtime<D> {
         });
     }
 
-    /// The view ticked `channel` at `now`, so it shows that channel. Once per interval of the
-    /// budget row, each live call of its held segments is asked about (the Murmure calls spec).
+    /// The listing named the live call of each channel of the user (`CALL-162`). Each channel
+    /// this thread watches and does not hold keeps its call, so the tick asks who is in it
+    /// (`MURMURE-691`). A call the relay answered gone is kept out.
+    pub(super) fn channel_calls(&mut self, calls: &[(Id<Channel>, Id<Call>)]) {
+        for (channel, call) in calls {
+            let gone = self
+                .call_asks
+                .get(channel)
+                .is_some_and(|asks| asks.gone.contains(call));
+            if self.closed_channels.contains_key(channel) && !gone {
+                self.unheld_calls.insert(*channel, *call);
+            }
+        }
+    }
+
+    /// The sealed cue of a call in `channel`, a channel this thread does not hold. A ring
+    /// names its live call, and an end takes that call away (`MURMURE-691`). A decline ends
+    /// no call.
+    pub(super) fn note_unheld_cue(&mut self, channel: Id<Channel>, cue: ambre_bus::CallCue) {
+        match cue.kind {
+            ambre_bus::CueKind::Ring => {
+                self.unheld_calls.insert(channel, cue.call);
+            }
+            ambre_bus::CueKind::End if self.unheld_calls.get(&channel) == Some(&cue.call) => {
+                self.unheld_calls.remove(&channel);
+                self.emit(UiEvent::Channel {
+                    channel_id: channel,
+                    event: MurmureEvent::CallMembers {
+                        call: cue.call,
+                        members: CallMembers::Gone,
+                    },
+                });
+            }
+            ambre_bus::CueKind::End | ambre_bus::CueKind::Decline => {}
+        }
+    }
+
+    /// The channels whose live call the sidebar counts with no state held (`MURMURE-691`).
+    pub(super) fn unheld_call_channels(&self) -> Vec<Id<Channel>> {
+        self.unheld_calls
+            .keys()
+            .copied()
+            .filter(|channel| !self.channels.contains_key(channel))
+            .collect()
+    }
+
+    /// The live calls of `channel` to ask about, and its `meta`. A held channel names them
+    /// from its state. Any other names the one call a cue or the relay gave (`MURMURE-691`).
+    fn calls_to_ask(&self, channel: Id<Channel>) -> Option<(Vec<Id<Call>>, Id<Document>)> {
+        if let Some(state) = self.channels.get(&channel) {
+            return Some((state.live_calls(), state.meta_id().document_id()));
+        }
+        let call = self.unheld_calls.get(&channel)?;
+        let meta = self.closed_channels.get(&channel)?.meta().document_id();
+        Some((vec![*call], meta))
+    }
+
+    /// The view ticked at `now` while it shows a channel. Once per interval of the budget row,
+    /// each live call of `channel` is asked about (the Murmure calls spec).
     pub(crate) fn ask_call_rosters(&mut self, channel: Id<Channel>, now: Instant<Authored>) {
-        let Some(state) = self.channels.get(&channel) else {
+        let Some((live, meta)) = self.calls_to_ask(channel) else {
             return;
         };
         let asks = self.call_asks.entry(channel).or_default();
@@ -112,8 +173,7 @@ impl<D> Runtime<D> {
         if !due {
             return;
         }
-        let calls: Vec<Id<Call>> = state
-            .live_calls()
+        let calls: Vec<Id<Call>> = live
             .into_iter()
             .filter(|call| !asks.gone.contains(call))
             .collect();
@@ -121,7 +181,6 @@ impl<D> Runtime<D> {
             return;
         }
         asks.last = Some(now);
-        let meta = state.meta_id().document_id();
         for call in calls {
             self.ask(SyncCommand::AskCallRoster {
                 call,

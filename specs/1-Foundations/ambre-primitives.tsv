@@ -960,7 +960,6 @@ ambre-core | src/error.rs | crate::error | UuidError::InvalidLength.0 | field | 
 ambre-core | src/error.rs | crate::error | VersionError::OutOfRange.0 | field | u8	generic	the refused value the error echoes
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as AsRef<[u8]>>::as_ref() | ret | &[u8]	newtype-inner	FixedBytes newtype, its bytes borrowed for a call that takes any bytes
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytesVisitor<R> as Visitor<'de>>::visit_str(text) | param | &str	trait	signature fixed by foreign trait: serde hands the hexadecimal text of a readable format
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <[u8;N] as ByteArray>::LEN | const | usize	generic	the width of a byte array, read only as the length of the role's array and of its tuple
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::as_slice() | ret | &[u8]	newtype-inner	FixedBytes newtype, its bytes borrowed
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_hex(text) | param | &str	newtype-inner	FixedBytes's own hex spelling, read back
@@ -970,6 +969,15 @@ ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from(bytes) | param | &[u8]	generic	the bytes of a layout the value opens, followed by fields of any type
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::to_hex() | ret | String	newtype-inner	FixedBytes's own hex spelling
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytesError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <Slots<'_> as Visitor<'de>>::visit_str(text) | param | &str	trait	signature fixed by foreign trait: serde hands the hexadecimal text of a readable format
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | Slots.bytes | field | &'a mut[u8]	generic	the array of the role under read, borrowed so one visitor serves every width
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | Width.len | field | usize	generic	the width of the role, which a serde error echoes
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | copy_exact(bytes) | param | &[u8]	generic	the bytes of any role, checked against the width of its array
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | copy_exact(slots) | param | &mut[u8]	generic	the array of any role, filled from bytes of its width
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | read_hex(slots) | param | &mut[u8]	generic	the array of any role, filled from its hexadecimal text
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | read_hex(text) | param | &str	generic	the hexadecimal text of a readable format, before it parses
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | read_tuple(slots) | param | &mut[u8]	generic	the array of any role, or of a Uuid, filled from a tuple of bytes
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | write_bytes(bytes) | param | &[u8]	generic	the bytes of any role, written as its hexadecimal text or its tuple of bytes
 ambre-core | src/authorship.rs | crate::authorship | <SessionNonce as FixedRole>::Array | assoc | [u8;SESSION_NONCE_LEN]	newtype-inner	the storage of FixedBytes<SessionNonce>, which states its width
 ambre-core | src/container.rs | crate::container | <FileDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<FileDigest>, which states its width
 ambre-core | src/container.rs | crate::container | <FileSalt as FixedRole>::Array | assoc | [u8;SALT_LEN]	newtype-inner	the storage of FixedBytes<FileSalt>, which states its width
@@ -1149,6 +1157,8 @@ ambre-core | src/uuid.rs | crate::uuid | Uuid::from_slice(slice) | param | &[u8]
 ambre-core | src/uuid.rs | crate::uuid | Uuid::parse_str(s) | param | &str	newtype-inner	Uuid newtype
 ambre-core | src/uuid.rs | crate::uuid | Uuid::to_hyphenated() | ret | String	newtype-inner	Uuid newtype
 ambre-core | src/uuid.rs | crate::uuid | Uuid::to_simple() | ret | String	newtype-inner	Uuid newtype
+ambre-core | src/uuid.rs | crate::uuid | <UuidVisitor as Visitor<'de>>::Value | assoc | Uuid	generic	the codec of Uuid's own tuple of bytes, which Id wraps in its entity type
+ambre-core | src/uuid.rs | crate::uuid | <UuidVisitor as Visitor<'de>>::visit_seq() | ret | Result<Uuid,A::Error>	generic	the codec of Uuid's own tuple of bytes, which Id wraps in its entity type
 ambre-core | src/version.rs | crate::version | <Protocol as VersionKind>::Repr | assoc | u8	newtype-inner	the number a version of this space holds
 ambre-core | src/version.rs | crate::version | <Version<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/version.rs | crate::version | Version<Protocol>::compatible_with() | ret | bool	generic	predicate
@@ -4858,6 +4868,7 @@ ambre-xlsx | src/ods/write.rs | crate::ods::write | settings_xml() | ret | Optio
 ambre-xlsx | src/write.rs | crate::write | sheet_view_xml(out) | param | &mut String	generic	the worksheet part being written, its sheet view appended
 ambre-core | src/envelope.rs | crate::envelope | <SnapshotDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<SnapshotDigest>, which states its width
 ambre-core | src/envelope.rs | crate::envelope | <ObjectChecksum as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ObjectChecksum>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | crate::FixedBytes<ObjectChecksum>::to_base64() | ret | String	newtype-inner	FixedBytes<ObjectChecksum>'s own spelling, the text of x-amz-checksum-sha256
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | held_root_map(name) | param | &str	foreign-api	the name of a Loro root, which the path lookup of loro takes as text
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | blank() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | holds_object() | ret | Result<bool,AppError>	generic	yes/no fact or predicate answer, selects no mode
@@ -4884,6 +4895,10 @@ ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_i64
 ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_str(value) | param | &str	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
 ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_u128(value) | param | u128	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
 ambre-sync | src/json.rs | crate::json | <Objects<V> as Visitor<'de>>::visit_u64(value) | param | u64	trait	serde Visitor signature: the value serde_json read, which the wrapper hands to the wrapped visitor untouched
+ambre-sync | src/json.rs | crate::json | <NameInto<'_> as Visitor<'de>>::visit_str(name) | param | &str	trait	serde Visitor signature: the field name serde_json read, copied into the buffer of its struct
+ambre-sync | src/json.rs | crate::json | Fields.name | field | String	local	the buffer of the last field name of one struct, read by next_key_seed alone
+ambre-sync | src/json.rs | crate::json | Fields<A>::next_name() | ret | Result<bool,A::Error>	generic	a fact, selects no mode: whether the map held one more field
+ambre-sync | src/json.rs | crate::json | NameInto.0 | field | &'a mut String	local	the buffer of Fields that the visitor fills, read back by next_key_seed alone
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_overflows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::applied_past_cap() | ret | bool	generic	predicate result
 ambre-sync | src/lib.rs | crate | Applied::is_empty() | ret | bool	generic	predicate result
@@ -5038,6 +5053,8 @@ ambre-chrome | src/header.rs | crate::header | PrimaryButton(label) | param | &'
 ambre-chrome | src/header.rs | crate::header | SEARCH_LABEL | const | &str	free-text	the words and the accessible name of the search field of the header
 ambre-chrome | src/status.rs | crate::status | Build::shows_diagnostics() | ret | bool	generic	predicate result
 ambre-commands | src/lib.rs | crate | NOTHING_SELECTED | const | &str	free-text	the subtitle a person reads over an empty selection
+ambre-commands | src/lib.rs | crate | TitleWords.en | field | &'static str	free-text	the English words of a display label, in a const table
+ambre-commands | src/lib.rs | crate | TitleWords.fr | field | &'static str	free-text	the French words of a display label, in a const table
 ambre-prose | src/count.rs | crate::count | words_in(text) | param | &str	free-text	the text a person wrote, counted in words
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
 ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
@@ -5070,6 +5087,18 @@ ambre-client-core | src/settings.rs | crate::settings | SettingWord::as_str() | 
 ambre-client-core | src/settings.rs | crate::settings | SettingWord::new(text) | param | impl Into<String>	newtype-inner	the word a value type spells or the document holds; reading it is the value type's job
 ambre-client-core | src/settings.rs | crate::settings | SettingsSection::word() | ret | &'static str	newtype-inner	closed-set enum word codec: the frozen name of the section's map
 ambre-core | src/static_key.rs | crate::static_key | <SettingKeys as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/base64.rs | crate::base64 | Alphabet::symbol() | ret | char	generic	the base64 symbol of six bits, which the codec pushes onto the text it writes
+ambre-core | src/base64.rs | crate::base64 | Alphabet::symbol(sextet) | param | u32	generic	the group of bits the codec cuts six at a time; the low six bits name the symbol
+ambre-core | src/base64.rs | crate::base64 | Alphabet::symbols() | ret | &'static[u8;64]	generic	the 64 symbols of one alphabet of RFC 4648, in the order of their values
+ambre-core | src/base64.rs | crate::base64 | Alphabet::value() | ret | Option<u32>	generic	the six bits a symbol spells, shifted into a group by the decoder
+ambre-core | src/base64.rs | crate::base64 | Alphabet::value(symbol) | param | u8	generic	one byte of the text under decode, which may be no symbol at all
+ambre-core | src/base64.rs | crate::base64 | PAD | const | u8	generic	the pad symbol of RFC 4648, matched in the text and written into it
+ambre-core | src/base64.rs | crate::base64 | STANDARD_SYMBOLS | const | &[u8;64]	generic	the standard alphabet of RFC 4648, a table of the codec
+ambre-core | src/base64.rs | crate::base64 | URL_SAFE_SYMBOLS | const | &[u8;64]	generic	the URL-safe alphabet of RFC 4648, a table of the codec
+ambre-core | src/base64.rs | crate::base64 | decode() | ret | Result<Vec<u8>,Base64Error>	generic	generic codec/parser/bytes API: the bytes of any role, which Encoded wraps in its own type
+ambre-core | src/base64.rs | crate::base64 | decode(text) | param | &str	generic	generic codec/parser/bytes API: the base64 text of any role, before it parses
+ambre-core | src/base64.rs | crate::base64 | encode() | ret | String	generic	generic codec/parser/bytes API: the base64 text of any role, which Encoded and FixedBytes hand out as their spelling
+ambre-core | src/base64.rs | crate::base64 | encode(bytes) | param | &[u8]	generic	generic codec/parser/bytes API: the bytes of any role, borrowed from Encoded or FixedBytes
 ambre-logic | src/settings.rs | crate::settings | KIND | const | &str	generic	the key of the kind marker in the settings document, which the open reads back: part of its codec
 ambre-logic | src/settings.rs | crate::settings | META | const | &str	generic	the name of the map that holds the kind marker, which the open reads back: part of the codec of the settings document
 ambre-logic | src/settings.rs | crate::settings | SETTINGS_KIND | const | &str	generic	the word the kind marker holds, which the open matches back: part of the codec of the settings document
@@ -5084,3 +5113,9 @@ ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping 
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::sweep_arrival() | ret | bool	generic	state flag/predicate
 ambre-toile | src/chrome/floatbar.rs | crate::chrome::floatbar | property_title() | ret | String	free-text	the label a person reads in the tooltip of a colour trigger
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | CallIcon(class) | param | &'static str	free-text	the class an icon of the call gives its button for the stylesheet and the tests, as IconButton(class)
+ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | ERASURE_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
+ambre-sync | src/erasure.rs | crate::erasure | verifies() | ret | bool	generic	predicate result
+ambre-sync | src/membership_log.rs | crate::membership_log | Held::names() | ret | bool	generic	predicate: does the member hold the signing key and the exchange key an entry names; a guard of the walk reads it, and it selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::holds_other_keys() | ret | bool	generic	predicate: does the log keep the member present under another key pair than the one the relay served; the invite refuses on it, and it selects no mode
+ambre-server | src/db/members.rs | crate::db::members | holds_owner() | ret | Result<bool,AppError>	generic	predicate answer: whether any member row of the document is an owner, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::caps_document() | ret | bool	generic	predicate answer: whether a valid revoke of the log caps the document, selects no mode

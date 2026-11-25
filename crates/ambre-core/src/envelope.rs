@@ -118,6 +118,15 @@ impl FixedRole for ObjectChecksum {
     type Array = [u8; 32];
 }
 
+impl crate::FixedBytes<ObjectChecksum> {
+    /// The text of `x-amz-checksum-sha256`: the digest in the standard
+    /// alphabet of base64, padded, as the object store reads it.
+    #[must_use]
+    pub fn to_base64(&self) -> String {
+        crate::base64::encode(crate::base64::Alphabet::Standard, self.as_slice())
+    }
+}
+
 /// The role of the digest of one membership-log entry, which the next entry
 /// names: `FixedBytes<EntryDigest>`. A wrapped document key also seals the
 /// digest of the first entry, as the anchor of the log (`SYNC-104`).

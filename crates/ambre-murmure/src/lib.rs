@@ -35,7 +35,7 @@ pub mod chrome;
 pub use logic::channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY, FOLD_DELAY, FinalSnapshot, FoldSnapshot,
     Linked, LinkedOpening, Named, Relocated, Replay, Replied, SEGMENT_MESSAGES,
-    SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, SeekStep, Sent, Settled, Successor, SweepStep,
+    SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, SeekStep, Sent, Settled, Successor, SweepStep, Swept,
     ThreadLinked, ThreadTarget,
 };
 pub use logic::delta::{JSON_SCHEMA_VERSION, JsonUpdate, Refusal, Signer};

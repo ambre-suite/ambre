@@ -54,7 +54,7 @@ pub use closing::{Closed, SEGMENT_MESSAGES, SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RET
 pub use finalizing::{FINALIZE_RETRY, FinalSnapshot};
 pub use folding::{FOLD_DELAY, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
-pub use sweeping::SweepStep;
+pub use sweeping::{SweepStep, Swept};
 pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
 
 #[cfg(test)]
