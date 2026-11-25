@@ -1054,7 +1054,7 @@ async fn with_no_selection_the_panel_shows_the_default_fonts() {
 #[wasm_bindgen_test]
 async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
     use ambre_prose::message::DefaultFont;
-    use ambre_prose::view::panel::TextWrite;
+    use ambre_prose::view::panel::TextValue;
     let signals = ProseSignals::new();
     signals.fonts.set(Some(ambre_prose::doc::DocFonts {
         body: ambre_core::FontFamily::from_label("Lora"),
@@ -1082,8 +1082,8 @@ async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
     );
     option(3).click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::DefaultFont(DefaultFont::Heading(Some(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::DefaultFont(DefaultFont::Heading(Some(
             ambre_core::FontFamily::Serif
         ))))
     );
@@ -1098,8 +1098,8 @@ async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
     );
     option(1).click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::DefaultFont(DefaultFont::Heading(None)))
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::DefaultFont(DefaultFont::Heading(None)))
     );
     root.remove();
 }
