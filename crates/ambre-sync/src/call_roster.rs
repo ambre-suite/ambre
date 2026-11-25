@@ -10,7 +10,7 @@
 use ambre_bus::{CallMembers, LogicEvent};
 use ambre_core::id::{Call, Channel, Document, Id, User};
 use ambre_crypto::call::SignedJoin;
-use ambre_protocol::signaling::{CallRoster, ChannelCall, ChannelCalls};
+use ambre_protocol::signaling::{CallRoster, ChannelCalls, ChannelLiveCall};
 
 #[cfg(target_arch = "wasm32")]
 use crate::SyncEvent;
@@ -173,7 +173,7 @@ impl SyncState {
     /// listing asks again.
     pub(crate) fn channel_calls_fetched(
         &self,
-        result: Result<Vec<ChannelCall>, crate::http::HttpError>,
+        result: Result<Vec<ChannelLiveCall>, crate::http::HttpError>,
     ) {
         match result {
             Ok(calls) => self.send_to_logic(LogicEvent::ChannelCalls {

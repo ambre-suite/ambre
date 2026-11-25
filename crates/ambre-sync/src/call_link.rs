@@ -1626,7 +1626,7 @@ mod tests {
             ambre_core::LocalFailure::NoRelay,
         )));
         assert!(rx.try_recv().is_err(), "a failed read names no call");
-        state.channel_calls_fetched(Ok(vec![ambre_protocol::signaling::ChannelCall {
+        state.channel_calls_fetched(Ok(vec![ambre_protocol::signaling::ChannelLiveCall {
             channel: TARGET.channel,
             call: TARGET.call,
         }]));

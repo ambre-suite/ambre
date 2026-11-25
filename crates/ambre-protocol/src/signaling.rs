@@ -263,7 +263,7 @@ pub enum CallRoster {
 /// The live call of one channel of the asker, as the key of that channel names it
 /// (`CALL-160`, `CALL-162`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChannelCall {
+pub struct ChannelLiveCall {
     #[serde(with = "ambre_core::serde_id::text")]
     pub channel: Id<Channel>,
     #[serde(with = "ambre_core::serde_id::text")]
@@ -274,7 +274,7 @@ pub struct ChannelCall {
 /// `GET /api/channel-calls` (`CALL-162`). A channel with no live call is absent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelCalls {
-    pub calls: Vec<ChannelCall>,
+    pub calls: Vec<ChannelLiveCall>,
 }
 
 /// The address of the signalling socket of the SFU: `ws:` or `wss:`, then a host and a path.

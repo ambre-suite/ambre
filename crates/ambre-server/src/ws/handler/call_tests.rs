@@ -1404,7 +1404,7 @@ async fn a_heartbeat_renews_the_admission_of_a_member_in_the_channel_alone(pool:
 async fn ask_channel_calls(
     state: &Arc<AppState>,
     asker: &Member,
-) -> Vec<ambre_protocol::signaling::ChannelCall> {
+) -> Vec<ambre_protocol::signaling::ChannelLiveCall> {
     use axum::response::IntoResponse;
     let answer = crate::routes::channel_calls(
         State(state.clone()),
@@ -1431,7 +1431,7 @@ async fn ask_channel_calls(
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn a_member_reads_the_live_call_of_its_own_channels_alone(pool: sqlx::PgPool) {
-    use ambre_protocol::signaling::ChannelCall;
+    use ambre_protocol::signaling::ChannelLiveCall;
     let state = test_app_state(pool.clone()).await;
     let alice = Member::new(&pool, "alice", 1).await;
     let bob = Member::new(&pool, "bob", 2).await;
@@ -1448,14 +1448,14 @@ async fn a_member_reads_the_live_call_of_its_own_channels_alone(pool: sqlx::PgPo
     }
     assert_eq!(
         ask_channel_calls(&state, &carol).await,
-        [ChannelCall {
+        [ChannelLiveCall {
             channel: with_carol,
             call: first
         }]
     );
     assert_eq!(
         ask_channel_calls(&state, &bob).await,
-        [ChannelCall {
+        [ChannelLiveCall {
             channel: with_bob,
             call: second
         }]
@@ -1463,11 +1463,11 @@ async fn a_member_reads_the_live_call_of_its_own_channels_alone(pool: sqlx::PgPo
     let mut both = ask_channel_calls(&state, &alice).await;
     ambre_core::order::sort_by_id(&mut both, |c| c.call);
     let mut want = vec![
-        ChannelCall {
+        ChannelLiveCall {
             channel: with_carol,
             call: first,
         },
-        ChannelCall {
+        ChannelLiveCall {
             channel: with_bob,
             call: second,
         },

@@ -660,7 +660,7 @@ enum SyncEvent {
     /// The answer to an ask of the live calls of the user's channels
     /// (`SyncCommand::FetchChannelCalls`, `CALL-162`).
     ChannelCallsFetched {
-        result: Result<Vec<ambre_protocol::signaling::ChannelCall>, http::HttpError>,
+        result: Result<Vec<ambre_protocol::signaling::ChannelLiveCall>, http::HttpError>,
     },
     /// The answer to a listing of a space's public channels
     /// (`SyncCommand::ListSpaceChannels`).

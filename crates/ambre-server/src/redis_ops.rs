@@ -1291,7 +1291,7 @@ return answer
 pub async fn channel_calls(
     redis: &Client,
     channels: &[Id<Channel>],
-) -> Result<Vec<ambre_protocol::signaling::ChannelCall>, AppError> {
+) -> Result<Vec<ambre_protocol::signaling::ChannelLiveCall>, AppError> {
     if channels.is_empty() {
         return Ok(Vec::new());
     }
@@ -1312,7 +1312,7 @@ pub async fn channel_calls(
         .zip(held)
         .filter_map(|(channel, call)| {
             let call = Id::<ambre_core::id::Call>::parse_str(&call?).ok()?;
-            Some(ambre_protocol::signaling::ChannelCall {
+            Some(ambre_protocol::signaling::ChannelLiveCall {
                 channel: *channel,
                 call,
             })
