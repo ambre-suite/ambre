@@ -57,6 +57,12 @@ impl LogicState {
         if let Some(session) = &self.settings {
             if session.document_id() != document_id {
                 tracing::warn!("Logic: a second settings document named, refused");
+                // The user sees the refusal, not only a log line
+                // (`SETTINGS-045`).
+                self.send_to_ui(UiEvent::SyncWarning {
+                    document_id,
+                    code: ambre_bus::sync_warning::SyncWarningCode::SettingsRefused,
+                });
             }
             return;
         }
@@ -547,6 +553,33 @@ mod tests {
             },
         });
         assert_eq!(rig.sync.try_iter().count(), 0, "nothing more opens");
+        assert!(rig.state.is_settings(rig.document_id));
+    }
+
+    /// `SETTINGS-045`: the refusal of a second settings document reaches the
+    /// view as a warning, and the same document named again warns nothing.
+    #[test]
+    fn a_refused_settings_document_warns_the_user() {
+        use ambre_bus::sync_warning::SyncWarningCode;
+        let mut rig = rig(0.0);
+        let warnings = |ui: &Receiver<UiEvent>| -> usize {
+            ui.try_iter()
+                .filter(|event| {
+                    matches!(
+                        event,
+                        UiEvent::SyncWarning {
+                            code: SyncWarningCode::SettingsRefused,
+                            ..
+                        }
+                    )
+                })
+                .count()
+        };
+        rig.ui.try_iter().for_each(drop);
+        named(&mut rig.state, rig.document_id);
+        assert_eq!(warnings(&rig.ui), 0, "the kept document warns nothing");
+        named(&mut rig.state, Id::<Document>::mint());
+        assert_eq!(warnings(&rig.ui), 1);
         assert!(rig.state.is_settings(rig.document_id));
     }
 
