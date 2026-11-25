@@ -348,6 +348,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[ ]` The chart isolates its pods on the network | MVP | the chart lets each pod reach every other pod and every host. A pod that an attacker takes can then reach the database. Done when each pod of the chart reaches only the services it names, and the chart test shows a refused connection |
 | `[x]` The WASM tests of ambre-sync compile in CI | MVP | `cargo clippy --target wasm32-unknown-unknown -p ambre-sync --lib --tests` fails to compile in `json.rs`, `log.rs`, `call_tests.rs` and `sharing.rs`. CI checks the library and three tests alone, so the others rot. Done when CI compiles every WASM test of `ambre-sync` and they pass |
 | `[x]` Every mutant of the call keys is caught | MVP | the mutants run of `c0b1ddb` missed five mutants of `crates/ambre-crypto/src/call.rs`: `ReceiveKeys::close` (`<` to `<=`), `Received::retire_below` (`<=` to `>`) and three in `Departures::read` (line 1262). No test sees a wrong bound on the retirement of a call key or on a departure. Done when a test catches each of them, or a row shows that a mutant is equivalent and why |
+| `[ ]` Re-run the mutant shards 5, 7 and 11 | MVP | CI run 45528449253 cancelled the mutant shards 5, 7 and 11, so no run has measured their mutants yet. Done when the three shards run to their end, and each mutant they miss is caught by a test, excluded in `.cargo/mutants.toml` with its reason, or filed as a row |
 
 ### Trame
 
@@ -603,6 +604,7 @@ row reads `V1`.
 | `[ ]` The JSON reader of Sync passes a human review | V1 | the reader that decodes every struct as a map added 21 trait lines to `ambre-primitives.tsv` and 2 lines to `ambre-newtypes.tsv` (`ARCH-035`, `ARCH-063`). Done when a reviewer holds them by hand and records the review |
 | `[ ]` A browser test of the moved creation bar | V1 | the creation bar moved to one place in Prose, Trame and Toile, and no belt test presses it there. Done when a belt test presses one item of the bar in each application |
 | `[ ]` The sheet reads the cover in WASM | V1 | a host test alone shows that a fit of the grid frames clear of a bar that covers it. Done when a WASM test shows the same fit in the sheet |
+| `[ ]` The non-security mutants of Murmure and Sync are caught | V1 | the mutants run left ten mutants that no test sees. In `crates/ambre-murmure/src/logic/channel/sweeping.rs`, `ChannelState::next_sweep` with `==` to `!=`. In `crates/ambre-sync/src`: `Applied::is_empty` to `false` in `lib.rs`; `SyncState::open_channel_documents` with `&&` to `||`, twice, in `channels.rs`; `end_json` to `Ok(())` and the `*` of line 613 to `+`, twice, in `http.rs`; `SyncState::kept_names` to `Default` in `members.rs`; `SyncState::find_settings_document` to `()` in `settings.rs`; and the `applied` field of `LightSubscription::of` deleted at line 128 of `light.rs`. Done when a test catches each of them, or an exclusion of `.cargo/mutants.toml` shows that a mutant is equivalent and why |
 
 ### Trame
 
