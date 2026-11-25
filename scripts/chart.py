@@ -16,6 +16,9 @@ the stores in the cluster, the stores outside it, and the stack under test of
   cluster (`CALL-141`);
 * a store image that names no digest, or another image than the compose file
   of `deploy/compose/` names for the same service (`ARCH-087`);
+* a pod off the network of its node that a NetworkPolicy leaves open in
+  either direction, or whose policies admit a flow the table of `FLOWS` does
+  not name, or refuse one it names (`SRV-351`);
 * with `--release`, an image of Ambre that names no digest (`SRV-308`).
 
 `check` also reads `.github/workflows/release.yml`: a release builds and
@@ -25,12 +28,18 @@ checks the pinned chart and pushes it (`SRV-308`).
 `pin VERSION relay=sha256:... sfu=... web=... init=...` writes the version
 and the digests of a release into `Chart.yaml` and `values.yaml`.
 
+`probe CONTEXT` runs on the cluster of `just chart-test`: two pods the flow
+table names nowhere try each port of the stores and of the relay, and a
+refused connection is the pass. The pod outside the release also reaches the
+web server, so a refusal is the policy and not a broken network (`SRV-352`).
+
 The renders and the workflow are read with PyYAML, which the Python of the
 CI runner ships as `python3-yaml`. Run: `just chart-check`. It writes nothing.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -58,13 +67,26 @@ SECRET_NAME = re.compile(r"(PASSWORD|SECRET|SEED|TOKEN|ADMISSION_KEY)$|^DATABASE
 # A value that reads a variable the pod got from the Secret is no secret in clear.
 REFERENCE = re.compile(r"\$\([A-Z_]+\)")
 BASE = ["--set", "domain=ambre.example.org,tls=admin@example.org,existingSecret=ambre"]
+# The addresses of the stores outside the cluster, in the render that names them.
+EXTERNAL_STORES = [{"to": [{"ipBlock": {"cidr": "192.0.2.10/32"}}], "ports": [{"port": 5432}, {"port": 6379}]}]
 EXTERNAL = [
     *BASE,
     "--set",
     "postgres.enabled=false,redis.enabled=false,garage.enabled=false",
     "--set",
     "s3.endpoint=https://s3.example.org,s3.publicEndpoint=https://s3.example.org",
+    "--set-json",
+    "networkPolicy.externalStores=" + json.dumps(EXTERNAL_STORES),
 ]
+
+# A peer or a port a rule leaves out: every one.
+ANYWHERE = "anywhere"
+# The private, shared, link-local and loopback ranges a public peer excepts.
+PRIVATE = {
+    "0.0.0.0/0": {"10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"},
+    "::/0": {"::1/128", "fc00::/7", "fe80::/10"},
+}
+DNS = {"kubernetes.io/metadata.name": "kube-system"}, {"k8s-app": "kube-dns"}
 
 
 def render(*args: str) -> list[dict]:
@@ -181,6 +203,98 @@ def check_images(objects: list[dict], compose: dict[str, str], release: bool) ->
     return faults
 
 
+def flows_table(present: set[str], acme: bool, external: bool) -> set[tuple[str, str, str, str]]:
+    """The flow table of `ambre-spec-server.md` section 3, for the stores a render runs.
+
+    Each flow reads (pod, direction, peer, port). `public` is every address
+    but the private ranges of `PRIVATE`, and `dns` the resolver of the cluster.
+    """
+    flows = {
+        ("web", "ingress", ANYWHERE, "TCP/8080"),
+        ("web", "ingress", ANYWHERE, "TCP/8443"),
+        ("web", "egress", "relay", "TCP/3000"),
+        # The SFU listens on the address of its node, which no pod selector names.
+        ("web", "egress", ANYWHERE, "TCP/3480"),
+        ("relay", "ingress", "web", "TCP/3000"),
+        ("relay", "egress", "public", "TCP/443"),
+    }
+    for pod in ("web", "relay"):
+        flows |= {(pod, "egress", "dns", "UDP/53"), (pod, "egress", "dns", "TCP/53")}
+    if acme:
+        flows.add(("web", "egress", "public", "TCP/443"))
+    for store, port in (("postgres", "TCP/5432"), ("redis", "TCP/6379")):
+        if store in present:
+            flows |= {("relay", "egress", store, port), (store, "ingress", "relay", port)}
+    if "garage" in present:
+        for port in ("TCP/3900", "TCP/3903"):
+            flows |= {("relay", "egress", "garage", port), ("garage", "ingress", "relay", port)}
+        flows |= {("web", "egress", "garage", "TCP/3900"), ("garage", "ingress", "web", "TCP/3900")}
+    if external:
+        for rule in EXTERNAL_STORES:
+            for peer in rule["to"]:
+                for port in rule["ports"]:
+                    flows.add(("relay", "egress", f"ipBlock {peer['ipBlock']['cidr']}", f"TCP/{port['port']}"))
+    return flows
+
+
+def selects(selector: dict, labels: dict) -> bool:
+    """Whether a label selector of a NetworkPolicy matches these labels."""
+    if set(selector) - {"matchLabels"}:
+        return False
+    return all(labels.get(k) == v for k, v in selector.get("matchLabels", {}).items())
+
+
+def peer_name(peer: dict, pods: dict[str, dict]) -> str:
+    """The name the flow table gives a peer of a rule."""
+    block = peer.get("ipBlock")
+    if block:
+        if set(block.get("except", [])) == PRIVATE.get(block["cidr"]):
+            return "public"
+        return f"ipBlock {block['cidr']}"
+    ns, pod = peer.get("namespaceSelector"), peer.get("podSelector")
+    if ns is not None:
+        if pod is not None and ns.get("matchLabels") == DNS[0] and pod.get("matchLabels") == DNS[1]:
+            return "dns"
+        return f"namespaces {ns}"
+    matched = sorted(name for name, labels in pods.items() if selects(pod, labels))
+    if len(matched) == 1 and pod.get("matchLabels", {}).get("app.kubernetes.io/component") == matched[0]:
+        return matched[0]
+    return f"pods {pod}"
+
+
+def check_network(objects: list[dict], expected: set[tuple[str, str, str, str]]) -> list[str]:
+    """The faults of the NetworkPolicies of one render against its flow table (`SRV-351`)."""
+    pods = {
+        component(o): o["spec"]["template"]["metadata"]["labels"]
+        for o in objects
+        if pod_of(o) is not None and not pod_of(o).get("hostNetwork")
+    }
+    policies = [o["spec"] for o in objects if o.get("kind") == "NetworkPolicy"]
+    faults, found = [], set()
+    for name, labels in pods.items():
+        mine = [p for p in policies if selects(p.get("podSelector", {}), labels)]
+        for direction, key, side in (("ingress", "from", "Ingress"), ("egress", "to", "Egress")):
+            if not any(side in p.get("policyTypes", []) for p in mine):
+                faults.append(f"{name}: no NetworkPolicy isolates its {direction}")
+                continue
+            for policy in mine:
+                if side not in policy.get("policyTypes", []):
+                    continue
+                for rule in policy.get(direction, []):
+                    peers = [peer_name(p, pods) for p in rule.get(key, [])] or [ANYWHERE]
+                    ports = [
+                        f"{p.get('protocol', 'TCP')}/{p['port']}" if "port" in p else f"{p.get('protocol', 'TCP')}/any"
+                        for p in rule.get("ports", [])
+                    ] or ["any port"]
+                    found |= {(name, direction, peer, port) for peer in peers for port in ports}
+    for flow in sorted(found - expected):
+        faults.append("{}: its {} admits {} on {}, which the flow table does not name".format(*flow))
+    for flow in sorted(expected - found):
+        if flow[0] in pods:
+            faults.append("{}: its {} refuses {} on {}, which the flow table names".format(*flow))
+    return faults
+
+
 def check_objects(objects: list[dict], compose: dict[str, str], release: bool) -> list[str]:
     """Every fault of one render."""
     faults = []
@@ -292,6 +406,9 @@ def check(release: bool) -> int:
     for name, objects in renders.items():
         under_test = name == "the stack under test"
         faults += [f"{name}: {f}" for f in check_objects(objects, compose, release and not under_test)]
+        present = {component(o) for o in objects if pod_of(o) is not None}
+        table = flows_table(present, acme=not under_test, external=name == "stores outside it")
+        faults += [f"{name}: {f}" for f in check_network(objects, table)]
     if not release:
         faults += [f"release.yml: {f}" for f in check_release(yaml.safe_load(RELEASE.read_text()))]
     for fault in faults:
@@ -302,9 +419,101 @@ def check(release: bool) -> int:
     return 0
 
 
+# The release of `just chart-test`, and the kubectl that reaches its cluster.
+PROBE_RELEASE = "ambre"
+PROBE_KUBECTL = ["kubectl", "--context", "kind-ambre-chart"]
+# What a pod the flow table names nowhere tries and must not reach (`SRV-352`).
+REFUSED = (("postgres", 5432), ("redis", 6379), ("garage", 3900), ("garage", 3903), ("relay", 3000), ("relay", 9100))
+# The one entry every pod reaches: the web server on the port of its Service.
+OPEN = ("web", 443)
+# The image of the probe, which `just chart-test` loads, and its program: one
+# line per target, `host port 1` when a connection opened and `0` otherwise.
+PROBE_IMAGE = "ambre-init:local"
+PROBE_SCRIPT = """
+import socket, sys
+for target in sys.argv[1:]:
+    host, port = target.rsplit(":", 1)
+    try:
+        socket.create_connection((host, int(port)), timeout=5).close()
+        print(host, port, 1)
+    except OSError:
+        print(host, port, 0)
+"""
+# The two probes: outside the release, and inside it under no component the
+# table names. The labels of the second one put it under the deny policy.
+PROBES = {
+    "ambre-probe-outside": "app.kubernetes.io/name=probe",
+    "ambre-probe-inside": f"app.kubernetes.io/name=ambre,app.kubernetes.io/instance={PROBE_RELEASE},app.kubernetes.io/component=probe",
+}
+
+
+def probe_faults(probe: str, lines: str, targets: dict[str, bool]) -> list[str]:
+    """The faults of one probe: a target it reached that it must not, or the reverse.
+
+    `targets` maps each `host:port` to whether the probe must reach it.
+    """
+    seen = {}
+    for line in lines.splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[2] in ("0", "1"):
+            seen[f"{parts[0]}:{parts[1]}"] = parts[2] == "1"
+    faults = []
+    for target, must in targets.items():
+        if target not in seen:
+            faults.append(f"{probe}: no answer for {target}")
+        elif seen[target] and not must:
+            faults.append(f"{probe}: reached {target}, which the flow table does not name")
+        elif must and not seen[target]:
+            faults.append(f"{probe}: did not reach {target}, so a refusal proves nothing")
+    return faults
+
+
+def kube(kubectl: list[str], *args: str) -> str:
+    """The output of one kubectl command, or an exit on its failure."""
+    out = subprocess.run([*kubectl, *args], capture_output=True, text=True, check=False)
+    if out.returncode != 0:
+        raise SystemExit(f"kubectl {' '.join(args)} failed:\n{out.stderr}")
+    return out.stdout
+
+
+def probe(kubectl: list[str]) -> int:
+    """Runs the two probes on the cluster of `just chart-test` (`SRV-352`)."""
+    def name(svc: str) -> str:
+        return f"{PROBE_RELEASE}-{svc}"
+
+    # The inside probe resolves no name, since its policy admits no resolver.
+    ip = {svc: kube(kubectl, "get", "svc", name(svc), "-o", "jsonpath={.spec.clusterIP}").strip() for svc, _ in REFUSED}
+    plans = {
+        "ambre-probe-outside": {
+            **{f"{name(svc)}:{port}": False for svc, port in REFUSED},
+            f"{name(OPEN[0])}:{OPEN[1]}": True,
+        },
+        "ambre-probe-inside": {f"{ip[svc]}:{port}": False for svc, port in REFUSED},
+    }
+    faults = []
+    for pod, targets in plans.items():
+        kube(kubectl, "delete", "pod", pod, "--ignore-not-found", "--wait=true")
+        kube(
+            kubectl, "run", pod, "--image", PROBE_IMAGE, "--image-pull-policy", "Never",
+            "--restart", "Never", "--labels", PROBES[pod], "--command", "--",
+            "python3", "-c", PROBE_SCRIPT, *targets,
+        )
+        kube(kubectl, "wait", f"pod/{pod}", "--for=jsonpath={.status.phase}=Succeeded", "--timeout=180s")
+        faults += probe_faults(pod, kube(kubectl, "logs", pod), targets)
+        kube(kubectl, "delete", "pod", pod, "--wait=false")
+    for fault in faults:
+        print(f"chart: {fault}", file=sys.stderr)
+    if faults:
+        return 1
+    print(f"chart: {sum(len(t) for t in plans.values())} connections of two probes hold the flow table")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if argv[:1] == ["check"]:
         return check(release=argv[1:] == ["--release"])
+    if argv[:1] == ["probe"]:
+        return probe(argv[1:] or PROBE_KUBECTL)
     if argv[:1] == ["pin"] and len(argv) >= 2:
         return pin(argv[1], argv[2:])
     print(__doc__, file=sys.stderr)

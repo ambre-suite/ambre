@@ -939,15 +939,18 @@ selfhost-down:
 
 # The chart of `deploy/chart/`, rendered under three sets of values and held to
 # its rules: no root, no capability, no secret in a value, the SFU on the
-# network of its node, the store images of the compose file, and the release
-# workflow that pins each image by digest (`scripts/chart.py`). Needs Helm.
+# network of its node, the store images of the compose file, the flow table of
+# the NetworkPolicies, and the release workflow that pins each image by digest
+# (`scripts/chart.py`). Needs Helm.
 chart-check:
     python3 scripts/chart.py check
 
 # `SRV-309`, `CALL-141`: the chart on a local kind cluster, from the images that
 # `just selfhost-up` built, then the browser tier through its web server on
 # port 443 of the host. The media of a call must reach the address of the node.
-# The cluster is deleted on exit, and its state printed first on a failure.
+# Between the two, two probe pods find each store and the relay refused
+# (`SRV-352`). The cluster is deleted on exit, and its state printed first on a
+# failure.
 chart-test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -960,6 +963,7 @@ chart-test:
     helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
     for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
     curl -skf -o /dev/null https://localhost/api/auth/config
+    python3 scripts/chart.py probe kubectl $kube
     node=$(kubectl $kube get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
     for t in prose::tests::the_self_hosted_stack_serves_two_members_one_document murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp; do sleep 61; BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost SELFHOST_MEDIA_HOST="$node" cargo test -p ambre-belt -- --ignored --exact "$t"; done
 

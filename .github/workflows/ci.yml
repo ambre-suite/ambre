@@ -177,8 +177,9 @@ jobs:
       - run: just service-pins
       # What the chart deploys: no root, no capability, no secret in a value,
       # the SFU on the network of its node, the store images of the compose
-      # file, and a release that pins each image by digest (`SRV-308`,
-      # `CALL-141`). The runner image ships Helm and PyYAML.
+      # file, the flow table of the NetworkPolicies, and a release that pins
+      # each image by digest (`SRV-308`, `SRV-351`, `CALL-141`). The runner
+      # image ships Helm and PyYAML.
       - run: just chart-check
       # Which step can read the job token: no checkout leaves it in
       # `.git/config`, unless the step is named for the push it makes
@@ -752,8 +753,8 @@ jobs:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
           BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
       # The chart on a kind cluster, from the images the step above built
-      # (`SRV-309`, `CALL-141`, `just chart-test`). The runner image ships
-      # kind, kubectl and Helm.
+      # (`SRV-309`, `SRV-352`, `CALL-141`, `just chart-test`). The runner
+      # image ships kind, kubectl and Helm.
       - run: just chart-test
         env:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
