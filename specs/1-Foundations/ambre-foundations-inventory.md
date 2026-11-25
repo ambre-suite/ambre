@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 132 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 31 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 161 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 162 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 20 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 23 |  |
@@ -62,8 +62,8 @@
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | partial | 41 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 55 | 1 |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 56 | 1 |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 27 implemented, 21 partial, 2 design-only. 1942 contract rows, 14 loose.**
+**50 features: 27 implemented, 21 partial, 2 design-only. 1944 contract rows, 14 loose.**

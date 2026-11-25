@@ -829,6 +829,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 channel_id: chan,
                 meta: Id::<Meta>::from_document(doc),
                 last: Some(Seq::<Relay>::new(5)),
+                call: Some(Id::<ambre_core::id::Call>::mint()),
             }],
         },
         LogicEvent::MeetingParticipantJoined {

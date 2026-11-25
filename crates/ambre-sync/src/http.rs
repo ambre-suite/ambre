@@ -1791,6 +1791,9 @@ pub(crate) struct MemberChannelEntry {
     /// relay that lists none.
     #[serde(default)]
     pub meta_last: Option<ambre_core::Seq<ambre_core::Relay>>,
+    /// The live call of the channel, none for none (`CALL-162`).
+    #[serde(default, with = "ambre_core::serde_id::text::option")]
+    pub call: Option<Id<ambre_core::id::Call>>,
 }
 
 impl MemberChannelEntry {

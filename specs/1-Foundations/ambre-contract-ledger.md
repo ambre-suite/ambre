@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5191 rows: 4799 shipped, of which 14 loose. 392 unbuilt.**
+**5193 rows: 4802 shipped, of which 14 loose. 391 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1785 | 583 | 1003 | 849 | 565 | 4785 |
+| `verified` | 1787 | 583 | 1003 | 849 | 566 | 4788 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 144 | 42 | 20 | 20 | 166 | 392 |
+| `unimplemented` | 144 | 42 | 20 | 20 | 165 | 391 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,7 +40,7 @@
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-architecture.md` | 132 | 132 | 124 | 8 |  |
 | `ambre-spec-broadcast.md` | 31 | 31 | 31 |  |  |
-| `ambre-spec-call-media.md` | 161 | 161 | 161 |  |  |
+| `ambre-spec-call-media.md` | 162 | 162 | 162 |  |  |
 | `ambre-spec-call-proofs.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-chrome.md` | 40 | 39 | 39 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
@@ -83,7 +83,7 @@
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-undo.md` | 25 | 25 | 25 |  |  |
 | `ambre-spec-user-settings.md` | 41 | 40 | 40 |  | 1 |
-| `ambre-spec-zero-knowledge.md` | 55 | 54 | 53 | 1 | 1 |
+| `ambre-spec-zero-knowledge.md` | 56 | 55 | 54 | 1 | 1 |
 | `ambre-spec-zoom.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
@@ -173,7 +173,7 @@
 | `ambre-spec-prose-word-count.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 19 | 18 | 18 |  | 1 |
-| `ambre-spec-murmure-calls.md` | 102 | 94 | 94 |  | 8 |
+| `ambre-spec-murmure-calls.md` | 102 | 95 | 95 |  | 7 |
 | `ambre-spec-murmure-channels.md` | 58 | 43 | 43 |  | 15 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
@@ -207,7 +207,7 @@
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
 | `ambre-spec-architecture.md` | ARCH-001..132 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237,258,269,301 |
-| `ambre-spec-call-media.md` | CALL-001..161 |
+| `ambre-spec-call-media.md` | CALL-001..162 |
 | `ambre-spec-call-proofs.md` | PROOF-001..020 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115,199..206 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057,061 |
@@ -369,5 +369,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064,067 |
 | `ambre-spec-undo.md` | UNDO-001..025 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..041 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..055 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..056 |
 | `ambre-spec-zoom.md` | ZOOM-001..011 |
