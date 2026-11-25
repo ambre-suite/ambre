@@ -773,29 +773,34 @@ pub struct ThreadErasuresJson {
     pub erasures: Vec<ThreadErasureJson>,
 }
 
-/// The `meta` of `channel_id`, when `user` is a member of it with `role`.
-/// An unknown channel and a stranger answer the same 403.
+/// The role of `user` on the `meta` of `channel_id`, and that `meta`. An
+/// unknown channel and a stranger answer the same 403.
 async fn meta_role(
     state: &AppState,
     channel_id: &Id<id::Channel>,
     user: &Id<User>,
-) -> Result<(Id<Meta>, Role), AppError> {
+) -> Result<(Role, Id<Document>), AppError> {
     let meta = db::get_channel(&state.db, channel_id)
         .await?
         .and_then(|channel| channel.meta_id)
-        .ok_or(AppError::Forbidden)?;
-    let role = db::member_role(&state.db, &meta.document_id(), user)
+        .ok_or(AppError::Forbidden)?
+        .document_id();
+    let role = db::member_role(&state.db, &meta, user)
         .await?
         .ok_or(AppError::Forbidden)?;
-    Ok((meta, role))
+    Ok((role, meta))
 }
 
-/// `POST /api/channels/{id}/erasures`: record an owner's erasure of a thread
-/// name that no document of the channel answers (`SRV-347`).
+/// `POST /api/channels/{id}/erasures`: record an erasure of a thread name
+/// that no document of the channel answers (`SRV-347`, `SRV-349`).
 ///
-/// The caller owns the `meta`, and signs under the key its account holds.
-/// The relay refuses an erasure of a document the channel groups. It learns
-/// the thread id, which a root of the channel names, and nothing of the root.
+/// The caller owns the `meta`, or writes in a `meta` that holds no owner
+/// (`SRV-356`). A direct message holds none, and neither does a public
+/// channel its last owner left. The census reads the same absence from the
+/// log, so the two agree on who erases. The caller signs under the key its
+/// account holds. The relay refuses an erasure of a document the channel
+/// groups. It learns the thread id, which a root of the channel names, and
+/// nothing of the root.
 pub async fn erase_thread(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -805,8 +810,12 @@ pub async fn erase_thread(
     use ed25519_dalek::{Signature, VerifyingKey};
     let channel_id = ids.into_inner();
     let req = body.into_inner();
-    let (_, role) = meta_role(&state, &channel_id, &auth.user_id).await?;
-    if role != Role::Owner {
+    let (role, meta) = meta_role(&state, &channel_id, &auth.user_id).await?;
+    let writes = role
+        .document_rank()
+        .is_some_and(|rank| rank >= ambre_core::DocumentRank::Editor);
+    let erases = role == Role::Owner || (writes && !db::holds_owner(&state.db, &meta).await?);
+    if !erases {
         return Err(AppError::Forbidden);
     }
     let transcript = ambre_protocol::thread_erasure::erasure_transcript(channel_id, req.thread);
@@ -4240,6 +4249,173 @@ mod tests {
             .await
             .is_err(),
             "a stranger lists nothing"
+        );
+    }
+
+    /// `SRV-356`: the relay gives the erasure to each writer exactly when the
+    /// `meta` holds no owner, as the census reads an ownerless log. An editor of a public channel erases nothing while its
+    /// owner stays, and erases once the last owner left. A direct message
+    /// holds no owner from its creation.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_writer_erases_exactly_when_the_meta_holds_no_owner(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor), (carol, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        let meta = channel.meta.document_id();
+        assert_eq!(
+            join(&state, carol, channel.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+        let phantom = Id::<Document>::mint();
+        let by_carol = (carol, channel.id);
+
+        assert!(db::holds_owner(&state.db, &meta).await.expect("query"));
+        assert_eq!(
+            erase(&state, carol, &channel, phantom, by_carol).await,
+            StatusCode::FORBIDDEN,
+            "an owner stays"
+        );
+        assert_eq!(
+            leave(&state, bob, &channel).await.expect("leave"),
+            db::Removed::Kept
+        );
+        assert!(!db::holds_owner(&state.db, &meta).await.expect("query"));
+        assert_eq!(
+            erase(&state, carol, &channel, phantom, by_carol).await,
+            StatusCode::OK,
+            "no owner is left"
+        );
+    }
+
+    /// `SRV-355`: a departure from a channel caps the leaver in documents
+    /// of that channel alone. A cap of a document the channel does not
+    /// group refuses the departure and adds nothing to the log. Caps of the
+    /// segment and of a linked thread pass.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removal_caps_only_documents_of_its_channel(pool: sqlx::PgPool) {
+        use ed25519_dalek::Signer;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let meta = channel.meta.document_id();
+        open_log(&state, meta, alice).await;
+        grant(&state, meta, bob, Role::Editor).await;
+        let thread_doc = document(&state, alice).await;
+        thread(&state, alice, &channel, Id::<Message>::mint(), thread_doc)
+            .await
+            .expect("thread");
+        let position = log_length(&state, meta).await;
+        let departure = |capped: &[Id<Document>]| {
+            let text = signed_entry(meta, position, bob, MembershipAct::Revoke, Role::Editor);
+            let mut entry = ambre_protocol::MembershipEntry::decode(&text).expect("decode");
+            entry.document_caps = capped
+                .iter()
+                .map(|document| ambre_protocol::DocumentCap {
+                    document: *document,
+                    cap: ambre_core::Seq::<ambre_protocol::messages::DeltaAuthor>::new(0),
+                })
+                .collect();
+            entry.document_caps.sort_by_key(|c| *c.document.as_bytes());
+            let signed = entry.signed_bytes().expect("signed bytes");
+            entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
+                signing_key_of(bob).sign(signed.as_bytes()).to_bytes(),
+            );
+            crate::routes::share::RemovalRequest {
+                entry: Some(entry.encode().expect("encode")),
+                continued: Vec::new(),
+            }
+        };
+        let leave = |body| {
+            crate::routes::share::revoke_from_document(
+                State(state.clone()),
+                session(bob),
+                PathId::new((meta, bob)),
+                Some(Json::new(body)),
+            )
+        };
+
+        let stray = Id::<Document>::mint();
+        assert_eq!(
+            status(leave(departure(&[thread_doc, stray])).await),
+            StatusCode::BAD_REQUEST,
+            "a cap outside the channel"
+        );
+        assert_eq!(
+            log_length(&state, meta).await,
+            position,
+            "nothing is logged"
+        );
+        assert_eq!(role_on(&state, meta, bob).await, Some(Role::Editor));
+
+        let grouped = [thread_doc, channel.segment.document_id()];
+        assert_eq!(status(leave(departure(&grouped)).await), StatusCode::OK);
+        assert_eq!(log_length(&state, meta).await, position + 1);
+    }
+
+    /// `SRV-349`: a direct message has no owner, so each of its writers
+    /// erases a thread name, under their own signature over this channel. A
+    /// stranger still erases nothing, and the channel still refuses an
+    /// erasure of a document it groups.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_writer_of_a_direct_message_erases_a_thread_name(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let eve = user(&state, "eve@test.dev").await;
+        let req = direct_request(alice, &[bob]);
+        let channel = Channel {
+            id: req.channel_id,
+            meta: req.meta_id,
+            segment: req.segment_id,
+        };
+        open_direct(&state, alice, req).await.expect("create");
+        let phantom = Id::<Document>::mint();
+
+        assert_eq!(
+            erase(&state, eve, &channel, phantom, (eve, channel.id)).await,
+            StatusCode::FORBIDDEN,
+            "a stranger erases nothing"
+        );
+        assert_eq!(
+            erase(&state, bob, &channel, phantom, (alice, channel.id)).await,
+            AppError::InvalidSignature.into_response().status(),
+            "a writer signs under their own key"
+        );
+        assert_eq!(
+            erase(
+                &state,
+                bob,
+                &channel,
+                channel.segment.document_id(),
+                (bob, channel.id)
+            )
+            .await,
+            StatusCode::CONFLICT,
+            "the channel groups it"
+        );
+        assert_eq!(
+            erase(&state, bob, &channel, phantom, (bob, channel.id)).await,
+            StatusCode::OK
+        );
+        let axum::Json(listed) = list_thread_erasures(
+            State(state.clone()),
+            session(alice),
+            OpaquePathId::new(channel.id),
+        )
+        .await
+        .expect("a member lists them");
+        let erasure = listed.erasures.first().expect("one");
+        assert_eq!(
+            (erasure.thread, erasure.signer),
+            (phantom, session(bob).signing_pubkey)
         );
     }
 

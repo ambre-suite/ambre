@@ -5115,3 +5115,5 @@ ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | ERASURE_DOMAIN 
 ambre-sync | src/erasure.rs | crate::erasure | verifies() | ret | bool	generic	predicate result
 ambre-sync | src/membership_log.rs | crate::membership_log | Held::names() | ret | bool	generic	predicate: does the member hold the signing key and the exchange key an entry names; a guard of the walk reads it, and it selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::holds_other_keys() | ret | bool	generic	predicate: does the log keep the member present under another key pair than the one the relay served; the invite refuses on it, and it selects no mode
+ambre-server | src/db/members.rs | crate::db::members | holds_owner() | ret | Result<bool,AppError>	generic	predicate answer: whether any member row of the document is an owner, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::caps_document() | ret | bool	generic	predicate answer: whether a valid revoke of the log caps the document, selects no mode

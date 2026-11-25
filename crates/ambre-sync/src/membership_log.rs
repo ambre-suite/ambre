@@ -865,6 +865,10 @@ pub(crate) struct Log {
     /// leaver's own (`SYNC-306`). A revoke on the log of a channel's `meta`
     /// names one per document of the channel (`SYNC-311`).
     caps: HashMap<FixedBytes<PublicKey>, CapsByDocument>,
+    /// Every document a valid revoke names a cap for. The relay checks each
+    /// one against the channel at the post (`SRV-355`), so the set proves
+    /// the document stood in the channel then (`SYNC-345`).
+    capped_documents: HashSet<Id<Document>>,
     /// Each set of caps a later grant lifted, with the place of the head
     /// after that grant (`SYNC-301`).
     readmitted: HashMap<FixedBytes<PublicKey>, Vec<Lifted>>,
@@ -905,6 +909,7 @@ impl Log {
             #[cfg(test)]
             document,
             caps: HashMap::new(),
+            capped_documents: HashSet::new(),
             readmitted: HashMap::new(),
             creator: None,
             anchored: anchor.is_some(),
@@ -1115,6 +1120,10 @@ impl Log {
             .flatten();
         self.apply_act(entry);
         let after = self.writer_key(entry.member);
+        if entry.act == MembershipAct::Revoke {
+            self.capped_documents
+                .extend(entry.document_caps.iter().map(|c| c.document));
+        }
         if let Some(key) = capped {
             let held = self.caps.entry(key).or_default();
             for (document, cap) in named {
@@ -1204,14 +1213,30 @@ impl Log {
         }
     }
 
-    /// The signing keys of the members the log holds present as owners: the
-    /// keys whose erasure of a thread name a census takes (`SYNC-322`).
-    pub(crate) fn owner_keys(&self) -> HashSet<FixedBytes<PublicKey>> {
-        self.held
-            .values()
-            .filter(|held| held.present && held.role == Role::Owner)
+    /// The signing keys whose erasure of a thread name a census takes
+    /// (`SYNC-322`, `SYNC-327`). These are the present owners. A log with no
+    /// owner, as a direct message holds, gives every present writer. The walk reads the
+    /// roles from signed entries, so the relay cannot drop an owner to widen
+    /// the set.
+    pub(crate) fn erasure_keys(&self) -> HashSet<FixedBytes<PublicKey>> {
+        let present = || self.held.values().filter(|held| held.present);
+        let ownerless = !present().any(|held| held.role == Role::Owner);
+        present()
+            .filter(|held| {
+                if ownerless {
+                    writing_rank(held.role).is_some()
+                } else {
+                    held.role == Role::Owner
+                }
+            })
             .map(|held| held.key)
             .collect()
+    }
+
+    /// Whether a valid revoke of the log names a cap for `document`
+    /// (`SYNC-345`). No erasure covers such a document.
+    pub(crate) fn caps_document(&self, document: Id<Document>) -> bool {
+        self.capped_documents.contains(&document)
     }
 
     /// The keys a key link may be signed by (`SYNC-121`): every key the log

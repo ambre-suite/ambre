@@ -6511,4 +6511,215 @@ mod tests {
         let http = FakeHttp::new(vec![Ok(members), Ok(none), Err(refused)]);
         assert!(erase_hidden(&http, params(author())).await.is_err());
     }
+
+    /// `SYNC-345`: a thread a valid revoke of the log caps stood in the
+    /// channel, so a listing that leaves it out hides it. The census fails
+    /// and asks for no erasure, under a held erasure of the owner too. A
+    /// thread no revoke caps still takes the owner's erasure.
+    #[tokio::test]
+    async fn a_thread_a_signed_revoke_caps_takes_no_erasure() {
+        use crate::erasure::{ErasureEntry, ErasureParams, erase_hidden, sign_erasure};
+        let (owner_xk, _) = keypair(1);
+        let (_, bob_xk) = keypair(2);
+        let bob = Id::<User>::mint();
+        let meta = Id::<Document>::mint();
+        let channel_id = Id::<Channel>::mint();
+        let (linked, phantom) = (Id::<Document>::mint(), Id::<Document>::mint());
+        let owner = author();
+        let (log, own) = log_inviting(meta, &owner, &owner_xk, &[(&bob.to_string(), &bob_xk)]);
+        let mut entries = membership_log::decode(&log);
+        let next = LogHead {
+            position: ambre_protocol::place_after(entries.len()),
+            previous: entries.last().and_then(membership_log::digest),
+        };
+        let revoke = Draft {
+            document: meta,
+            member: bob,
+            member_key: FixedBytes::from_array(*bob_xk.as_array()),
+            member_exchange_key: bob_xk,
+            act: MembershipAct::Revoke,
+            role: Role::Editor,
+            key: None,
+        };
+        let caps = vec![ambre_protocol::DocumentCap {
+            document: linked,
+            cap: Seq::<DeltaAuthor>::new(0),
+        }];
+        entries.extend(
+            membership_log::sign_channel_capped(
+                revoke,
+                (None, ambre_protocol::Elsewhere::Zero),
+                caps,
+                next,
+                owner.user_id,
+                &owner.signing_key,
+            )
+            .unwrap(),
+        );
+        let log: Vec<_> = entries
+            .iter()
+            .map(|entry| membership_log::encode(entry).unwrap())
+            .collect();
+        let walked = footing_of(meta, &log)
+            .walk(&log, &LogRule::document())
+            .unwrap();
+        assert!(walked.log().caps_document(linked), "the revoke walks");
+        let members = serde_json::json!({ "members": [own], "log": log });
+        let params = |hidden| ErasureParams {
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            channel_id,
+            meta,
+            hidden,
+            footing: footing_of(meta, &log),
+            rule: LogRule::document(),
+            author: author(),
+        };
+        let held = serde_json::json!({ "erasures": [ErasureEntry {
+            thread: linked,
+            signer: author().public(),
+            signature: sign_erasure(&author(), channel_id, linked),
+        }] });
+        let none = serde_json::json!({ "erasures": [] });
+        for listed in [held, none.clone()] {
+            let http = FakeHttp::new(vec![Ok(members.clone()), Ok(listed)]);
+            assert!(matches!(
+                erase_hidden(&http, params(vec![linked])).await,
+                Err(http::HttpError::Local(LocalFailure::ChannelDocumentHidden))
+            ));
+            assert_eq!(http.calls().len(), 1, "no erasure is read or posted");
+        }
+
+        let erased = serde_json::json!({ "thread": phantom.to_string() });
+        let http = FakeHttp::new(vec![Ok(members), Ok(none), Ok(erased)]);
+        assert!(erase_hidden(&http, params(vec![phantom])).await.is_ok());
+        assert!(matches!(
+            http.calls().last(),
+            Some(Call::Post(url, _)) if url.ends_with("/erasures")
+        ));
+    }
+
+    /// `SYNC-327`: a direct message leaves no owner, so each present writer
+    /// of its log erases a hidden thread. The leaver posts an erasure when
+    /// the relay lists none. It also posts when the listed one is by a
+    /// stranger key or under a forged signature. Another writer's held
+    /// erasure posts nothing. A stranger to the log posts nothing and fails.
+    /// An editor under an owner fails too, as does an answer of another
+    /// thread.
+    #[tokio::test]
+    async fn a_writer_of_a_direct_message_erases_a_hidden_thread() {
+        use crate::erasure::{ErasureEntry, ErasureParams, erase_hidden, sign_erasure};
+        let signer = |seed| Author {
+            user_id: Id::<User>::mint(),
+            signing_key: MasterSeed::from_array([seed; 32]).derive_signing_key(),
+        };
+        let (carol, bob, eve) = (signer(3), signer(5), signer(7));
+        let (carol_xk, _) = keypair(3);
+        let (_, alice_pub) = keypair(1);
+        let (_, bob_pub) = keypair(2);
+        let invited = [
+            (
+                ambre_bus::DirectMember {
+                    user_id: author().user_id,
+                    exchange_pub_key: alice_pub,
+                },
+                author().public(),
+            ),
+            (
+                ambre_bus::DirectMember {
+                    user_id: bob.user_id,
+                    exchange_pub_key: bob_pub,
+                },
+                bob.public(),
+            ),
+        ];
+        let invited: Vec<_> = invited.iter().map(|(m, key)| (m, *key)).collect();
+        let channel_id = Id::<Channel>::mint();
+        let meta = Id::<ambre_core::id::Meta>::mint();
+        let log = crate::channels::direct_message_request(
+            &carol,
+            &carol_xk,
+            channel_id,
+            (meta, Id::<ambre_core::id::Segment>::mint()),
+            &invited,
+        )
+        .expect("a direct message")
+        .entries;
+        let meta = meta.document_id();
+        let phantom = Id::<Document>::mint();
+        let params =
+            |author, log: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>]| ErasureParams {
+                url_scheme: crate::http::UrlScheme::Https,
+                api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+                channel_id,
+                meta,
+                hidden: vec![phantom],
+                footing: footing_of(meta, log),
+                rule: LogRule::document(),
+                author,
+            };
+        let members = serde_json::json!({ "members": [], "log": log });
+        let listing = |erasures: Vec<ErasureEntry>| serde_json::json!({ "erasures": erasures });
+        let erased = serde_json::json!({ "thread": phantom.to_string() });
+        let by = |who: &Author| ErasureEntry {
+            thread: phantom,
+            signer: who.public(),
+            signature: sign_erasure(who, channel_id, phantom),
+        };
+        let forged = ErasureEntry {
+            signature: sign_erasure(&eve, channel_id, phantom),
+            ..by(&bob)
+        };
+
+        for refused in [Vec::new(), vec![by(&eve)], vec![forged]] {
+            let http = FakeHttp::new(vec![
+                Ok(members.clone()),
+                Ok(listing(refused)),
+                Ok(erased.clone()),
+            ]);
+            assert!(erase_hidden(&http, params(author(), &log)).await.is_ok());
+            assert!(
+                matches!(http.calls().last(), Some(Call::Post(url, _)) if url.ends_with("/erasures")),
+                "the leaver posts its own erasure"
+            );
+        }
+
+        let http = FakeHttp::new(vec![Ok(members.clone()), Ok(listing(vec![by(&bob)]))]);
+        assert!(erase_hidden(&http, params(author(), &log)).await.is_ok());
+        assert_eq!(
+            http.calls().len(),
+            2,
+            "a writer's held erasure posts nothing"
+        );
+
+        let http = FakeHttp::new(vec![Ok(members.clone()), Ok(listing(Vec::new()))]);
+        assert!(matches!(
+            erase_hidden(&http, params(eve, &log)).await,
+            Err(http::HttpError::Local(LocalFailure::ChannelDocumentHidden))
+        ));
+        assert_eq!(http.calls().len(), 2, "a stranger posts nothing");
+
+        let other = serde_json::json!({ "thread": Id::<Document>::mint().to_string() });
+        let http = FakeHttp::new(vec![Ok(members), Ok(listing(Vec::new())), Ok(other)]);
+        assert!(erase_hidden(&http, params(author(), &log)).await.is_err());
+
+        // A log that holds an owner keeps the erasure to its owners.
+        let (owner_xk, _) = keypair(4);
+        let editor =
+            FixedBytes::<ambre_core::ExchangePublicKey>::from_array(*author().public().as_array());
+        let (owned, own) = log_inviting(
+            meta,
+            &carol,
+            &owner_xk,
+            &[(&author().user_id.to_string(), &editor)],
+        );
+        let members = serde_json::json!({ "members": [own], "log": owned });
+        let http = FakeHttp::new(vec![Ok(members), Ok(listing(Vec::new()))]);
+        assert!(erase_hidden(&http, params(author(), &owned)).await.is_err());
+        assert_eq!(
+            http.calls().len(),
+            2,
+            "an editor under an owner posts nothing"
+        );
+    }
 }
