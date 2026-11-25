@@ -73,6 +73,7 @@ ambre-app | src/switchboard.rs | crate::switchboard | sync_warning_message() | r
 ambre-app | src/switchboard.rs | crate::switchboard | Notice.text | field | String	free-text	the words of a notice the user reads
 ambre-app | src/switchboard.rs | crate::switchboard | Notice::new(text) | param | impl Into<String>	free-text	the words of a notice the user reads
 ambre-app | src/switchboard.rs | crate::switchboard | Notice::visual(text) | param | impl Into<String>	free-text	the words of a notice the user reads
+ambre-app | src/switchboard.rs | crate::switchboard | Switchboard::mirrors_link_of() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | doc_path() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | parse(path) | param | &str	generic	generic codec/parser/bytes API
