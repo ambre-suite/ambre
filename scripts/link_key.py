@@ -51,11 +51,6 @@ import re
 import sys
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover - the message is the whole behaviour
-    sys.exit("link_key.py needs PyYAML: install python3-yaml")
-
 ROOT = Path(__file__).resolve().parent.parent
 DOCKERFILE = ROOT / "deploy/Dockerfile"
 RELEASE = ROOT / ".github/workflows/release.yml"
@@ -205,6 +200,11 @@ def main(args: list[str]) -> int:
         print(key)
         return 0
     if args == ["lint"]:
+        # Only the lint reads YAML: the web image builds `check` and `pinned` with no PyYAML.
+        try:
+            import yaml
+        except ImportError:  # pragma: no cover - the message is the whole behaviour
+            sys.exit("link_key.py lint needs PyYAML: install python3-yaml")
         faults = check_dockerfile(DOCKERFILE.read_text()) + check_release(yaml.safe_load(RELEASE.read_text()))
         for fault in faults:
             print(f"link_key: {fault} (ZK-057)", file=sys.stderr)
