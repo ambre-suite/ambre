@@ -14,6 +14,12 @@
 # then the chart of `deploy/chart/` with the digest of each image pinned in it
 # (`SRV-308`, `scripts/chart.py`). A deployment pulls each image by its digest,
 # so an auditor matches a running image to the commit of its tag.
+#
+# Each image job attests the digest it pushed, signed through the OIDC token of
+# that job alone, and pushes the attestation beside the image (`SRV-380`,
+# `SRV-381`). The chart test verifies each attestation against the commit and
+# this workflow before it pulls the image, and the chart waits for it
+# (`SRV-382`, `scripts/image_provenance.py`).
 
 name: Release
 
@@ -68,6 +74,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     strategy:
       matrix:
         target: [relay, sfu, web, init]
@@ -96,6 +104,14 @@ jobs:
         run: |
           mkdir -p digests
           printf '%s\n' "$DIGEST" > "digests/${{ matrix.target }}"
+      # The signed provenance of the digest above: the commit, the ref and this
+      # workflow, pushed to the registry beside the image (`SRV-380`).
+      - name: Attest the provenance of the image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/${{ matrix.target }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-${{ matrix.target }}
@@ -105,7 +121,7 @@ jobs:
   # waits for the release the client job publishes, and adds the list of the
   # images to it.
   chart:
-    needs: [client-digest, images]
+    needs: [client-digest, images, chart-test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -136,3 +152,39 @@ jobs:
           echo "$GH_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
           helm push "target/chart/ambre-$version.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
           gh release upload "$TAG" ambre-images.txt "target/chart/ambre-$version.tgz"
+
+  # The chart test of the release, on a cluster of its own. It verifies the
+  # provenance of each image by its digest, against the commit and this
+  # workflow, before it pulls one (`SRV-382`, `just chart-test-release`). A
+  # failed verification fails the job, and the chart is then never pushed.
+  chart-test:
+    needs: [images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install just
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      # The runner image ships gh, kind, kubectl and Helm. The verification
+      # reads the attestation from the registry, so it signs in first.
+      - name: Verify, pull and install the images of the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGES: ghcr.io/${{ github.repository }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for t in relay sfu web init; do printf '%s/%s@%s\n' "$IMAGES" "$t" "$(cat "digests/$t")"; done > ambre-images.txt
+          just chart-test-release ambre-images.txt "$GITHUB_REF" "$GITHUB_SHA"

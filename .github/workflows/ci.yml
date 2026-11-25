@@ -180,6 +180,11 @@ jobs:
       # file, and a release that pins each image by digest (`SRV-308`,
       # `CALL-141`). The runner image ships Helm and PyYAML.
       - run: just chart-check
+      # Where each released image comes from: each job that pushes one attests
+      # its digest and alone holds the signing token, and the chart test of a
+      # release verifies each image before it pulls one (`SRV-380`, `SRV-381`,
+      # `SRV-382`). The runner image ships PyYAML.
+      - run: just image-provenance
       # Which step can read the job token: no checkout leaves it in
       # `.git/config`, unless the step is named for the push it makes
       # (`ARCH-113`).
