@@ -109,7 +109,10 @@ impl CommandHandler for ProseHandler {
             IMPORT_MARKDOWN => pick(
                 ImportFormat::Markdown,
                 FileAccept::Markdown,
-                "Could not read the Markdown file",
+                ambre_commands::tr!(
+                    "Could not read the Markdown file",
+                    "Impossible de lire le fichier Markdown"
+                ),
             ),
             EXPORT_WORD => ShellAction::Send(word(ReviewExport::Omitted)),
             // Publishing the review is an act of its own (`PROSE-IO-081`).
@@ -117,14 +120,20 @@ impl CommandHandler for ProseHandler {
             IMPORT_WORD => pick(
                 ImportFormat::Word,
                 FileAccept::Word,
-                "Could not read the Word file",
+                ambre_commands::tr!(
+                    "Could not read the Word file",
+                    "Impossible de lire le fichier Word"
+                ),
             ),
             EXPORT_ODT => ShellAction::Send(odt(ReviewExport::Omitted)),
             EXPORT_ODT_REVIEWED => ShellAction::Send(odt(ReviewExport::Included)),
             IMPORT_ODT => pick(
                 ImportFormat::OpenDocument,
                 FileAccept::OpenDocumentText,
-                "Could not read the OpenDocument file",
+                ambre_commands::tr!(
+                    "Could not read the OpenDocument file",
+                    "Impossible de lire le fichier OpenDocument"
+                ),
             ),
             EXPORT_HTML => ShellAction::Send(export(ExportFormat::Html(ReviewExport::Omitted))),
             EXPORT_HTML_REVIEWED => {
@@ -135,14 +144,20 @@ impl CommandHandler for ProseHandler {
             IMPORT_HTML => pick(
                 ImportFormat::Html,
                 FileAccept::Html,
-                "Could not read the HTML document",
+                ambre_commands::tr!(
+                    "Could not read the HTML document",
+                    "Impossible de lire le document HTML"
+                ),
             ),
             // The picture lands after the block the caret sits in, which
             // the Logic thread knows from the caret samples
             // (`PROSE-FEAT-316`).
             INSERT_PICTURE => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Picture,
-                unreadable: "Could not read the picture",
+                unreadable: ambre_commands::tr!(
+                    "Could not read the picture",
+                    "Impossible de lire l'image"
+                ),
                 read: Box::new(|data| ProseCommand::InsertImageFile {
                     parent_id: None,
                     after_id: None,

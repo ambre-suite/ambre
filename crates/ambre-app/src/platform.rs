@@ -230,6 +230,14 @@ pub(crate) fn reader_locale() -> ambre_client_core::ReaderLocale {
     reader
 }
 
+/// Reload the page, so every view draws its words again in the interface
+/// language (`SETTINGS-048`).
+pub(crate) fn reload() {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().reload();
+    }
+}
+
 /// The browser's language, read with no wait. A malformed tag is none.
 pub(crate) fn browser_language() -> ambre_client_core::DocumentLocale {
     ambre_client_core::DocumentLocale::from_register(

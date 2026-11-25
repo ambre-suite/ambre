@@ -56,6 +56,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-030` | `FAIL` | Given a settings document whose sealed kind is not the settings kind, the client MUST refuse it, write nothing into it and keep the defaults. | this spec section 3, the store; `SETTINGS-018` | `ambre_logic::settings::tests::a_document_with_no_settings_marker_takes_no_write` | none | verified |
 | `SETTINGS-031` | `FAIL` | Given a device that already opened the settings document of its user, a relay answer naming another one MUST be refused, and the device MUST keep the one it opened. | this spec section 3, the store; `SETTINGS-002` | `ambre_logic::settings_flow::tests::the_kept_settings_document_opens_and_another_relay_answer_is_refused` -- the relay answer waits for the store, and the kept document opens whichever answer comes first; `ambre_logic::persistence::tests::a_kept_settings_document_outlives_the_page_and_is_never_replaced` -- wasm tier, the kept name reads back on a later page and a second one never replaces it | none | verified |
 | `SETTINGS-040` | `FAIL` | Given a second settings document named in one session, the client MUST refuse it and keep the one it opened. | this spec section 3, the store; `SETTINGS-031` | `ambre_logic::settings_flow::tests::a_second_settings_document_named_in_a_session_is_refused` | none | verified |
+| `SETTINGS-050` | `FAIL` | Given a second settings document named in one session, the client MUST show its user an error toast that names the refusal and what to do, in the interface language. | this spec section 3, the store; `SETTINGS-040`; `ambre-spec-chrome.md` | `ambre_logic::settings_flow::tests::a_refused_settings_document_warns_the_user` -- the refusal reaches the view as a warning, and the kept document named again raises none; `ambre_app::switchboard::tests::a_refused_settings_document_raises_an_error_toast_in_the_page_language` -- one announced error toast, in English and in French | none | verified |
 
 ### 1.3 Boot a page before the unlock
 
@@ -66,6 +67,9 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-034` | `FRAME` | Reading the boot hint MUST NOT wait on the network, on a key or on the local store. | this spec section 3, the boot | structural -- the page reads the hint through the synchronous local storage, before the first frame and before any wait | none | verified |
 | `SETTINGS-042` | `POST` | A pick in the language picker of the avatar menu MUST change the interface language of the page and of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the French option writes `fr` | none | verified |
 | `SETTINGS-043` | `POST` | A new interface language MUST redraw every label that reads it, with no reload. | this spec section 3, the boot | `ambre_chrome::language::tests::a_label_read_in_a_reactive_scope_follows_a_new_language` | none | verified |
+| `SETTINGS-047` | `POST` | A word of the Prose chrome MUST show in the interface language of the page. | this spec section 3, the interface language | `ambre_prose::view::slash::language_tests::the_slash_menu_reads_and_finds_its_items_in_the_interface_language` | none | verified |
+| `SETTINGS-048` | `POST` | A change of the interface language MUST show every word in the new language, the titles at once and the rest from the next load of the page. | this spec section 3, the interface language; `SETTINGS-035` | `ambre_logic::settings_flow::tests::a_language_change_reloads_the_page_after_its_copy` -- the reload follows its copy; `ambre_app::local_store::tests::the_page_reloads_once_the_copy_before_the_reload_landed` -- wasm tier, no reload while a write is in flight; `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the pick writes the boot hint first | none | verified |
+| `SETTINGS-049` | `POST` | After a reload, the page MUST keep the interface language of its local copy over an earlier one the relay replays. | this spec section 3, the interface language; `SETTINGS-035` | `ambre_logic::settings_flow::tests::the_reloaded_page_keeps_the_language_of_its_copy_over_the_replay` | none | verified |
 
 ### 1.4 Change a setting
 
@@ -93,7 +97,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 46 `verified`.
+* **Verification.** 50 `verified`.
 
 ---
 
@@ -111,6 +115,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | signs out | her phone | her settings, on the relay | nothing left on the phone, and everything back at the next sign-in (`SETTINGS-014`, `SETTINGS-039`) | none |
 | forgets her passphrase, and recovers with her 24 words on a new laptop | the laptop | her settings, under the same copy of the key | her settings, with no re-wrap and no prompt (`SETTINGS-045`) | none |
 | -- | -- | the relay points her new phone at a document of her own that is no settings document | the defaults, and that document unchanged (`SETTINGS-030`) | none |
+| -- | her laptop | the relay names another settings document after the first | her own settings, and an error toast that tells her to warn her administrator if it repeats (`SETTINGS-050`) | none |
 
 ---
 
@@ -142,6 +147,11 @@ A first unlock needs the relay, so the creation never runs offline.
 A relay could point a client at another document of that user, whose log the user also signed. The
 sealed kind refuses it, and no setting is written into a Prose document (`SETTINGS-030`). A device
 keeps the identifier it opened, and refuses an answer naming another (`SETTINGS-031`).
+
+**A refusal warns the user.** A relay that names another settings document tries to swap the
+settings of the user, which is a sign of attack. The client keeps its own, and an error toast says
+so (`SETTINGS-050`). The toast tells the user to warn the administrator if the refusal repeats. The
+toast asks for no decision: the client refused the document already.
 
 **Offline.** The device keeps the identifier beside its trust pins, in the clear: the relay knows it
 already. At sign-in, the relay's answer waits for that row, and the kept document opens first. The
@@ -219,6 +229,11 @@ language that ships: English and French (`SETTINGS-042`). A French tag of any re
 and every other tag shows English. A stored tag of none takes the browser's language. The page
 holds one language, and every label that reads it redraws on a change (`SETTINGS-043`). Each title
 carries its words in every language, on its description (`SETTINGS-044`).
+
+Every other word reads the language once, where the view draws it (`SETTINGS-047`). A change of
+language reloads the page once the local copy holds it (`SETTINGS-048`). The change leaves for
+the relay after the coalescing delay, as any change does. The copy opens before the relay answers,
+so the reloaded page keeps the new language over an earlier one the relay replays (`SETTINGS-049`).
 
 **The width stays on the device.** A width in CSS pixels takes another share of each screen. So
 300 px is a quarter of a laptop and a tenth of a large monitor. The width lives in the local store of the
@@ -310,6 +325,7 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
 | One section per owner | one flat map for every owner | two owners could write one key, and nothing would say which owns it |
 | One last-writer-wins entry per setting | one value holding every setting | two devices changing two settings would lose one of the two changes |
 | The order of the CRDT decides | a wall-clock instant in each value | the clocks of two devices differ, and a device whose clock runs ahead would win every race for as long as it runs ahead |
+| An error toast for a refused settings document | a modal, as for a key change | a key change asks the user for a decision (`ambre-spec-key-verification.md`). Here the client refused the document already, so a modal would stop the page for nothing to decide |
 | A boot hint in the clear | the default theme until the unlock | each unlock screen would flash the wrong theme, in the wrong language, before the settings load |
 | A boot hint in the clear | a sealed boot hint | no key exists before the unlock (`RESID-025`), so a sealed hint cannot be read when it is needed |
 | A boot hint of two settings | every setting in the hint | the panel shows after the unlock, when the sealed copy opens. Each setting in the clear tells more to whoever holds the device |

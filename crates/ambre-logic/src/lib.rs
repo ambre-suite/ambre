@@ -905,6 +905,10 @@ pub enum PersistWrite<
     /// The document is the log's own, the `meta` of a channel. A row
     /// outside the copy, which a later one replaces: no eviction reaches it.
     KeepLog(ambre_bus::KeptLog),
+    /// Not a write: the interface language changed. The page reloads once
+    /// every write queued before this one landed, so the copy it reopens
+    /// holds the change (`SETTINGS-048`).
+    Reload,
 }
 
 /// A [`PersistWrite`] as the store receives it: its snapshot or delta is a
@@ -1694,7 +1698,8 @@ mod pass_tests {
                 | PersistWrite::Erase
                 | PersistWrite::KeepInviter(_)
                 | PersistWrite::KeepSettings
-                | PersistWrite::KeepLog(_) => {}
+                | PersistWrite::KeepLog(_)
+                | PersistWrite::Reload => {}
             }
         }
         let (to_persist, _persist) = test_link();

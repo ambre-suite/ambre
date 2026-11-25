@@ -489,6 +489,19 @@ impl Switchboard {
         }
     }
 
+    /// Whether the header's sync state mirrors the link of `document_id`
+    /// (`CHROME-257`).
+    ///
+    /// A document page mirrors its routed document. A Murmure page routes no
+    /// document, so it mirrors every one it opened: one socket carries them
+    /// all. A guard on the routed document kept that header offline for good.
+    fn mirrors_link_of(&self, shown: Shown, document_id: Id<Document>) -> bool {
+        match self.page {
+            Page::Document => shown.current == Some(document_id),
+            Page::Murmure => true,
+        }
+    }
+
     /// What a service event calls for, in the order the wiring applies it.
     ///
     /// A content event calls for nothing here: it goes on to the view. The
@@ -506,10 +519,9 @@ impl Switchboard {
             // They never reach the fatal path. The session keeps running and
             // the CRDT reconverges: a dropped/quarantined update is re-fetched
             // via RequestMissing once its parent snapshot lands.
-            UiEvent::SyncWarning { code, .. } => effects.push(Effect::Notice(Notice::new(
-                ToastKind::Warning,
-                sync_warning_message(*code),
-            ))),
+            UiEvent::SyncWarning { code, .. } => {
+                effects.push(Effect::Notice(sync_warning_notice(*code)));
+            }
             // The relay moved to a newer wire version: syncing stays off
             // until the page reloads onto the new client (`SYNC-137`).
             UiEvent::UpdateRequired => effects.push(Effect::Notice(Notice::new(
@@ -545,13 +557,13 @@ impl Switchboard {
                 effects.extend(face);
                 effects.extend(toast.map(Effect::Notice));
             }
-            // Chrome status indicator (`-chrome.md` 2.G): mirror the active
-            // document's WebSocket link into the header label. Ignored for a
+            // Chrome status indicator (`-chrome.md` 2.G): mirror the link
+            // into the header label (`CHROME-257`). A document page ignores a
             // non-active document (a stale push during a fast doc switch).
             UiEvent::ConnectionStatus {
                 document_id,
                 connected,
-            } if shown.current == Some(*document_id) => {
+            } if self.mirrors_link_of(shown, *document_id) => {
                 effects.push(Effect::Status(ChromeStatus {
                     connected: *connected,
                     ..shown.status
@@ -841,12 +853,29 @@ fn list_members(document_id: Id<Document>) -> LogicCommand {
     }
 }
 
+/// The words of a refused settings document, in each interface language
+/// (`SETTINGS-050`). They name what happened and what the user does.
+const SETTINGS_REFUSED: ambre_chrome::commands::TitleWords = ambre_chrome::commands::TitleWords {
+    en: "Security warning: the server offered settings that are not yours, and Ambre \
+         kept yours. If this happens again, tell your administrator.",
+    fr: "Alerte de s\u{e9}curit\u{e9}\u{a0}: le serveur a propos\u{e9} des r\u{e9}glages \
+         qui ne sont pas les v\u{f4}tres, et Ambre a gard\u{e9} les v\u{f4}tres. Si cela se \
+         reproduit, pr\u{e9}venez votre administrateur.",
+};
+
 /// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing
 /// notice. All are non-fatal, and all but an unreadable document correct
 /// themselves, so the wording reassures rather than alarms. Exhaustive by
 /// design: a new variant is a compile error here until it gets a message.
-fn sync_warning_message(code: SyncWarningCode) -> &'static str {
-    match code {
+///
+/// A refused settings document is the exception: a sign of attack, so an
+/// error toast in the language of the page (`SETTINGS-050`).
+fn sync_warning_notice(code: SyncWarningCode) -> Notice {
+    let text = match code {
+        SyncWarningCode::SettingsRefused => {
+            let words = SETTINGS_REFUSED.pick(&ambre_chrome::language());
+            return Notice::new(ToastKind::Error, words.into_string());
+        }
         SyncWarningCode::QuarantineOverflow => {
             "Syncing is catching up - some changes are taking longer to arrive."
         }
@@ -878,7 +907,8 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
             "The server may be hiding a change of members from this device. Your new \
              changes stay on this device until the member list shows that change."
         }
-    }
+    };
+    Notice::new(ToastKind::Warning, text)
 }
 
 /// Where an event goes once the switchboard has read it.
@@ -2003,6 +2033,44 @@ mod tests {
         );
     }
 
+    /// `CHROME-257`: a Murmure page routes no document, so its header
+    /// follows the link of each document it opened. A guard on the routed
+    /// document read `Offline` there for the whole session.
+    #[test]
+    fn a_murmure_header_follows_the_link_of_any_opened_document() {
+        let channel = Id::<Document>::mint();
+        let space = Id::<Document>::mint();
+        let mut switchboard = Switchboard::new(Page::Murmure);
+        let link = |document_id, connected| UiEvent::ConnectionStatus {
+            document_id,
+            connected,
+        };
+        let mut shown = on(None);
+        shown.status = ChromeStatus::default();
+        for (ev, connected) in [
+            (link(space, LinkState::Connected), LinkState::Connected),
+            (
+                link(channel, LinkState::Disconnected),
+                LinkState::Disconnected,
+            ),
+            (link(channel, LinkState::Connected), LinkState::Connected),
+        ] {
+            assert_eq!(
+                switchboard
+                    .service(&ev, shown, &nobody())
+                    .first()
+                    .map(|e| match e {
+                        Effect::Status(status) => Some(*status),
+                        _ => None,
+                    }),
+                Some(Some(ChromeStatus {
+                    hydrating: false,
+                    connected,
+                }))
+            );
+        }
+    }
+
     /// `CHROME-127`: a failed open whose key no member signed raises a
     /// security fault, an error in its own words. A key not yet received
     /// keeps the plain warning, so the two never read alike.
@@ -2436,6 +2504,38 @@ mod tests {
             effects.as_slice(),
             [Effect::RefuseSeal(named)] if *named == weakness
         ));
+    }
+
+    /// `SETTINGS-050`: a refused settings document raises one error toast,
+    /// announced, that names the refusal and what to do, in the language of
+    /// the page.
+    #[test]
+    fn a_refused_settings_document_raises_an_error_toast_in_the_page_language() {
+        use ambre_chrome::commands::Locale;
+        let mut switchboard = Switchboard::new(Page::Document);
+        let refused = UiEvent::SyncWarning {
+            document_id: Id::<Document>::mint(),
+            code: SyncWarningCode::SettingsRefused,
+        };
+        for (locale, opens, asks) in [
+            (Locale::En, "Security warning", "tell your administrator"),
+            (
+                Locale::Fr,
+                "Alerte de s\u{e9}curit\u{e9}",
+                "pr\u{e9}venez votre administrateur",
+            ),
+        ] {
+            ambre_chrome::set_language(locale);
+            let effects = switchboard.service(&refused, on(None), &nobody());
+            let [Effect::Notice(toast)] = effects.as_slice() else {
+                panic!("one toast in {locale:?}");
+            };
+            assert_eq!(tone(toast.kind), Tone::Error);
+            assert_eq!(toast.voice, ToastVoice::Announced);
+            assert!(toast.text.starts_with(opens), "{}", toast.text);
+            assert!(toast.text.contains(asks), "{}", toast.text);
+        }
+        ambre_chrome::set_language(Locale::En);
     }
 
     /// `CHROME-131`: a refused passphrase reads on the gate that asked for it,

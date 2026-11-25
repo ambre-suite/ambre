@@ -227,6 +227,16 @@ fn ShellHeader(
             return;
         };
         ambre_chrome::set_language(locale);
+        // The page that reloads boots in the language picked
+        // (`SETTINGS-033`, `SETTINGS-048`).
+        let hint = ambre_client_core::BootHint {
+            theme: crate::platform::boot_hint().map_or_else(
+                || crate::settings_view::chosen(theme_sig.get_untracked()),
+                |hint| hint.theme,
+            ),
+            interface_language: ambre_chrome::stored_tag(locale),
+        };
+        crate::platform::keep_boot_hint(&hint);
         to_logic.with_value(|outbox| {
             outbox.send(LogicCommand::ChangeSetting {
                 change: ambre_client_core::SettingChange::InterfaceLanguage(
@@ -1863,6 +1873,13 @@ mod tests {
             _ => None,
         });
         assert_eq!(written.as_ref().and_then(|t| t.as_str()), Some("fr"));
+        assert_eq!(
+            crate::platform::boot_hint()
+                .and_then(|hint| hint.interface_language.as_str().map(str::to_owned)),
+            Some("fr".to_owned()),
+            "the page that reloads boots in French"
+        );
+        crate::platform::forget_boot_hint();
         ambre_chrome::set_language(ambre_chrome::commands::Locale::En);
         current_doc.set(None);
         leptos::task::tick().await;

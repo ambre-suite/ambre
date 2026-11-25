@@ -218,7 +218,8 @@ impl StoreLedger {
             | SealedWrite::ReadBack { .. }
             | SealedWrite::KeepInviter(_)
             | SealedWrite::KeepSettings
-            | SealedWrite::KeepLog(_) => {}
+            | SealedWrite::KeepLog(_)
+            | SealedWrite::Reload => {}
         }
         // The delta bytes alone change at every keystroke: a reload counts
         // them from the last row, which the next snapshot corrects.
