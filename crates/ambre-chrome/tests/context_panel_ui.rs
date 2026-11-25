@@ -66,7 +66,10 @@ where
     let container = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&container).unwrap();
     let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-    mount_to(target, f).forget();
+    // The mount lives as long as the owner of the test, and leaves with the
+    // signals it reads. A forgotten mount kept effects that could run in the
+    // next test and read disposed signals.
+    StoredValue::new_local(mount_to(target, f));
     container
 }
 

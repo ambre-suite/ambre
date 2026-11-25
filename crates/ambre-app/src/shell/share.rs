@@ -311,10 +311,9 @@ mod tests {
         let container = document().create_element("div").unwrap();
         document().body().unwrap().append_child(&container).unwrap();
         let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-        mount_to(target, move || {
+        StoredValue::new_local(mount_to(target, move || {
             view! { <ShareMembers members=members me=me current_doc=current_doc send=send /> }
-        })
-        .forget();
+        }));
         (container, sent, document_id)
     }
 
@@ -389,10 +388,9 @@ mod tests {
         let container = document().create_element("div").unwrap();
         document().body().unwrap().append_child(&container).unwrap();
         let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-        mount_to(target, move || {
+        StoredValue::new_local(mount_to(target, move || {
             view! { <ShareInviteLink link=link current_doc=current_doc /> }
-        })
-        .forget();
+        }));
         let shown = |root: &web_sys::Element| {
             root.query_selector(".ambre-share-link-input")
                 .unwrap()

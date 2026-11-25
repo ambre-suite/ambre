@@ -466,7 +466,10 @@ mod tests {
         let container = document().create_element("div").unwrap();
         document().body().unwrap().append_child(&container).unwrap();
         let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-        mount_to(target, f).forget();
+        // The mount lives as long as the owner of the test, and leaves with
+        // the signals it reads: a forgotten mount kept effects that ran in the
+        // next test and read disposed signals.
+        StoredValue::new_local(mount_to(target, f));
         container
     }
 
@@ -772,11 +775,6 @@ mod tests {
         keys.close();
         keys.refuse(cause);
         assert_eq!(keys.refusal.get_untracked(), None);
-        // The close schedules the view's effect. The owner of the signals
-        // drops when the test returns. The view lives under its own owner, so
-        // the effect runs first here. Otherwise it runs in the next test and
-        // reads disposed signals.
-        tick().await;
         container.remove();
     }
 }

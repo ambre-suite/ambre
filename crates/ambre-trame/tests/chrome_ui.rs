@@ -242,8 +242,8 @@ fn document() -> web_sys::Document {
 /// log then throws `appendChild` on null, the summary is never written, and the
 /// runner times out (SIGKILL). Scoping each test to its own container --
 /// removed via `container.remove()` -- leaves the harness elements untouched.
-/// `mount_to(..).forget()` keeps the view mounted for the assertions (like
-/// `mount_to_body`); the container removal tears it down.
+/// The test's owner keeps the mount for the assertions, and the container
+/// removal tears the page down.
 /// A fresh reactive owner, current until the guard drops.
 ///
 /// `Owner::set` alone leaves the thread-local pointing at the owner after the
@@ -273,7 +273,10 @@ where
     let container = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&container).unwrap();
     let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-    mount_to(target, f).forget();
+    // The mount lives as long as the owner of the test, and leaves with the
+    // signals it reads. A forgotten mount kept effects that could run in the
+    // next test and read disposed signals.
+    StoredValue::new_local(mount_to(target, f));
     container
 }
 

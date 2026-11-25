@@ -1189,11 +1189,10 @@ mod tests {
         let figures = RwSignal::new(None);
         let zoom = RwSignal::new(ambre_core::Scale::ONE);
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
-        mount_to(
+        StoredValue::new_local(mount_to(
             target,
             move || view! { <ProseFigures figures=figures zoom=zoom /> },
-        )
-        .forget();
+        ));
 
         let (to_logic, _queue) = ambre_bus::conduit::local(ambre_core::Bounded::<
             ambre_bus::conduit::ChannelSlots,
@@ -1267,11 +1266,10 @@ mod tests {
         let figures = RwSignal::new(None);
         let zoom = RwSignal::new(ambre_core::Scale::ONE);
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
-        mount_to(
+        StoredValue::new_local(mount_to(
             target,
             move || view! { <ProseFigures figures=figures zoom=zoom /> },
-        )
-        .forget();
+        ));
         let last = slot.last_element_child().expect("a band child");
         assert!(
             last.class_list().contains("statusbar-zoom"),
