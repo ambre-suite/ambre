@@ -195,13 +195,19 @@ it to every writer that asks.
 | `SRV-347` | `FAIL` | The relay MUST record an erasure of a thread name only from an owner of the channel's `meta`, or from a writer of a direct message (`SRV-349`), under that caller's signature over the channel and the thread, and MUST refuse an erasure of a document the channel groups. | this spec section 3; `ambre-spec-membership.md`, `SYNC-322` | `ambre_server::routes::channels::tests::an_owner_alone_erases_a_thread_the_channel_does_not_group` -- database tier, an editor and a stranger are refused, a signature by another key or over another channel is refused, a thread and a segment of the channel are refused, two erasures keep one row, and a member lists it | none | verified |
 | `SRV-349` | `FAIL` | The relay MUST record an erasure of a thread name in a direct message from any of its writers, under that caller's signature over the channel and the thread, and MUST refuse it from a stranger and for a document the channel groups. | this spec section 3; `SRV-347`, `SRV-175`, `SYNC-327` | `ambre_server::routes::channels::tests::a_writer_of_a_direct_message_erases_a_thread_name` -- database tier, a stranger is refused, a signature by another member is refused, a segment of the channel is refused, a writer's erasure is kept and listed to another member under that writer's key | none | verified |
 
+### 1.15 An erasure races a thread link
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-353` | `CONC` | Given an erasure and a registration of one thread id in one channel, the relay MUST keep the first step it commits and refuse the second. The channel MUST never link an erased thread nor erase a linked one. | this spec section 3; `SRV-347`, `SRV-213`; `ambre-spec-membership.md`, `SYNC-322` | `ambre_server::db::channels::tests::an_erasure_and_a_thread_registration_take_turns` -- database tier, the test holds the channel row lock and queues the two steps behind it in both orders: the first step wins, the second reads 409, and the channel holds the link or the erasure alone | none | verified |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
   All three read **none exists**, as does the cold start of the same table.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 87 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 88 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -455,6 +461,11 @@ absent. An owner of the `meta` signs the channel and a thread id, and posts the 
 channel row lock, the relay refuses an id the channel groups, then keeps one row per thread. It
 learns the id and the owner's key alone (`ZK-015`, `SRV-347`). A direct message has no owner, so
 the relay takes the erasure from any of its writers there (`SRV-349`).
+
+**An erasure races a thread link.** The channel row lock orders an erasure and a link of one id:
+the first to commit wins, and the relay refuses the second (`SRV-353`). So no erasure covers a
+linked thread. An honest reply names its fresh thread id only once the link holds, so it meets no
+erasure.
 
 **A fold.** A delete in the amendments erases nothing while the final snapshot still holds the
 text. So a writer folds the amendments into a new snapshot of the segment.
