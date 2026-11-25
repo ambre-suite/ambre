@@ -24,7 +24,7 @@ the stores in the cluster, the stores outside it, and the stack under test of
 * a web pod that starts Caddy before an init container of its own image
   compares the key the image pins, in `/etc/ambre/thread-link-key`, with the
   `thread-link-key` of the Secret, or that reads that key as optional
-  (`SRV-430`);
+  (`SRV-365`);
 * with `--release`, an image of Ambre that names no digest (`SRV-308`).
 
 `check` also renders the chart under `NODE_REFUSALS`: no block of nodes, and
@@ -44,7 +44,7 @@ web server, so a refusal is the policy and not a broken network (`SRV-352`).
 
 `link-key [--plant] CONTEXT` runs on a cluster of the chart: the web pod
 stops in its init container, and its log names the key the image pins and
-the key of the Secret (`SRV-430`). With `--plant`, it first writes another
+the key of the Secret (`SRV-365`). With `--plant`, it first writes another
 key into the Secret and restarts the web server, as `just chart-test` does
 on a stack that runs. Without it, the Secret already names another key, as
 in the chart test of a release.
@@ -344,14 +344,14 @@ def check_network(objects: list[dict], expected: set[tuple[str, str, str, str]])
 
 
 # The init container of the web pod, the file of its image and the key of
-# the Secret it compares (`SRV-430`).
+# the Secret it compares (`SRV-365`).
 LINK_INIT = "link-key"
 LINK_FILE = "/etc/ambre/thread-link-key"
 LINK_SECRET_KEY = "thread-link-key"
 
 
 def check_link_key(objects: list[dict]) -> list[str]:
-    """The faults of the web pod against `SRV-430`."""
+    """The faults of the web pod against `SRV-365`."""
     webs = [o for o in objects if component(o) == "web" and pod_of(o) is not None]
     if len(webs) != 1:
         return [f"{len(webs)} web workloads, not one"]
@@ -598,7 +598,7 @@ def probe(kubectl: list[str]) -> int:
 
 
 def link_key_faults(pods: dict, log: str, pinned: str, named: str) -> list[str]:
-    """The faults of the web pods of a cluster against `SRV-430`.
+    """The faults of the web pods of a cluster against `SRV-365`.
 
     `pods` is the list of the pods of the web server, as `kubectl get -o json`
     prints it, and `log` the log of the init container of the refused pod.
@@ -633,7 +633,7 @@ def link_key_faults(pods: dict, log: str, pinned: str, named: str) -> list[str]:
 
 
 def link_key(kubectl: list[str], plant: bool) -> int:
-    """Finds the web pod refused under a key the image does not pin (`SRV-430`)."""
+    """Finds the web pod refused under a key the image does not pin (`SRV-365`)."""
     secret = yaml.safe_load(TEST_VALUES.read_text())["existingSecret"]
     deployment = f"deployment/{PROBE_RELEASE}-web"
     image = yaml.safe_load(TEST_VALUES.read_text())["images"]["web"]

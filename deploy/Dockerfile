@@ -88,7 +88,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
 # development key (`ZK-057`, `scripts/link_key.py`). A `DEV_LOGIN` build pins
 # the development key when it names none. Each build writes the key it pins
 # to `thread-link-key`, which the web pod of the chart compares with the key
-# of its Secret before Caddy starts (`SRV-430`, `SRV-431`).
+# of its Secret before Caddy starts (`SRV-365`, `SRV-366`).
 FROM toolchain AS web-build
 # The trunk that `scripts/client_digest.py` pins: another trunk writes another page.
 ARG TRUNK_VERSION=0.22.1
@@ -157,7 +157,7 @@ FROM caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac523
 RUN cp /usr/bin/caddy /tmp/caddy && mv /tmp/caddy /usr/bin/caddy
 COPY --from=web-build /out/dist /srv/ambre
 COPY --from=web-build /out/headers.caddy /etc/caddy/headers.caddy
-# The link key the client pins, which no request reads (`SRV-431`).
+# The link key the client pins, which no request reads (`SRV-366`).
 COPY --from=web-build /out/thread-link-key /etc/ambre/thread-link-key
 COPY deploy/compose/Caddyfile /etc/caddy/Caddyfile
 

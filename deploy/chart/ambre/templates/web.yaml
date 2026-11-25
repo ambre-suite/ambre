@@ -98,7 +98,7 @@ spec:
       # The client counts the receipts of the one link key its build pins
       # (`ZK-057`), and the relay signs under the seed of `thread-link-key`
       # (`SRV-364`). Under another key, the pod stops here and names both
-      # (`SRV-430`). An image with no pinned key stops too.
+      # (`SRV-365`). An image with no pinned key stops too.
       initContainers:
         - name: link-key
           image: {{ include "ambre.image" $c }}

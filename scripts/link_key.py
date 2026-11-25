@@ -17,8 +17,8 @@ of these:
   `crates/ambre-protocol/src/thread_erasure.rs`, read from that file.
 
 `pinned` prints the key the client build pins, in lowercase hex, and the web
-image keeps it in `/etc/ambre/thread-link-key` (`SRV-431`). The web pod of the
-chart compares it with the key of its Secret (`SRV-430`). A release build pins
+image keeps it in `/etc/ambre/thread-link-key` (`SRV-366`). The web pod of the
+chart compares it with the key of its Secret (`SRV-365`). A release build pins
 the key `check` passes, and fails where `check` fails. With `--dev`, for a
 build of the sign-in by bare name, no key or an empty one prints the
 development key, which that build then pins.

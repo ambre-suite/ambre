@@ -48,7 +48,7 @@ class Check(unittest.TestCase):
 
 
 class Pinned(unittest.TestCase):
-    """`SRV-431`: the key each build writes is the key the client pins."""
+    """`SRV-366`: the key each build writes is the key the client pins."""
 
     def test_a_release_pins_the_named_key_in_lowercase(self) -> None:
         self.assertEqual(lk.pinned(KEY.upper(), DEV, dev_build=False), (KEY, None))

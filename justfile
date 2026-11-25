@@ -953,7 +953,7 @@ chart-check:
 # blocks of the test values, where the web server reaches the signalling of the
 # SFU (`SRV-361`). Last, the recipe writes another link key into the Secret,
 # and the restarted web pod stops before Caddy and names both keys
-# (`SRV-430`). The cluster is deleted on exit, and its state printed first
+# (`SRV-365`). The cluster is deleted on exit, and its state printed first
 # on a failure.
 chart-test:
     #!/usr/bin/env bash
@@ -981,7 +981,7 @@ chart-test:
 # browser tier stays on `just chart-test`. The released web image pins the
 # link key of the production relay, and the test holds no seed of that key.
 # Under the fresh key of its Secret, its web pod must stop and name both keys
-# (`SRV-430`), as it does for a self-hoster who runs the published image.
+# (`SRV-365`), as it does for a self-hoster who runs the published image.
 chart-test-release LIST REF SHA:
     #!/usr/bin/env bash
     set -euo pipefail

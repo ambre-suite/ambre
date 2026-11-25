@@ -306,7 +306,7 @@ OTHER = "22" * 32
 
 
 def web() -> dict:
-    """A web workload whose init container compares the pinned key (`SRV-430`)."""
+    """A web workload whose init container compares the pinned key (`SRV-365`)."""
     obj = workload("web", "ghcr.io/x/web:1.0.0")
     ref = {"secretKeyRef": {"name": "ambre", "key": "thread-link-key"}}
     init = container(
@@ -320,7 +320,7 @@ def web() -> dict:
 
 
 class LinkKeyTest(unittest.TestCase):
-    """`SRV-430`: the web pod compares its pinned key before Caddy starts."""
+    """`SRV-365`: the web pod compares its pinned key before Caddy starts."""
 
     def init(self, obj: dict) -> dict:
         return obj["spec"]["template"]["spec"]["initContainers"][0]
@@ -371,7 +371,7 @@ LOG = f"link key: the client pins {LINK}, and thread-link-key of the Secret name
 
 
 class LinkKeyRefusalTest(unittest.TestCase):
-    """`SRV-430`: the verdict of `chart.py link-key` on a cluster."""
+    """`SRV-365`: the verdict of `chart.py link-key` on a cluster."""
 
     def test_a_failed_init_whose_log_names_both_keys_holds(self) -> None:
         self.assertEqual(chart.link_key_faults(pods(FAILED, WAITING), LOG, LINK, OTHER), [])
