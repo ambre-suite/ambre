@@ -248,8 +248,8 @@ impl ProseView {
         self.drop_lost_drafts();
         self.take_intent();
         self.take_format();
-        self.take_text_write();
         self.take_page();
+        self.take_text_write();
         self.take_ruler();
         self.take_slash_pick();
         self.sync_zoom();
@@ -325,26 +325,12 @@ impl ProseView {
             return;
         };
         self.annotations.format.set(None);
+        // The link and the comment open a field of the bar, which writes
+        // once the user confirms it.
+        if self.annotations.open_prompt(id).is_some() {
+            return;
+        }
         if let Some(command) = self.state.format(id) {
-            send_edit(&mut self.outbox, self.document_id, command);
-        }
-        self.busy_pub
-            .publish(BusyLevel::from_busy(self.outbox.is_busy()));
-    }
-
-    /// Act on the write a value or block control of the text section asked
-    /// for: one command over the whole selection, one undo item
-    /// (`PROSE-UI-270`). One that waits behind a busy outbox stays in its
-    /// signal for a later frame.
-    fn take_text_write(&mut self) {
-        if self.fatal || self.outbox.is_busy() {
-            return;
-        }
-        let Some(write) = self.annotations.text_write.get_untracked() else {
-            return;
-        };
-        self.annotations.text_write.set(None);
-        if let Some(command) = self.state.text_write(&write) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
         self.busy_pub
@@ -359,6 +345,22 @@ impl ProseView {
             return;
         }
         let Some(command) = self.annotations.take_page_write() else {
+            return;
+        };
+        send_edit(&mut self.outbox, self.document_id, command);
+        self.busy_pub
+            .publish(BusyLevel::from_busy(self.outbox.is_busy()));
+    }
+
+    /// Act on the write a control of the text, paragraph or default styles
+    /// section asked for. One command covers the whole selection, so one
+    /// undo takes it back (`CHROME-173`). One that waits behind a busy
+    /// outbox stays in its signal for a later frame.
+    fn take_text_write(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(command) = self.annotations.take_text_write(&self.state) else {
             return;
         };
         send_edit(&mut self.outbox, self.document_id, command);
@@ -477,10 +479,19 @@ impl ProseView {
             self.annotations.page.set(page);
         }
         // The mode the Logic thread last reported, for the control of the
-        // panel and the status chip (`PROSE-UI-261`).
+        // panel and the status chip (`PROSE-UI-275`).
         let mode = self.state.edit_mode;
         if self.annotations.mode.get_untracked() != mode {
             self.annotations.mode.set(mode);
+        }
+        // The default fonts, for the default styles section (`PROSE-UI-261`).
+        let fonts = Some(self.state.shaped.layout.fonts.clone());
+        if self
+            .annotations
+            .fonts
+            .with_untracked(|shown| *shown != fonts)
+        {
+            self.annotations.fonts.set(fonts);
         }
         // The slash menu sits at the caret, and moves when the bar does.
         self.publish_slash();
@@ -488,8 +499,8 @@ impl ProseView {
     }
 
     /// Publish where the popover goes: the hovered suggestion, else the one
-    /// at the caret, which the context panel also reaches (`PROSE-UI-258`,
-    /// `PROSE-UI-259`).
+    /// at the caret, which the context panel also reaches (`PROSE-UI-272`,
+    /// `PROSE-UI-273`).
     fn publish_hover(&self) {
         let at_caret = self.state.suggestion_at_caret();
         if self.annotations.at_caret.get_untracked() != at_caret {
@@ -817,7 +828,7 @@ impl ProseView {
             .publish(BusyLevel::from_busy(self.outbox.is_busy()));
         self.publish_toolbar();
         // A key or a tap that moves the caret into a suggestion raises its
-        // popover (`PROSE-UI-258`).
+        // popover (`PROSE-UI-272`).
         self.publish_hover();
         self.dirty |= consumed.is_yes();
         consumed

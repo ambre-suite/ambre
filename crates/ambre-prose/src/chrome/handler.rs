@@ -36,7 +36,7 @@ pub struct ProseHandler {
     /// The suggestion at the caret, as the view last published it.
     pub at_caret: RwSignal<Option<HoveredSuggestion>>,
     /// Where the palette leaves an accept or a reject, which the view
-    /// drains as the popover's own (`PROSE-UI-259`).
+    /// drains as the popover's own (`PROSE-UI-273`).
     pub intent: RwSignal<Option<AnnotationIntent>>,
     /// The page's clock: an import dates a reply the file leaves undated at
     /// the moment the user chose the file.
@@ -166,7 +166,7 @@ impl CommandHandler for ProseHandler {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
         // The suggestion-mode chord takes the path of its control and of
-        // the palette (`PROSE-UI-262`).
+        // the palette (`PROSE-UI-276`).
         if let Some(intent) = review_intent(id, self.at_caret.get_untracked()) {
             self.intent.set(Some(intent));
             return KeyRoute::Run(Vec::new());

@@ -73,6 +73,8 @@ pub(crate) enum RefusalCause {
     BlockAttrsRefused,
     /// A block left the tree before its attributes landed.
     BlockVanished,
+    /// The document holds no defaults register, or it refused a font.
+    DefaultsRefused,
     /// An export the Logic thread writes reached the document.
     FileByLogic,
     /// A new block left the tree before its style landed.
@@ -120,6 +122,7 @@ impl RefusalCause {
             Self::ReplyEmpty => "the reply holds no text",
             Self::NoWidthList => "the table carries no width list",
             Self::TreeRefusedBandBlock => "the tree refused a band block",
+            Self::DefaultsRefused => "the defaults register refused a font",
             Self::TreeRefusedBlock => "the tree refused a block",
             Self::TreeRefusedCell => "the tree refused a cell",
             Self::TreeRefusedNoteBlock => "the tree refused a note block",
@@ -495,6 +498,10 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
 /// The width a column takes when the command that makes it names none
 /// (`PROSE-FEAT-232`): one inch.
 pub const DEFAULT_COLUMN_WIDTH: PrintLength<Pt> = PrintLength::<Pt>::new(72.0);
+
+/// How far the built-in quote sets a paragraph in from the left, when the
+/// paragraph names no left indent of its own.
+pub const QUOTE_INDENT: PrintLength<Pt> = PrintLength::<Pt>::new(24.0);
 
 /// The nine built-in styles. A document written by an older client renders
 /// them from the client rather than from stale copies of its own
@@ -1238,6 +1245,31 @@ pub struct DocDefaults {
     pub line_height: LineSpacingMultiple,
 }
 
+/// The default fonts of a document, as the context panel shows them
+/// (`PROSE-UI-261`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct DocFonts {
+    /// The font of every block no mark and no block type sets.
+    pub body: ambre_core::FontFamily,
+}
+
+impl DocFonts {
+    /// The two fonts of a set of defaults.
+    #[must_use]
+    pub fn of(defaults: &DocDefaults) -> Self {
+        Self {
+            body: defaults.font_family.clone(),
+        }
+    }
+}
+
+impl Default for DocFonts {
+    /// What `seed` writes.
+    fn default() -> Self {
+        Self::of(&DocDefaults::default())
+    }
+}
+
 impl Default for DocDefaults {
     /// What `seed` writes.
     fn default() -> Self {
@@ -1371,6 +1403,23 @@ pub(crate) fn write_page_format(
         && page
             .insert(PageKey::HeightMm, f64::from(height.get()))
             .is_ok()
+}
+
+/// Write the body font of the document (`PROSE-UI-261`). The register
+/// `seed` opened takes the key, so the other defaults stay.
+///
+/// # Errors
+/// [`RefusalCause::DefaultsRefused`] when the document holds no defaults
+/// register, or the engine's own error when it refuses the write.
+pub(crate) fn write_default_font(
+    doc: &LoroDoc,
+    family: &ambre_core::FontFamily,
+) -> Result<(), WriteError> {
+    let defaults = map_at(&meta(doc), MetaKey::Defaults)
+        .map(Fields::<DefaultsKey>::new)
+        .ok_or(WriteError::Refused(RefusalCause::DefaultsRefused))?;
+    defaults.insert(DefaultsKey::FontFamily, family.label())?;
+    Ok(())
 }
 
 /// Write the whole page format: the orientation the two dimensions name, the

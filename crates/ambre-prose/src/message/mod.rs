@@ -29,7 +29,6 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-pub use ambre_commands::Reading;
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
 use ambre_core::{CommandNames, Count, Pt, Rgb, StaticKey};
 
@@ -404,6 +403,10 @@ impl LineSpacingMultiple {
     pub const SINGLE: Self = Self(1.0);
     /// One and a half lines, the seeded default.
     pub const ONE_AND_HALF: Self = Self(1.5);
+    /// The spacing an office suite offers just above single.
+    pub const ONE_AND_FIFTEEN: Self = Self(1.15);
+    /// Double spacing.
+    pub const DOUBLE: Self = Self(2.0);
 
     /// The multiple `ratio`, `None` unless it is finite and above zero.
     #[must_use]
@@ -742,25 +745,25 @@ pub enum TriState {
     Mixed,
 }
 
-/// What one block control of the text section writes over every block a
-/// selection covers, in one commit (`PROSE-UI-265` to `PROSE-UI-267`).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BlockFormat {
-    /// The paragraph settings it names. A `None` field leaves that property
-    /// alone on each block (`PROSE-FEAT-025`).
-    Paragraph(ParagraphStyle),
-    /// The paragraph style: a heading of this level, or `None` for a body
-    /// paragraph. A block that is neither keeps its type.
-    Heading(Option<HeadingLevel>),
-    /// Each paragraph becomes a list item of this style, and each item takes
-    /// it. `None` takes each item out of its list, as a paragraph.
-    List(Option<ListStyle>),
-    /// Nest or raise each list item, and move the left indent of each other
-    /// block one step.
-    Indent(IndentStep),
+/// What a paragraph is, as the paragraph style control names it
+/// (`features/ambre-spec-prose-toolbar.md section 3`).
+///
+/// A quote is a paragraph under the built-in `quote` style, never a block
+/// type of its own (`ambre-spec-prose-schema.md section 5`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParagraphKind {
+    /// A plain paragraph, under no named style.
+    Body,
+    /// A heading of one level.
+    Heading(HeadingLevel),
+    /// A paragraph under the built-in `quote` style.
+    Quote,
+    /// A list item of one marker.
+    List(ListStyle),
 }
 
-/// Which way an indent control moves the blocks of a selection.
+/// Which way an indent control moves the blocks of a selection
+/// (`PROSE-UI-267`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IndentStep {
     /// One level out, or one step to the left.
@@ -769,13 +772,46 @@ pub enum IndentStep {
     In,
 }
 
+/// The value of each property over a selection, as the context panel reads
+/// it (`CHROME-210`). A property the selection holds two values of reads
+/// mixed. An absent mark reads as `None`: the block or the document decides.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectionValues {
+    pub font_family: ambre_commands::Reading<Option<ambre_core::FontFamily>>,
+    pub font_size: ambre_commands::Reading<Option<ambre_core::FontSize>>,
+    pub color: ambre_commands::Reading<Option<ambre_core::Rgba>>,
+    pub highlight: ambre_commands::Reading<Option<ambre_core::Rgba>>,
+    pub align: ambre_commands::Reading<Align>,
+    /// `None` is the document default.
+    pub line_height: ambre_commands::Reading<Option<LineHeight>>,
+    pub indent_left: ambre_commands::Reading<PrintLength<Pt>>,
+    pub indent_first: ambre_commands::Reading<PrintLength<Pt>>,
+    /// `None` for a block the paragraph style control does not name: a code
+    /// block, a table cell's own structure.
+    pub kind: ambre_commands::Reading<Option<ParagraphKind>>,
+}
+
+impl Default for SelectionValues {
+    /// What an empty selection of a fresh paragraph reads.
+    fn default() -> Self {
+        use ambre_commands::Reading::Uniform;
+        Self {
+            font_family: Uniform(None),
+            font_size: Uniform(None),
+            color: Uniform(None),
+            highlight: Uniform(None),
+            align: Uniform(Align::Left),
+            line_height: Uniform(None),
+            indent_left: Uniform(PrintLength::<Pt>::ZERO),
+            indent_first: Uniform(PrintLength::<Pt>::ZERO),
+            kind: Uniform(Some(ParagraphKind::Body)),
+        }
+    }
+}
+
 /// The marks a selection carries, one state per control of the format bar
-/// (`PROSE-UI-054`), and one reading per value control of the text section
-/// (`PROSE-UI-269`).
-///
-/// A value reading is `Uniform(None)` when the selection carries no value of
-/// its own: no colour, a body paragraph, no list.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// (`PROSE-UI-054`).
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ActiveMarks {
     pub bold: TriState,
     pub italic: TriState,
@@ -787,44 +823,8 @@ pub struct ActiveMarks {
     /// The address, when the whole selection carries one link and the same
     /// one.
     pub link: Option<ambre_core::LinkUrl>,
-    /// The family every selected run resolves to, the document's face
-    /// included.
-    pub font_family: Reading<Option<ambre_core::FontFamily>>,
-    /// The size every selected run resolves to.
-    pub font_size: Reading<Option<ambre_core::FontSize>>,
-    /// The text colour every selected run carries.
-    pub color: Reading<Option<ambre_core::Rgba>>,
-    /// The highlight every selected run carries.
-    pub background: Reading<Option<ambre_core::Rgba>>,
-    /// The paragraph style of every selected block: a heading level, or
-    /// `None` for a body paragraph.
-    pub heading: Reading<Option<HeadingLevel>>,
-    /// The alignment every selected block resolves to.
-    pub align: Reading<Option<Align>>,
-    /// The list marker every selected block carries. `None` is no list.
-    pub list: Reading<Option<ListStyle>>,
-}
-
-impl Default for ActiveMarks {
-    fn default() -> Self {
-        Self {
-            bold: TriState::Off,
-            italic: TriState::Off,
-            underline: TriState::Off,
-            strikethrough: TriState::Off,
-            code: TriState::Off,
-            superscript: TriState::Off,
-            subscript: TriState::Off,
-            link: None,
-            font_family: Reading::Uniform(None),
-            font_size: Reading::Uniform(None),
-            color: Reading::Uniform(None),
-            background: Reading::Uniform(None),
-            heading: Reading::Uniform(None),
-            align: Reading::Uniform(None),
-            list: Reading::Uniform(None),
-        }
-    }
+    /// The value of each property the context panel edits.
+    pub values: SelectionValues,
 }
 
 /// A value a band resolves when its page is drawn, and never stores
@@ -891,7 +891,7 @@ pub enum EditMode {
 
 impl EditMode {
     /// The other mode: what the suggestion-mode command asks for
-    /// (`PROSE-UI-260`).
+    /// (`PROSE-UI-274`).
     #[must_use]
     pub fn toggled(self) -> Self {
         match self {
@@ -1555,23 +1555,6 @@ pub enum ProseCommand {
         key: MarkKey,
         action: MarkAction,
     },
-    /// Write one value mark over a whole selection, or take it off: a font,
-    /// a size, a colour, a highlight or a link. `None` takes the key off.
-    /// Every block the selection covers changes in one commit, so one undo
-    /// takes the whole gesture back (`PROSE-UI-263`, `PROSE-UI-268`).
-    MarkSelection {
-        anchor: (BlockId, Pos<DocChar>),
-        focus: (BlockId, Pos<DocChar>),
-        key: MarkKey,
-        value: Option<MarkValue>,
-    },
-    /// Write one block property over every block a selection covers, in one
-    /// commit (`PROSE-UI-265`).
-    FormatBlocks {
-        anchor: (BlockId, Pos<DocChar>),
-        focus: (BlockId, Pos<DocChar>),
-        format: BlockFormat,
-    },
 
     // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --
     /// Show or hide the top band (`PROSE-FEAT-167`).
@@ -1629,6 +1612,43 @@ pub enum ProseCommand {
     ClearSelectionMarks {
         anchor: (BlockId, Pos<DocChar>),
         focus: (BlockId, Pos<DocChar>),
+    },
+    /// Write one value mark over every block a selection covers, or remove
+    /// it with `None`, in one commit (`PROSE-UI-190`, `PROSE-UI-188`). The
+    /// mark is a font, a size, a colour, a highlight or a link. The Logic
+    /// thread checks the value under `key`.
+    MarkSelection {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        key: MarkKey,
+        value: Option<MarkValue>,
+    },
+    /// Write the paragraph properties `style` names on every block a
+    /// selection covers, in one commit (`PROSE-UI-259`).
+    SetSelectionParagraph {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        style: ParagraphStyle,
+    },
+    /// Make every block a selection covers a body paragraph, a heading, a
+    /// quote or a list item, in one commit (`PROSE-UI-189`).
+    SetSelectionKind {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        kind: ParagraphKind,
+    },
+    /// Move every block a selection covers one step in or out, in one
+    /// commit (`PROSE-UI-267`). A list item changes level, and any other
+    /// block moves its left indent one step.
+    IndentSelection {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+        step: IndentStep,
+    },
+    /// Set the body font of the document, `meta/defaults`
+    /// (`PROSE-UI-261`).
+    SetDefaultFont {
+        family: ambre_core::FontFamily,
     },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
@@ -1974,17 +1994,6 @@ impl fmt::Debug for ProseCommand {
                 key,
                 action,
             } => fields!("FormatSelection", anchor, focus, key, action),
-            Self::MarkSelection {
-                anchor,
-                focus,
-                key,
-                value,
-            } => fields!("MarkSelection", anchor, focus, key, value),
-            Self::FormatBlocks {
-                anchor,
-                focus,
-                format,
-            } => fields!("FormatBlocks", anchor, focus, format),
             Self::SetHeaderEnabled { shown } => fields!("SetHeaderEnabled", shown),
             Self::SetFooterEnabled { shown } => fields!("SetFooterEnabled", shown),
             Self::SetDifferentFirstPage { first_page } => {
@@ -2003,6 +2012,28 @@ impl fmt::Debug for ProseCommand {
             Self::ClearSelectionMarks { anchor, focus } => {
                 fields!("ClearSelectionMarks", anchor, focus)
             }
+            Self::MarkSelection {
+                anchor,
+                focus,
+                key,
+                value,
+            } => fields!("MarkSelection", anchor, focus, key, value),
+            Self::SetSelectionParagraph {
+                anchor,
+                focus,
+                style,
+            } => fields!("SetSelectionParagraph", anchor, focus, style),
+            Self::SetSelectionKind {
+                anchor,
+                focus,
+                kind,
+            } => fields!("SetSelectionKind", anchor, focus, kind),
+            Self::IndentSelection {
+                anchor,
+                focus,
+                step,
+            } => fields!("IndentSelection", anchor, focus, step),
+            Self::SetDefaultFont { family } => fields!("SetDefaultFont", family),
             Self::FindStart { query } => fields!("FindStart", query),
             Self::FindNext => f.write_str("FindNext"),
             Self::FindPrev => f.write_str("FindPrev"),
@@ -2333,8 +2364,6 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::CopyRange { .. }
             | Self::Paste { .. }
             | Self::FormatSelection { .. }
-            | Self::MarkSelection { .. }
-            | Self::FormatBlocks { .. }
             | Self::SetHeaderEnabled { .. }
             | Self::SetFooterEnabled { .. }
             | Self::SetDifferentFirstPage { .. }
@@ -2345,6 +2374,11 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::SetDocumentLocale { .. }
             | Self::SetPageFormat { .. }
             | Self::ClearSelectionMarks { .. }
+            | Self::MarkSelection { .. }
+            | Self::SetSelectionParagraph { .. }
+            | Self::SetSelectionKind { .. }
+            | Self::IndentSelection { .. }
+            | Self::SetDefaultFont { .. }
             | Self::FindStart { .. }
             | Self::FindNext
             | Self::FindPrev
@@ -2473,8 +2507,6 @@ impl ProseCommand {
             Self::ShowBlock { .. } => "showing the block",
             Self::ReadMarks { .. } => "reading the styles",
             Self::FormatSelection { .. } => "formatting the selection",
-            Self::MarkSelection { .. } => "formatting the selection",
-            Self::FormatBlocks { .. } => "formatting the paragraphs",
             Self::SetHeaderEnabled { .. } => "showing or hiding the header",
             Self::SetFooterEnabled { .. } => "showing or hiding the footer",
             Self::SetDifferentFirstPage { .. } => "changing the first page's bands",
@@ -2485,6 +2517,11 @@ impl ProseCommand {
             Self::SetDocumentLocale { .. } => "setting the document language",
             Self::SetPageFormat { .. } => "setting the page format",
             Self::ClearSelectionMarks { .. } => "clearing the formatting",
+            Self::MarkSelection { .. } => "formatting the selection",
+            Self::SetSelectionParagraph { .. } => "setting the paragraph",
+            Self::SetSelectionKind { .. } => "setting the paragraph style",
+            Self::IndentSelection { .. } => "indenting the paragraphs",
+            Self::SetDefaultFont { .. } => "setting the default font",
             Self::FindStart { .. } => "searching",
             Self::FindNext => "going to the next match",
             Self::FindPrev => "going to the previous match",

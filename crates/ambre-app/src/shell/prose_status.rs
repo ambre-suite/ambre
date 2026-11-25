@@ -31,7 +31,7 @@ pub(crate) fn ProseFigures(
             }}
         </span>
         // Suggestion mode stays in view while the panel is folded
-        // (`PROSE-UI-261`).
+        // (`PROSE-UI-275`).
         <ambre_prose::chrome::ProseModeChip signals=signals />
         <span class="spacer"></span>
         <ambre_chrome::ZoomChip

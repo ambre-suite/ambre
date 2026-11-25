@@ -118,9 +118,9 @@ impl CatchUp {
         Span::<DocChar>::new(self.position(start, block), self.end(end, block))
     }
 
-    /// A selection the view sent, its head first, both ends moved through
-    /// what it had not seen. Its tail is an end: text typed there stays
-    /// outside.
+    /// A selection the view sent, both ends moved through what it had not
+    /// seen. The view sends the head first, so the tail is an end: text
+    /// typed there stays outside.
     fn selection(
         &self,
         anchor: (crate::events::BlockId, Pos<DocChar>),
@@ -343,16 +343,40 @@ impl ProseState {
                     value,
                 }
             }
-            ProseCommand::FormatBlocks {
+            ProseCommand::SetSelectionParagraph {
                 anchor,
                 focus,
-                format,
+                style,
             } => {
                 let (anchor, focus) = sync.selection(anchor, focus);
-                ProseCommand::FormatBlocks {
+                ProseCommand::SetSelectionParagraph {
                     anchor,
                     focus,
-                    format,
+                    style,
+                }
+            }
+            ProseCommand::SetSelectionKind {
+                anchor,
+                focus,
+                kind,
+            } => {
+                let (anchor, focus) = sync.selection(anchor, focus);
+                ProseCommand::SetSelectionKind {
+                    anchor,
+                    focus,
+                    kind,
+                }
+            }
+            ProseCommand::IndentSelection {
+                anchor,
+                focus,
+                step,
+            } => {
+                let (anchor, focus) = sync.selection(anchor, focus);
+                ProseCommand::IndentSelection {
+                    anchor,
+                    focus,
+                    step,
                 }
             }
             ProseCommand::ReadMarks { anchor, focus } => {
