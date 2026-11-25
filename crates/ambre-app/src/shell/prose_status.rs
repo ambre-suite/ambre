@@ -37,7 +37,7 @@ pub(crate) fn ProseFigures(
         <ambre_chrome::ZoomChip
             zoom=zoom
             range=ambre_prose::view::zoom::ZOOM_RANGE
-            title="Page zoom"
+            title=ambre_chrome::commands::tr!("Page zoom", "Zoom de la page")
         />
     }
 }

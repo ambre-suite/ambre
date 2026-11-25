@@ -41,7 +41,7 @@
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 54 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 25 |  |
-| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | implemented | 46 |  |
+| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | implemented | 49 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 28 implemented, 20 partial, 2 design-only. 1979 contract rows, 14 loose.**
+**50 features: 28 implemented, 20 partial, 2 design-only. 1982 contract rows, 14 loose.**

@@ -95,6 +95,30 @@ struct Inner {
     /// The user the session names, whose row a kept pin takes
     /// (`SYNC-244`). `None` before a session.
     user: Cell<Option<Id<User>>>,
+    /// The snapshot and delta writes the browser has not finished.
+    in_flight: Cell<Count<InFlightWrites>>,
+    /// Whether the page reloads once no write is in flight (`SETTINGS-048`).
+    reload: Cell<ReloadOnIdle>,
+    /// What reloads the page. A test takes the reload without leaving the
+    /// page.
+    reloads: Cell<fn()>,
+}
+
+/// How many writes of the local store the browser has not finished.
+enum InFlightWrites {}
+
+impl NarrowCount for InFlightWrites {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InFlightWrites");
+}
+
+/// Whether the store reloads the page once its writes landed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ReloadOnIdle {
+    /// No change asks for a reload.
+    No,
+    /// A change of the interface language waits for its copy to land.
+    Pending,
 }
 
 impl LocalStore {
@@ -123,6 +147,9 @@ impl LocalStore {
                 boot: Cell::new(boot),
                 boot_identity: Cell::new(Identity::Pending),
                 user: Cell::new(None),
+                in_flight: Cell::new(Count::new(0)),
+                reload: Cell::new(ReloadOnIdle::No),
+                reloads: Cell::new(crate::platform::reload),
             }),
         }
     }
@@ -230,6 +257,11 @@ impl LocalStore {
                 None => tracing::warn!("Persistence: no session names a user, the name is dropped"),
             },
             PersistWrite::Shown | PersistWrite::Hidden => {}
+            // Every write queued before it already left for the browser.
+            PersistWrite::Reload => {
+                self.inner.reload.set(ReloadOnIdle::Pending);
+                self.reload_if_idle();
+            }
             // The copy leaves whole, with what the quota held back of it
             // (`SYNC-233`).
             PersistWrite::Erase => {
@@ -332,13 +364,31 @@ impl LocalStore {
             _ => return,
         };
         let this = self.clone();
+        self.inner
+            .in_flight
+            .set(self.inner.in_flight.get().incremented());
         wasm_bindgen_futures::spawn_local(async move {
-            match landed.await {
+            let stored = landed.await;
+            this.inner
+                .in_flight
+                .set(this.inner.in_flight.get().minus(Count::new(1)));
+            match stored {
                 Ok(Stored::Quota) => this.refused(id, write, attempt),
                 Ok(Stored::Done) if attempt == Attempt::Held => this.resumed(id),
                 _ => {}
             }
+            this.reload_if_idle();
         });
+    }
+
+    /// Reload the page once no write is in flight, if a change of the
+    /// interface language asked for it (`SETTINGS-048`).
+    fn reload_if_idle(&self) {
+        if self.inner.reload.get() == ReloadOnIdle::Pending && self.inner.in_flight.get().is_zero()
+        {
+            self.inner.reload.set(ReloadOnIdle::No);
+            (self.inner.reloads.get())();
+        }
     }
 
     /// Meet a write the browser refused for its quota (`RESID-017`,
@@ -448,6 +498,73 @@ mod tests {
             ),
             other => panic!("expected a restore, got {other:?}"),
         }
+    }
+
+    thread_local! {
+        static RELOADS: Cell<u32> = const { Cell::new(0) };
+        // The store under test, whose writes in flight a reload reads.
+        static UNDER_TEST: std::cell::RefCell<Option<LocalStore>> = const { std::cell::RefCell::new(None) };
+    }
+
+    fn count_reload() {
+        let idle = UNDER_TEST.with(|store| {
+            store
+                .borrow()
+                .as_ref()
+                .is_some_and(|store| store.inner.in_flight.get().is_zero())
+        });
+        // A panic in a callback fails no test: the count stays at zero.
+        if idle {
+            RELOADS.with(|reloads| reloads.set(reloads.get() + 1));
+        }
+    }
+
+    /// `SETTINGS-048`: the page reloads once the copy queued before the
+    /// reload landed, and not while its seal is still out.
+    #[wasm_bindgen_test]
+    async fn the_page_reloads_once_the_copy_before_the_reload_landed() {
+        let store = PersistenceStore::open().await.unwrap().unwrap();
+        let (logic_tx, _logic_rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
+        let (vault_tx, vault_rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
+        let local = LocalStore::open(
+            store.clone(),
+            crate::outbox::ShellOutbox::new(logic_tx),
+            Vault::new(crate::outbox::ShellOutbox::new(vault_tx.clone())),
+            None,
+        )
+        .await;
+        local.inner.reloads.set(count_reload);
+        UNDER_TEST.with(|store| *store.borrow_mut() = Some(local.clone()));
+        let vault = local.inner.vault.clone();
+        let doc = Id::<Document>::mint();
+        local.apply(
+            doc,
+            PersistWrite::Snapshot(Payload::<ambre_core::SnapshotBytes>::new(b"fr".to_vec())),
+        );
+        local.apply(doc, PersistWrite::Reload);
+        let (seal, _) = request(&vault_rx).await;
+        sleep(20).await;
+        assert_eq!(RELOADS.with(Cell::get), 0, "the copy is not sealed yet");
+        vault.answer(
+            Some(seal),
+            RestEvent::LocalRowSealed {
+                sealed: Payload::<SealedRowBytes>::new(b"sealed fr".to_vec()),
+            },
+        );
+        for _ in 0..100 {
+            if RELOADS.with(Cell::get) > 0 {
+                break;
+            }
+            sleep(10).await;
+        }
+        assert_eq!(RELOADS.with(Cell::get), 1);
+        assert_eq!(
+            store.load_snapshot(doc).await.unwrap(),
+            Some(Payload::<SealedRowBytes>::new(b"sealed fr".to_vec())),
+            "the reload found the copy in the store"
+        );
     }
 
     /// A copy reaches the store sealed: the bytes the store holds are the

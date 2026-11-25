@@ -120,7 +120,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             })
             .collect::<Vec<_>>();
         view! {
-            <Field label="Paper">
+            <Field label=ambre_commands::tr!("Paper", "Papier")>
                 <SelectField
                     property=prop(panel::PAPER)
                     choices=papers
@@ -134,12 +134,12 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     })
                 />
             </Field>
-            <Field label="Orientation">
+            <Field label=ambre_commands::tr!("Orientation", "Orientation")>
                 <Segmented
                     property=prop(panel::ORIENTATION)
                     choices=vec![
-                        Choice { value: Pick::Orientation(Orientation::Portrait), label: "Portrait", icon: Some(icondata::LuRectangleVertical) },
-                        Choice { value: Pick::Orientation(Orientation::Landscape), label: "Landscape", icon: Some(icondata::LuRectangleHorizontal) },
+                        Choice { value: Pick::Orientation(Orientation::Portrait), label: ambre_commands::tr!("Portrait", "Portrait"), icon: Some(icondata::LuRectangleVertical) },
+                        Choice { value: Pick::Orientation(Orientation::Landscape), label: ambre_commands::tr!("Landscape", "Paysage"), icon: Some(icondata::LuRectangleHorizontal) },
                     ]
                     value=orientation
                     on_write=Callback::new(move |o| {
@@ -149,7 +149,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     })
                 />
             </Field>
-            <Field label="Margins">
+            <Field label=ambre_commands::tr!("Margins", "Marges")>
                 <SelectField
                     property=prop(panel::MARGINS)
                     choices=margin_choices
@@ -167,10 +167,10 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 />
             </Field>
             <Show when=show_steppers>
-                <Field label="Top">{margin(panel::MARGIN_TOP, |f| f.margin_top, |f, m| f.margin_top = m)}</Field>
-                <Field label="Bottom">{margin(panel::MARGIN_BOTTOM, |f| f.margin_bottom, |f, m| f.margin_bottom = m)}</Field>
-                <Field label="Left">{margin(panel::MARGIN_LEFT, |f| f.margin_left, |f, m| f.margin_left = m)}</Field>
-                <Field label="Right">{margin(panel::MARGIN_RIGHT, |f| f.margin_right, |f, m| f.margin_right = m)}</Field>
+                <Field label=ambre_commands::tr!("Top", "Haut")>{margin(panel::MARGIN_TOP, |f| f.margin_top, |f, m| f.margin_top = m)}</Field>
+                <Field label=ambre_commands::tr!("Bottom", "Bas")>{margin(panel::MARGIN_BOTTOM, |f| f.margin_bottom, |f, m| f.margin_bottom = m)}</Field>
+                <Field label=ambre_commands::tr!("Left", "Gauche")>{margin(panel::MARGIN_LEFT, |f| f.margin_left, |f, m| f.margin_left = m)}</Field>
+                <Field label=ambre_commands::tr!("Right", "Droite")>{margin(panel::MARGIN_RIGHT, |f| f.margin_right, |f, m| f.margin_right = m)}</Field>
             </Show>
         }
         .into_any()
@@ -239,45 +239,45 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
         let (script, clear) = rest.split_at(2);
         let size = Signal::derive(move || values.with(|v| v.font_size.uniform().flatten()));
         view! {
-            <Field label="Font">
+            <Field label=ambre_commands::tr!("Font", "Police")>
                 <FontField
                     property=prop(panel::FONT)
                     value=Signal::derive(move || values.with(|v| v.font_family.clone()))
                     on_write=Callback::new(move |f| text_write(TextValue::Font(f)))
                 />
             </Field>
-            <Field label="Size">
+            <Field label=ambre_commands::tr!("Size", "Taille")>
                 <span data-reach=Reach::Property(panel::SIZE).marker()>
                     <FontSizeSelect
                         current=size
                         on_pick=Callback::new(move |s| text_write(TextValue::Size(s)))
-                        auto_label="Default"
+                        auto_label=ambre_commands::tr!("Default", "Par d\u{e9}faut")
                     />
                 </span>
             </Field>
-            <Field label="Style">{command_buttons(marks, Labelled::Icon)}</Field>
-            <Field label="Colour">
+            <Field label=ambre_commands::tr!("Style", "Style")>{command_buttons(marks, Labelled::Icon)}</Field>
+            <Field label=ambre_commands::tr!("Colour", "Couleur")>
                 <ColourField
                     property=prop(panel::COLOUR)
                     icon=icondata::MdiFormatColorText
                     value=Signal::derive(move || values.with(|v| v.color))
                     default=Signal::stored(Rgba::from_bits(0x2924_1eff))
-                    reset_label="Automatic"
+                    reset_label=ambre_commands::tr!("Automatic", "Automatique")
                     on_write=Callback::new(move |c| text_write(TextValue::Colour(c)))
                 />
             </Field>
-            <Field label="Highlight">
+            <Field label=ambre_commands::tr!("Highlight", "Surlignage")>
                 <ColourField
                     property=prop(panel::HIGHLIGHT)
                     icon=icondata::MdiFormatColorHighlight
                     value=Signal::derive(move || values.with(|v| v.highlight))
                     default=Signal::stored(Rgba::from_bits(0xffff_00ff))
-                    reset_label="No highlight"
+                    reset_label=ambre_commands::tr!("No highlight", "Aucun surlignage")
                     on_write=Callback::new(move |c| text_write(TextValue::Highlight(c)))
                 />
             </Field>
-            <Field label="Script">{command_buttons(script, Labelled::Icon)}</Field>
-            <Field label="Clear">{command_buttons(clear, Labelled::Icon)}</Field>
+            <Field label=ambre_commands::tr!("Script", "Exposant et indice")>{command_buttons(script, Labelled::Icon)}</Field>
+            <Field label=ambre_commands::tr!("Clear", "Effacer")>{command_buttons(clear, Labelled::Icon)}</Field>
         }
         .into_any()
     };
@@ -301,7 +301,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             .into_iter()
             .map(|(value, label)| Choice {
                 value: Pick::Spacing(value),
-                label,
+                label: ambre_commands::shown(&label),
                 icon: None,
             })
             .collect::<Vec<_>>();
@@ -314,7 +314,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             ])
             .map(|((style, label), icon)| Choice {
                 value: Pick::Kind(Some(ParagraphKind::List(style))),
-                label,
+                label: ambre_commands::shown(&label),
                 icon: Some(icon),
             })
             .collect::<Vec<_>>();
@@ -338,14 +338,14 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             Reading::Mixed => Reading::Mixed,
         });
         view! {
-            <Field label="Alignment">
+            <Field label=ambre_commands::tr!("Alignment", "Alignement")>
                 <Segmented
                     property=prop(panel::ALIGN)
                     choices=vec![
-                        Choice { value: Pick::Align(Align::Left), label: "Left", icon: Some(icondata::MdiFormatAlignLeft) },
-                        Choice { value: Pick::Align(Align::Center), label: "Centre", icon: Some(icondata::MdiFormatAlignCenter) },
-                        Choice { value: Pick::Align(Align::Right), label: "Right", icon: Some(icondata::MdiFormatAlignRight) },
-                        Choice { value: Pick::Align(Align::Justify), label: "Justified", icon: Some(icondata::MdiFormatAlignJustify) },
+                        Choice { value: Pick::Align(Align::Left), label: ambre_commands::tr!("Left", "Gauche"), icon: Some(icondata::MdiFormatAlignLeft) },
+                        Choice { value: Pick::Align(Align::Center), label: ambre_commands::tr!("Centre", "Centr\u{e9}"), icon: Some(icondata::MdiFormatAlignCenter) },
+                        Choice { value: Pick::Align(Align::Right), label: ambre_commands::tr!("Right", "Droite"), icon: Some(icondata::MdiFormatAlignRight) },
+                        Choice { value: Pick::Align(Align::Justify), label: ambre_commands::tr!("Justified", "Justifi\u{e9}"), icon: Some(icondata::MdiFormatAlignJustify) },
                     ]
                     value=Signal::derive(move || picked(values.with(|v| v.align), Pick::Align))
                     on_write=Callback::new(move |a| {
@@ -355,7 +355,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     })
                 />
             </Field>
-            <Field label="Line spacing">
+            <Field label=ambre_commands::tr!("Line spacing", "Interligne")>
                 <SelectField
                     property=prop(panel::LINE_SPACING)
                     choices=spacings
@@ -371,17 +371,17 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     })
                 />
             </Field>
-            <Field label="Left indent">
+            <Field label=ambre_commands::tr!("Left indent", "Retrait gauche")>
                 {indent(panel::INDENT_LEFT, |v| v.indent_left, |pt| ParagraphStyle { indent_left: Some(pt), ..ParagraphStyle::default() })}
             </Field>
-            <Field label="First line">
+            <Field label=ambre_commands::tr!("First line", "Premi\u{e8}re ligne")>
                 {indent(panel::INDENT_FIRST, |v| v.indent_first, |pt| ParagraphStyle { indent_first: Some(pt), ..ParagraphStyle::default() })}
             </Field>
-            <Field label="Indent">
+            <Field label=ambre_commands::tr!("Indent", "Retrait")>
                 {step(panel::INDENT_OUT, icondata::MdiFormatIndentDecrease, IndentStep::Out)}
                 {step(panel::INDENT_IN, icondata::MdiFormatIndentIncrease, IndentStep::In)}
             </Field>
-            <Field label="List">
+            <Field label=ambre_commands::tr!("List", "Liste")>
                 <Segmented
                     property=prop(panel::KIND)
                     choices=lists
@@ -398,7 +398,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             .into_iter()
             .map(|(kind, label)| Choice {
                 value: Pick::Kind(Some(kind)),
-                label,
+                label: ambre_commands::shown(&label),
                 // A heading shows its short glyph, so the five chips fit the
                 // panel; its full name is the tooltip and the accessible name.
                 icon: match kind {
@@ -432,7 +432,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
     let defaults_section = move || {
         let fonts = move || signals.fonts.get().unwrap_or_default();
         view! {
-            <Field label="Body">
+            <Field label=ambre_commands::tr!("Body", "Corps")>
                 <FontField
                     property=prop(panel::BODY_FONT)
                     value=Signal::derive(move || Reading::Uniform(Some(fonts().body)))
@@ -445,14 +445,14 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             </Field>
             // The entry that names no family deletes the key, so the
             // headings follow the body font (`PROSE-UI-266`).
-            <Field label="Headings">
+            <Field label=ambre_commands::tr!("Headings", "Titres")>
                 <FontField
                     property=prop(panel::HEADING_FONT)
                     value=Signal::derive(move || Reading::Uniform(fonts().heading))
                     on_write=Callback::new(move |f: Option<ambre_core::FontFamily>| {
                         text_write(TextValue::DefaultFont(DefaultFont::Heading(f)));
                     })
-                    default_label="Body font"
+                    default_label=ambre_commands::tr!("Body font", "Police du corps")
                 />
             </Field>
         }
@@ -474,7 +474,8 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 Some(view! { <CommandButton command=command icon={ Option::<icondata::Icon>::None } on_command=on_command /> })
             })
             .collect_view();
-        view! { <Field label="Review">{buttons}</Field> }.into_any()
+        view! { <Field label=ambre_commands::tr!("Review", "R\u{e9}vision")>{buttons}</Field> }
+            .into_any()
     };
 
     // Suggestion mode, whatever is selected (`PROSE-UI-276`). The control
@@ -508,7 +509,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 })
             })
             .collect_view();
-        view! { <Field label="Mode">{buttons}</Field> }.into_any()
+        view! { <Field label=ambre_commands::tr!("Mode", "Mode")>{buttons}</Field> }.into_any()
     };
 
     let at_caret = Memo::new(move |_| {
@@ -523,42 +524,51 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
             .into_iter()
             .filter_map(|key| {
                 Some(match key {
-                    k if k == panel::PAGE => {
-                        PanelSection::new(k, "Page", icondata::MdiFileDocumentOutline, page_section)
-                    }
-                    k if k == panel::TEXT => {
-                        PanelSection::new(k, "Text", icondata::MdiFormatText, text_section)
-                    }
+                    k if k == panel::PAGE => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Page", "Page"),
+                        icondata::MdiFileDocumentOutline,
+                        page_section,
+                    ),
+                    k if k == panel::TEXT => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Text", "Texte"),
+                        icondata::MdiFormatText,
+                        text_section,
+                    ),
                     k if k == panel::PARAGRAPH => PanelSection::new(
                         k,
-                        "Paragraph",
+                        ambre_commands::tr!("Paragraph", "Paragraphe"),
                         icondata::MdiFormatAlignLeft,
                         paragraph_section,
                     ),
                     k if k == panel::PARAGRAPH_STYLE => PanelSection::new(
                         k,
-                        "Paragraph style",
+                        ambre_commands::tr!("Paragraph style", "Style de paragraphe"),
                         icondata::MdiFormatHeaderPound,
                         kind_section,
                     ),
-                    k if k == panel::ACTIONS => {
-                        PanelSection::new(k, "Actions", icondata::MdiLink, actions_section)
-                    }
+                    k if k == panel::ACTIONS => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Actions", "Actions"),
+                        icondata::MdiLink,
+                        actions_section,
+                    ),
                     k if k == panel::DEFAULT_STYLES => PanelSection::new(
                         k,
-                        "Default styles",
+                        ambre_commands::tr!("Default styles", "Styles par d\u{e9}faut"),
                         icondata::MdiFormatFont,
                         defaults_section,
                     ),
                     k if k == panel::SUGGESTION => PanelSection::new(
                         k,
-                        "Suggestion",
+                        ambre_commands::tr!("Suggestion", "Suggestion"),
                         icondata::MdiFileDocumentEditOutline,
                         suggestion_section,
                     ),
                     k if k == panel::REVIEW => PanelSection::new(
                         k,
-                        "Review",
+                        ambre_commands::tr!("Review", "R\u{e9}vision"),
                         icondata::MdiFileDocumentEditOutline,
                         review_section,
                     ),

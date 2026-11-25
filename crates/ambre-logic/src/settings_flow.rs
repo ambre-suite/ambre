@@ -201,14 +201,23 @@ impl LogicState {
         self.settings_changed();
     }
 
-    /// One change of the view (`SETTINGS-012`).
+    /// One change of the view (`SETTINGS-012`). After a change of the
+    /// interface language, the page reloads once the local copy holds it
+    /// (`SETTINGS-048`).
     pub(crate) fn change_setting(&mut self, change: ambre_client_core::SettingChange) {
         let now = self.clock.now();
+        let language = matches!(
+            change,
+            ambre_client_core::SettingChange::InterfaceLanguage(_)
+        );
         if let Some(session) = self.settings.as_mut() {
             session.change(change, now);
         }
         self.release_settings(now);
         self.settings_changed();
+        if language && let Some(session) = &self.settings {
+            self.send_to_persist(session.document_id(), PersistWrite::Reload);
+        }
     }
 
     /// Sends the coalesced writes once their delay ended (`SETTINGS-036`).
@@ -634,6 +643,102 @@ mod tests {
         assert_eq!(phone.settings().panel_side, PanelSide::Left);
         link(&mut rig, ambre_core::LinkState::Connected);
         assert!(updates(&rig.sync).is_empty(), "no fall, nothing again");
+    }
+
+    /// `SETTINGS-048`: a change of the interface language asks the store
+    /// for a reload after the copy that holds it.
+    #[test]
+    fn a_language_change_reloads_the_page_after_its_copy() {
+        let mut rig = rig(0.0);
+        restore(&mut rig, None, Vec::new());
+        identify(&mut rig, FixedBytes::from_array([3; 16]));
+        rig.sync.try_iter().for_each(drop);
+        rig.persist.try_iter().for_each(drop);
+        let french = ambre_client_core::DocumentLocale::parse("fr").expect("a tag");
+        rig.state.handle_logic_command(LogicCommand::ChangeSetting {
+            change: SettingChange::InterfaceLanguage(french),
+        });
+        let writes: Vec<PersistWrite> = rig.persist.try_iter().map(|(_, write)| write).collect();
+        let copy = writes
+            .iter()
+            .position(|write| matches!(write, PersistWrite::Snapshot(_)))
+            .expect("the copy");
+        let reload = writes
+            .iter()
+            .position(|write| matches!(write, PersistWrite::Reload))
+            .expect("the reload");
+        assert!(copy < reload, "the reload waits for the copy: {writes:?}");
+
+        // Another setting coalesces as before, and asks for no reload.
+        rig.state.handle_logic_command(LogicCommand::ChangeSetting {
+            change: SettingChange::Theme(ThemeChoice::Dark),
+        });
+        assert!(
+            !rig.persist
+                .try_iter()
+                .any(|(_, write)| matches!(write, PersistWrite::Reload))
+        );
+    }
+
+    /// `SETTINGS-049`: after the reload, the language the local copy holds
+    /// wins over an earlier language the relay replays.
+    #[test]
+    fn the_reloaded_page_keeps_the_language_of_its_copy_over_the_replay() {
+        let mut page = rig(0.0);
+        restore(&mut page, None, Vec::new());
+        let nonce = FixedBytes::from_array([5; 16]);
+        let peer = identify(&mut page, nonce);
+        page.sync.try_iter().for_each(drop);
+        let english = ambre_client_core::DocumentLocale::parse("en").expect("a tag");
+        page.state
+            .handle_logic_command(LogicCommand::ChangeSetting {
+                change: SettingChange::InterfaceLanguage(english),
+            });
+        later(&mut page, 2000.0);
+        let replayed = page
+            .sync
+            .try_iter()
+            .find_map(|command| match command {
+                SyncCommand::SendUpdate { payload, .. } => Some(payload),
+                _ => None,
+            })
+            .expect("the English change left");
+        link(&mut page, ambre_core::LinkState::Disconnected);
+        let french = ambre_client_core::DocumentLocale::parse("fr").expect("a tag");
+        page.state
+            .handle_logic_command(LogicCommand::ChangeSetting {
+                change: SettingChange::InterfaceLanguage(french.clone()),
+            });
+        let copy = last_copy(&page).expect("the copy holds the French change");
+
+        let mut next = bare(0.0);
+        next.document_id = page.document_id;
+        next.state.my_user_id = page.state.my_user_id;
+        next.state.handle_logic_command(LogicCommand::KeptSettings {
+            document_id: Some(page.document_id),
+        });
+        restore(&mut next, Some(copy), vec![(peer, nonce)]);
+        identify(&mut next, FixedBytes::from_array([6; 16]));
+        let me = next.state.my_user_id;
+        next.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: next.document_id,
+            delta: SignedDelta {
+                seq: Seq::<Relay>::new(1),
+                payload: replayed,
+                nonce,
+                peer,
+                user: me,
+                summary: None,
+            },
+        });
+        next.state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: next.document_id,
+            role: ambre_core::Role::Owner,
+        });
+        assert_eq!(
+            last_settings(&next.ui).map(|settings| settings.interface_language),
+            Some(french)
+        );
     }
 
     /// `SETTINGS-035`: a change an earlier session made offline survives the

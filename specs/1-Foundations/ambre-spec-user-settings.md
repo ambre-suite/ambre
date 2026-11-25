@@ -66,6 +66,9 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-034` | `FRAME` | Reading the boot hint MUST NOT wait on the network, on a key or on the local store. | this spec section 3, the boot | structural -- the page reads the hint through the synchronous local storage, before the first frame and before any wait | none | verified |
 | `SETTINGS-042` | `POST` | A pick in the language picker of the avatar menu MUST change the interface language of the page and of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the French option writes `fr` | none | verified |
 | `SETTINGS-043` | `POST` | A new interface language MUST redraw every label that reads it, with no reload. | this spec section 3, the boot | `ambre_chrome::language::tests::a_label_read_in_a_reactive_scope_follows_a_new_language` | none | verified |
+| `SETTINGS-047` | `POST` | A word of the Prose chrome MUST show in the interface language of the page. | this spec section 3, the interface language | `ambre_prose::view::slash::language_tests::the_slash_menu_reads_and_finds_its_items_in_the_interface_language` | none | verified |
+| `SETTINGS-048` | `POST` | A change of the interface language MUST show every word in the new language, the titles at once and the rest from the next load of the page. | this spec section 3, the interface language; `SETTINGS-035` | `ambre_logic::settings_flow::tests::a_language_change_reloads_the_page_after_its_copy` -- the reload follows its copy; `ambre_app::local_store::tests::the_page_reloads_once_the_copy_before_the_reload_landed` -- wasm tier, no reload while a write is in flight; `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the pick writes the boot hint first | none | verified |
+| `SETTINGS-049` | `POST` | After a reload, the page MUST keep the interface language of its local copy over an earlier one the relay replays. | this spec section 3, the interface language; `SETTINGS-035` | `ambre_logic::settings_flow::tests::the_reloaded_page_keeps_the_language_of_its_copy_over_the_replay` | none | verified |
 
 ### 1.4 Change a setting
 
@@ -93,7 +96,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 46 `verified`.
+* **Verification.** 49 `verified`.
 
 ---
 
@@ -219,6 +222,11 @@ language that ships: English and French (`SETTINGS-042`). A French tag of any re
 and every other tag shows English. A stored tag of none takes the browser's language. The page
 holds one language, and every label that reads it redraws on a change (`SETTINGS-043`). Each title
 carries its words in every language, on its description (`SETTINGS-044`).
+
+Every other word reads the language once, where the view draws it (`SETTINGS-047`). A change of
+language reloads the page once the local copy holds it (`SETTINGS-048`). The change leaves for
+the relay after the coalescing delay, as any change does. The copy opens before the relay answers,
+so the reloaded page keeps the new language over an earlier one the relay replays (`SETTINGS-049`).
 
 **The width stays on the device.** A width in CSS pixels takes another share of each screen. So
 300 px is a quarter of a laptop and a tenth of a large monitor. The width lives in the local store of the
