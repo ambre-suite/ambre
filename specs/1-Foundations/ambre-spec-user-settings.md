@@ -88,8 +88,8 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 38 `verified`, 3 `unimplemented`: no settings document exists. Every row lands
-  with one Story.
+* **Verification.** 38 `verified`, 3 `unimplemented`. Each open row waits on the Story that the
+  roadmap binds to it.
 
 ---
 
