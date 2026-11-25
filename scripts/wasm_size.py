@@ -59,7 +59,7 @@ BUDGET = 4_000_000
 # merges after them. It holds 1,350,000, the figure of the W10 raise, with
 # 1.6 % of room: 2 % above the measure would round up to 1,360,000.
 CEILINGS = {
-    "Main": 10_710_000,
+    "Main": 10_860_000,
     "Sync": 1_350_000,
 }
 

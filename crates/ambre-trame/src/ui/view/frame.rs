@@ -389,6 +389,10 @@ impl TrameView {
             if self.selection_ref.get_untracked() != selection {
                 self.selection_ref.set(selection);
             }
+            let bar = self.range_bar_anchor();
+            if self.range_bar.get_untracked() != bar {
+                self.range_bar.set(bar);
+            }
             if self.formula_text.get_untracked() != self.formula.text {
                 self.formula_text.set(self.formula.text.clone());
             }

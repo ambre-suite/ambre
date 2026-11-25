@@ -1607,6 +1607,11 @@ body {
     background: var(--surface-hover);
 }
 
+.ambre-kit-command > .ambre-kbd {
+    margin-left: auto;
+    color: var(--text-dim);
+}
+
 .ambre-kit-command[aria-pressed="true"] {
     border-color: var(--accent);
     background: var(--accent-soft);
@@ -1642,6 +1647,31 @@ body {
 
 .ambre-stepper:focus-within {
     outline-offset: 0;
+}
+
+/* A one-line text field of a panel section, such as the sheet name: the box
+   of a stepper, with the text across it. */
+.ambre-kit-text {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: var(--control);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-small);
+}
+
+.ambre-kit-text:focus-visible {
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: 0;
+}
+
+.ambre-kit-text[aria-invalid="true"] {
+    border-color: var(--error);
 }
 
 /* An icon button: one glyph of the icon size, centred in a square box of a
@@ -4902,4 +4932,16 @@ body {
 .ambre-gallery-frame {
     display: flex;
     height: 220px;
+}
+
+/* The count of items of a frame row, at its end (`CHROME-251`). */
+.ambre-kit-count {
+    margin-left: auto;
+    color: var(--text-dim);
+}
+
+.ambre-kit-empty {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: var(--font-small);
 }

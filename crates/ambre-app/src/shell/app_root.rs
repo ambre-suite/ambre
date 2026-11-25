@@ -432,6 +432,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         prose_signals,
         formula_ref,
         selection_ref,
+        range_bar,
         sheet_setup,
         formula_text,
         formula_action,
@@ -462,6 +463,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_cursor,
         toile_style_model,
         toile_restyle,
+        toile_place,
         toile_float_bar,
         toile_quick_style,
         shell_cover,
@@ -879,6 +881,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             scope: toile_ctx_scope,
             on_command,
             restyle: toile_restyle,
+            place: toile_place,
+            deck: toile_deck,
             stats: sel_stats_toile,
         })
     } else if boot_is_prose {
@@ -891,6 +895,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_style,
             selection: selection_ref,
             sheet: sheet_setup,
+            sheets,
+            active_sheet,
+            on_rename: on_sheet_rename,
         })
     } else {
         ambre_chrome::PanelContent::empty()
@@ -1286,6 +1293,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     })
                 />
             </toile_chrome::EditingSurfaces>
+        })}
+
+        // The Trame range bar over a selection of two cells or more
+        // (`CHROME-246`): the shared format bar, at the anchor the view
+        // publishes.
+        {boot_is_trame.then(|| view! {
+            <trame_chrome::RangeBar
+                anchor=range_bar
+                style=style_state
+                theme=theme_sig
+                on_command=on_command
+                on_style=on_style
+            />
         })}
 
         // Prose annotations: the comment panel and the suggestion popover,

@@ -803,11 +803,15 @@ async fn the_panel_announces_the_registry_labels() {
             theme: RwSignal::new(ambre_canvas::Theme::Dark),
             on_command: Callback::new(|_| {}),
             on_style: Callback::new(|_| {}),
+            // A lone cell shows every section (`CHROME-253`).
             selection: RwSignal::new(panel::PanelSelection {
-                reference: ambre_core::Validated::new("B2:D5"),
-                cells: ambre_core::Count::new(12),
+                reference: ambre_core::Validated::new("B2"),
+                cells: ambre_core::Count::new(1),
             }),
             sheet: RwSignal::new(None),
+            sheets: RwSignal::new(Vec::new()),
+            active_sheet: RwSignal::new(Id::<Sheet>::from_text("s0".to_owned())),
+            on_rename: Callback::new(|_| {}),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
         view! { <ContextPanel prefs=prefs title=content.title sections=content.sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
@@ -833,6 +837,21 @@ async fn the_panel_announces_the_registry_labels() {
             .query_selector(&format!("[aria-label=\"{expected}\"]"))
             .unwrap();
         assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
+    }
+    // `CHROME-249`: each command of the rows and columns and of the sort and
+    // filter is a labelled row, never a bare icon.
+    for &id in panel::ROW_COL_COMMANDS
+        .iter()
+        .chain(panel::SORT_FILTER_COMMANDS.iter())
+    {
+        let marker = ambre_chrome::commands::Reach::Command(id).marker();
+        assert!(
+            container
+                .query_selector(&format!(".ambre-kit-command[data-reach=\"{marker}\"] span"))
+                .unwrap()
+                .is_some(),
+            "{id:?} is a labelled row"
+        );
     }
     assert_eq!(ambre_chrome::repeated_title(&container), None);
     assert_eq!(
@@ -875,6 +894,54 @@ async fn the_panel_announces_the_registry_labels() {
     container.remove();
 }
 
+/// `CHROME-246`: the range bar is the shared format bar. It shows each entry
+/// `ui::panel::BAR` declares, save the unmerge of a merged cell. With no
+/// anchor it draws nothing.
+#[wasm_bindgen_test]
+async fn the_range_bar_shows_the_declared_entries_over_a_range() {
+    use ambre_trame::ui::panel;
+    let anchor = RwSignal::new(None);
+    let container = mount_in_container(move || {
+        view! {
+            <chrome::RangeBar
+                anchor=anchor
+                style=StyleState::new()
+                theme=RwSignal::new(ambre_canvas::Theme::Light)
+                on_command=Callback::new(|_| {})
+                on_style=Callback::new(|_| {})
+            />
+        }
+    });
+    leptos::task::tick().await;
+    assert!(
+        container
+            .query_selector(".ambre-format-bar")
+            .unwrap()
+            .is_none()
+    );
+    anchor.set(Some(panel::RangeBarAnchor {
+        at: ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::View>::new(100.0),
+            ambre_core::Px::<ambre_core::View>::new(80.0),
+        ),
+    }));
+    leptos::task::tick().await;
+    assert!(
+        container
+            .query_selector(".ambre-format-bar")
+            .unwrap()
+            .is_some()
+    );
+    let markers = ambre_chrome::reach_markers(&container);
+    for entry in panel::BAR
+        .iter()
+        .filter(|e| **e != ambre_chrome::commands::Reach::Command(chrome::UNMERGE))
+    {
+        assert!(markers.iter().any(|m| entry.matches_marker(m)), "{entry:?}");
+    }
+    container.remove();
+}
+
 /// The header names the selection, and the print group starts folded. Each
 /// list shows the setup of the active sheet, and find has no control here.
 #[wasm_bindgen_test]
@@ -905,6 +972,12 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             on_style: Callback::new(|_| {}),
             selection,
             sheet,
+            sheets: RwSignal::new(vec![ambre_trame::message::SheetTab {
+                id: Id::<Sheet>::from_text("s0".to_owned()),
+                name: SheetName::new("Budget").unwrap(),
+            }]),
+            active_sheet: RwSignal::new(Id::<Sheet>::from_text("s0".to_owned())),
+            on_rename: Callback::new(|_| {}),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
         view! {
@@ -929,6 +1002,21 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
     assert_eq!(text(".ambre-ctx-title"), "B2:D5");
     // The subtitle counts the cells the selection spans (`CHROME-241`).
     assert_eq!(text(".ambre-ctx-subtitle"), "12 cells");
+    // `CHROME-253`: a range shows the cells first and no sheet section; a
+    // lone cell shows the sheet first, then the cells.
+    let order = || {
+        let list = container.query_selector_all(".ambre-ctx-section").unwrap();
+        (0..list.length())
+            .filter_map(|i| list.item(i))
+            .filter_map(|n| leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(n).ok())
+            .filter_map(|e| e.get_attribute("data-section"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        order().first().map(String::as_str),
+        Some(panel::CELLS.as_str())
+    );
+    assert!(!order().iter().any(|s| s == panel::SHEET.as_str()));
     selection.set(panel::PanelSelection {
         reference: ambre_core::Validated::new("C3"),
         cells: ambre_core::Count::new(1),
@@ -936,6 +1024,22 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
     leptos::task::tick().await;
     assert_eq!(text(".ambre-ctx-title"), "C3");
     assert_eq!(text(".ambre-ctx-subtitle"), "1 cell");
+    assert_eq!(
+        order().first().map(String::as_str),
+        Some(panel::SHEET.as_str())
+    );
+    assert_eq!(
+        order().get(1).map(String::as_str),
+        Some(panel::CELLS.as_str())
+    );
+    // The field takes its value on the next tick of the new section.
+    leptos::task::tick().await;
+    let name = container
+        .query_selector("[aria-label=\"Sheet name\"]")
+        .unwrap()
+        .expect("the sheet name field");
+    let name = leptos::wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlInputElement>(name).unwrap();
+    assert_eq!(name.value(), "Budget", "the field names the active sheet");
 
     let print = format!(
         ".ambre-ctx-section[data-section=\"{}\"]",

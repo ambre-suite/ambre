@@ -80,6 +80,7 @@ async fn deck_panel_lists_the_slides_in_order() {
     let frame = |id: &str, name: &str| DeckFrame {
         id: Id::<Frame>::from_text(id.to_owned()),
         name: name.to_owned(),
+        items: ambre_core::Count::<ambre_core::Elements>::new(0),
     };
     let view = RwSignal::new(DeckView {
         slides: vec![frame("a", "Agenda"), frame("b", "")],

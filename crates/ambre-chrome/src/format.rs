@@ -197,17 +197,22 @@ impl FormatControl {
 
 /// The format bar over a selection, centred on `anchor` in the viewport
 /// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
+/// `children` follow the controls: a list or a colour, which a press button
+/// cannot hold (`CHROME-246`).
 ///
-/// The bar is a context bar: it publishes into `cover` how far it reaches
+/// The bar is a context bar. Given a `cover`, it publishes how far it reaches
 /// above the selection, so a fit frames clear of it (`CHROME-171`).
 #[component]
 pub fn FormatBar(
     anchor: Point<Px<Css>>,
-    controls: Vec<FormatControl>,
-    cover: RwSignal<ambre_client_core::cover::Cover>,
+    #[prop(optional)] controls: Vec<FormatControl>,
+    #[prop(optional)] children: Option<Children>,
+    #[prop(optional)] cover: Option<RwSignal<ambre_client_core::cover::Cover>>,
 ) -> impl IntoView {
     let node = NodeRef::<leptos::html::Div>::new();
-    crate::cover::watch_above(node, move || Some(anchor.y), cover);
+    if let Some(cover) = cover {
+        crate::cover::watch_above(node, move || Some(anchor.y), cover);
+    }
     let left = format!("{}px", anchor.x.get());
     let top = format!(
         "{}px",
@@ -263,6 +268,7 @@ pub fn FormatBar(
             aria-label="Format"
         >
             {controls.collect_view()}
+            {children.map(|c| c())}
         </div>
     }
     .into_any()

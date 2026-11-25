@@ -872,11 +872,50 @@ mod tests {
         );
     }
 
+    /// The grid-colour bordered rects the overlay draws: the autofilter
+    /// buttons, since cell grid lines are `stroke_line`.
+    fn filter_buttons_drawn(state: &crate::ui::grid::TrameUiState) -> u32 {
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+        draw_overlay(
+            &mut surface,
+            state,
+            palette,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
+            &clock,
+            &mut stats,
+        );
+        surface
+            .count(|op| {
+                matches!(
+                    op, DrawOp::StrokeRect { color, .. } if *color == palette.grid_line
+                )
+            })
+            .get()
+    }
+
+    /// `TRAME-FEAT-027`: a header row of text with no filter on the sheet
+    /// draws no filter button. A filter on one of its columns draws one per
+    /// column of the block.
+    #[test]
+    fn no_filter_button_shows_until_the_sheet_holds_a_filter() {
+        let mut state = fixture(&[(0, 0, "Name"), (0, 1, "City"), (1, 0, "a"), (1, 1, "b")]);
+        assert_eq!(filter_buttons_drawn(&state), 0, "no filter, no button");
+        state.filtered_col = Some(Pos::<Col>::new(1));
+        assert_eq!(filter_buttons_drawn(&state), 2);
+    }
+
     #[test]
     fn autofilter_buttons_drawn_on_region_header_row() {
-        // A two-column data block around the active cell (0,0): each column draws
-        // one autofilter button (bordered with the grid colour) on the band row.
-        let state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
+        // A two-column data block around the active cell (0,0), filtered on
+        // column 0. Each column draws one autofilter button on the band row,
+        // bordered with the grid colour.
+        let mut state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
+        state.filtered_col = Some(Pos::<Col>::new(0));
         assert_eq!(state.current_region(), Some(rect(0, 0, 0, 1)));
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();

@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-008` | `OBS` | A hidden row MUST occupy no height. | this spec section 4 | `ambre_trame::render::tests::cell_rect_collapses_over_hidden_rows` -- it reads the rectangle of a cell below a hidden row and finds it risen by that row's height | none | verified |
 | `TRAME-UI-173` | `OBS` | A click MUST land on the row the user sees, never on the one the collapse moved out of the way. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav` -- it hit-tests a point over the collapsed range and reads back the visible row | none | verified |
 | `TRAME-UI-154` | `OBS` | Arrow-key navigation MUST step over a hidden row. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav` -- the `nav` half of the same case | none | verified |
-| `TRAME-FEAT-027` | `OBS` | Every column of the filtered range MUST carry a button on the range's first row. | this spec section 4 | `ambre_trame::ui::renderer::tests::autofilter_buttons_drawn_on_region_header_row`; `ambre_trame::ui::grid::tests::group1::filter_button_hit_test_matches_drawn_rect`; `::filter_button_scales_with_zoom` | none | verified |
+| `TRAME-FEAT-027` | `OBS` | While the sheet holds a filter, every column of the filtered block MUST carry a button on its first row, and a sheet with no filter MUST show none. | this spec section 4 | `ambre_trame::ui::renderer::tests::no_filter_button_shows_until_the_sheet_holds_a_filter` -- a header row of text with no filter draws none; `ambre_trame::ui::renderer::tests::autofilter_buttons_drawn_on_region_header_row`; `ambre_trame::ui::grid::tests::group1::filter_button_hit_test_matches_drawn_rect`; `::filter_button_scales_with_zoom` | none | verified |
 | `TRAME-FEAT-043` | `OBS` | The button MUST show whether a filter is active on its column. | this spec section 4 | `ambre_trame::ui::renderer::tests::autofilter_button_shows_funnel_on_filtered_column` | none | verified |
 | `TRAME-FEAT-046` | `OBS` | The user MUST be told how many rows a filter hid. | this spec section 4 | `ambre_trame::tests::chrome_ui::the_filter_toast_says_how_many_rows_it_hid` | none | verified |
 | `TRAME-FEAT-029` | `OBS` | What the status bar totals MUST be what a formula over the same cells totals, save text that reads as a number and a boolean, which only the formula counts. | this spec section 4 | `ambre_trame::logic::tests::group5::status_bar_total_matches_sum_under_a_filter`; `ambre_trame::logic::tests::group4::selection_stats_sums_as_a_formula_over_the_same_cells_does` -- a small term between two large ones, terms that cancel near the largest number, and an overflow | none | verified |
@@ -218,9 +218,11 @@ The list arrives through a read-only round trip -- `RequestActiveColumnValues`, 
 
 **The buttons** (`TRAME-FEAT-027`), on the first row of the data block around the active cell:
 
+* drawn only while the sheet holds a filter on a column of that block;
 * one button per column of that block, at the right edge of its first-row cell;
 * a chevron while the column is unfiltered, a funnel while a filter is active on it;
-* always drawn, so a user reaches the popover before any filter exists;
+* before any filter exists, the context menu and the Filter row of the context panel reach the
+  popover;
 * a funnel badge on the column letter is a second cue.
 
 **The collapsed axis** (`TRAME-UI-008`):
@@ -249,6 +251,7 @@ the filtered column for the glyph, and the chrome relay turns each into a notice
 | A filter is an ordinary change to the sheet | making a filter non-undoable, as Google Sheets does | the user then carries an exception in mind: one gesture on the sheet that the undo key does not answer |
 | A filter is an ordinary change to the sheet | a separate history for view changes | two stacks have to be ordered against each other on every undo, and the ordinary path already undoes, redoes and converges |
 | An edit recomputes the hidden set, a structural change does not | recomputing after every change | it costs one pass over the column for nothing: only an edit can change the outcome of the test, and a move changes positions alone |
+| The buttons show only while the sheet holds a filter | drawing them on the first row of every data block | a row of headers then reads as a filter nobody set, and each button covers the end of a header text |
 | The buttons sit on the data's first row | the funnel badge on the column letter alone | it sits far from the values it describes; the affordance belongs where the data is, as it does in Excel |
 | A personal view writes nothing to the document | a per-user container in the document | every peer would then merge and undo it. A personal view is one user's reading of shared data, so it must reach no collaborator and enter no history, and local storage is the only store that gives both |
 | A personal view re-tests the rows on each activation | trusting the persisted set | it shows a stale view of live data: the document changed since the view was saved, so a stored hidden set names rows that may now pass. The predicate is cheap and the set is not a fact |

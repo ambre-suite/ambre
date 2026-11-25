@@ -20,7 +20,7 @@
 
 use ambre_commands::{Command, Locale, Property, Reach, Reading};
 use ambre_core::FontFamily;
-use ambre_core::{Commands, Mm, PrintLength, Px, StaticKey, StoredBoard};
+use ambre_core::{Board, Commands, Mm, PrintLength, Px, Radians, StaticKey, StoredBoard};
 use leptos::prelude::*;
 
 use crate::color::PickedColour;
@@ -107,6 +107,7 @@ pub fn CommandButton(
                     class="ambre-kit-command"
                     data-reach=reach.marker()
                     aria-label=aria
+                    aria-keyshortcuts=command.chord().map(|c| c.to_string())
                     title=tip
                     aria-pressed=move || pressed.map(|p| p.get().aria())
                     on:mousedown=move |ev| ev.prevent_default()
@@ -114,6 +115,8 @@ pub fn CommandButton(
                 >
                     {icon.map(|icon| view! { <leptos_icons::Icon icon=icon /> })}
                     <span>{label}</span>
+                    // A labelled row names its chord at its end (`CHROME-250`).
+                    {command.chord().map(|c| view! { <crate::Kbd binding=c /> })}
                 </button>
             }
             .into_any()
@@ -162,12 +165,23 @@ pub fn ColourField<C: PickedColour>(
     #[prop(into)] default: Signal<C>,
     reset_label: &'static str,
     on_write: Callback<Option<C>>,
+    /// Lay out the common colours inline, before the picker.
+    #[prop(optional)]
+    layout: ColourLayout,
 ) -> impl IntoView {
     // The picker edits a signal of its own; a reading seeds it.
     let current = RwSignal::new(value.get_untracked().uniform().flatten());
     Effect::new(move |_| current.set(value.get().uniform().flatten()));
+    let inline = (layout == ColourLayout::Swatches).then(|| {
+        swatch_row(
+            reset_label,
+            Signal::derive(move || current.get().map(C::as_rgba)),
+            Callback::new(move |c: Option<ambre_core::Rgba>| on_write.run(c.map(C::from_rgba))),
+        )
+    });
     view! {
         <span class="ambre-kit-colour" data-reach=Reach::Property(property.id).marker()>
+            {inline}
             <crate::ColorPopover
                 title=property_label(property)
                 icon=icon
@@ -180,6 +194,52 @@ pub fn ColourField<C: PickedColour>(
         </span>
     }
     .into_any()
+}
+
+/// How a [`ColourField`] lays out its choices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColourLayout {
+    /// The picker alone, behind its icon button.
+    #[default]
+    Popover,
+    /// The common colours as inline swatches, then the picker as the
+    /// custom-colour button (`CHROME-252`).
+    Swatches,
+}
+
+/// The inline swatches of a colour field: no colour first, then each colour
+/// of [`INLINE`](crate::color::INLINE). One copy of the view serves every
+/// packing, which the caller converts.
+fn swatch_row(
+    none_label: &'static str,
+    current: Signal<Option<ambre_core::Rgba>>,
+    on_pick: Callback<Option<ambre_core::Rgba>>,
+) -> AnyView {
+    let choices = std::iter::once((none_label, None, None)).chain(
+        crate::color::INLINE
+            .iter()
+            .map(|&(name, css, c)| (name, Some(css), Some(c))),
+    );
+    choices
+        .map(|(name, css, rgb)| {
+            let pressed =
+                move || Pressed::from_bool(current.get().map(ambre_core::Rgba::rgb) == rgb).aria();
+            let picked = rgb.map(|c| c.to_rgba(ambre_core::Alpha::OPAQUE));
+            view! {
+                <button
+                    class="ambre-swatch"
+                    data-empty=if css.is_none() { "true" } else { "false" }
+                    aria-label=name
+                    title=name
+                    aria-pressed=pressed
+                    style:background-color=css
+                    on:mousedown=|ev| ev.prevent_default()
+                    on:click=move |_| on_pick.run(picked)
+                ></button>
+            }
+        })
+        .collect_view()
+        .into_any()
 }
 
 /// The font family of a property: the picker that shows each family in
@@ -213,105 +273,190 @@ pub enum Step {
     Up,
 }
 
-/// A length a [`LengthField`] edits: its unit, its step and its text.
-pub trait FieldLength: Copy + PartialEq + Send + Sync + 'static {
+/// The unit of a [`LengthField`], as data. It names the suffix, the step of
+/// one stepper, the floor and the scale the field shows at. One copy
+/// of the field serves every unit, so each length type adds no code but its
+/// adapter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LengthUnit {
     /// The unit the field shows after the number.
-    const UNIT: &'static str;
+    pub suffix: &'static str,
+    /// How far one stepper moves, in the shown scale.
+    pub step: f64,
+    /// The least value the field accepts, or `None` for a value of either
+    /// sign: a place on the board or an angle.
+    pub floor: Option<f64>,
+    /// The shown number per stored unit: 1 for a length, degrees per radian
+    /// for an angle.
+    pub scale: f64,
+}
 
-    /// The length one stepper moves, from `self`, never below zero.
+impl LengthUnit {
+    /// The text the field shows for `value`, to one decimal and with no
+    /// decimal when whole: "20", never "20.0", and "12.7".
     #[must_use]
-    fn stepped(self, step: Step) -> Self;
+    pub fn text(&self, value: f64) -> String {
+        // The field shows a tenth, so `f32` holds it; Main already formats
+        // `f32`, and a second float formatter would cost its code.
+        let text = format!("{:.1}", (value * self.scale) as f32);
+        match text.strip_suffix(".0") {
+            Some("-0") => "0".to_owned(),
+            Some(whole) => whole.to_owned(),
+            None => text,
+        }
+    }
 
-    /// The number the field shows.
-    fn field_text(self) -> String;
+    /// The value a typed text names, or `None` for a text that is no number
+    /// or falls below the floor.
+    #[must_use]
+    pub fn parse(&self, text: &str) -> Option<f64> {
+        let shown = f64::from(text.trim().replace(',', ".").parse::<f32>().ok()?);
+        let fits = shown.is_finite() && self.floor.is_none_or(|f| shown >= f);
+        fits.then_some(shown / self.scale)
+    }
 
-    /// The length a typed number names, or `None` for a text that is no
-    /// length: a negative number, or no number.
-    fn from_field(text: &str) -> Option<Self>;
-}
-
-/// The text of `value` to one decimal, with no decimal when it is whole:
-/// "20", never "20.0", and "12.7".
-fn tenths(value: f32) -> String {
-    let text = format!("{value:.1}");
-    match text.strip_suffix(".0") {
-        Some(whole) => whole.to_owned(),
-        None => text,
+    /// The value one stepper moves `value` to, held at the floor.
+    #[must_use]
+    pub fn stepped(&self, value: f64, step: Step) -> f64 {
+        let by = match step {
+            Step::Down => -self.step,
+            Step::Up => self.step,
+        };
+        let shown = value * self.scale + by;
+        self.floor.map_or(shown, |f| shown.max(f)) / self.scale
     }
 }
 
-/// The number a field reads, when it is a finite length of zero or more.
-fn field_number(text: &str) -> Option<f32> {
-    text.trim()
-        .replace(',', ".")
-        .parse::<f32>()
-        .ok()
-        .filter(|v| v.is_finite() && *v >= 0.0)
+/// A length a [`LengthField`] edits: its unit, and the one conversion to and
+/// from the number the field computes in.
+pub trait FieldLength: Copy + PartialEq + Send + Sync + 'static {
+    /// The unit of the field.
+    const UNIT: &'static LengthUnit;
+
+    /// The number the field computes in.
+    fn to_field(self) -> f64;
+
+    /// The length a number of the field names.
+    fn of_field(value: f64) -> Self;
 }
 
+/// A margin of a printed page.
 impl FieldLength for PrintLength<Mm> {
-    const UNIT: &'static str = "mm";
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "mm",
+        step: 1.0,
+        floor: Some(0.0),
+        scale: 1.0,
+    };
 
-    fn stepped(self, step: Step) -> Self {
-        let by = match step {
-            Step::Down => -1.0,
-            Step::Up => 1.0,
-        };
-        Self::new((self.get() + by).max(0.0))
+    fn to_field(self) -> f64 {
+        f64::from(self.get())
     }
 
-    fn field_text(self) -> String {
-        tenths(self.get())
-    }
-
-    fn from_field(text: &str) -> Option<Self> {
-        field_number(text).map(Self::new)
+    fn of_field(value: f64) -> Self {
+        // A margin is stored in `f32`; the field computes in `f64`.
+        Self::new(value as f32)
     }
 }
 
+/// A stroke width on the board.
 impl FieldLength for Px<StoredBoard> {
-    const UNIT: &'static str = "px";
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "px",
+        step: 0.5,
+        floor: Some(0.0),
+        scale: 1.0,
+    };
 
-    fn stepped(self, step: Step) -> Self {
-        let by = match step {
-            Step::Down => -0.5,
-            Step::Up => 0.5,
-        };
-        Self::new((self.get() + by).max(0.0))
+    fn to_field(self) -> f64 {
+        f64::from(self.get())
     }
 
-    fn field_text(self) -> String {
-        tenths(self.get())
+    fn of_field(value: f64) -> Self {
+        // A stroke width is stored in `f32`; the field computes in `f64`.
+        Self::new(value as f32)
+    }
+}
+
+/// A place or a size on the board (`CHROME-247`). A place can be negative:
+/// the board has no edge. A size below zero flips its box, which the caller
+/// refuses.
+impl FieldLength for Px<Board> {
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "px",
+        step: 1.0,
+        floor: None,
+        scale: 1.0,
+    };
+
+    fn to_field(self) -> f64 {
+        self.get()
     }
 
-    fn from_field(text: &str) -> Option<Self> {
-        field_number(text).map(Self::new)
+    fn of_field(value: f64) -> Self {
+        Self::new(value)
+    }
+}
+
+/// A rotation, which the field shows and reads in degrees (`CHROME-247`).
+impl FieldLength for Radians {
+    const UNIT: &'static LengthUnit = &LengthUnit {
+        suffix: "deg",
+        step: 1.0,
+        floor: None,
+        scale: 180.0 / std::f64::consts::PI,
+    };
+
+    fn to_field(self) -> f64 {
+        self.get()
+    }
+
+    fn of_field(value: f64) -> Self {
+        Self::new(value)
     }
 }
 
 /// A length of a property: a number, its unit, and two steppers, drawn by
-/// the one [`Stepper`](crate::Stepper).
+/// the one [`Stepper`](crate::Stepper). The body is a thin adapter to the
+/// one copy of the field (`length_core`), so a length type costs its two
+/// conversions alone.
 #[component]
 pub fn LengthField<L: FieldLength>(
     property: &'static Property,
     #[prop(into)] value: Signal<Reading<L>>,
     on_write: Callback<L>,
 ) -> impl IntoView {
+    length_core(
+        property,
+        L::UNIT,
+        Signal::derive(move || value.get().uniform().map(L::to_field)),
+        Callback::new(move |v: f64| on_write.run(L::of_field(v))),
+    )
+}
+
+/// The one copy of a length field, over the number it computes in. `value`
+/// is `None` while the selection disagrees.
+fn length_core(
+    property: &'static Property,
+    unit: &'static LengthUnit,
+    value: Signal<Option<f64>>,
+    on_write: Callback<f64>,
+) -> AnyView {
     let step = Callback::new(move |s: Step| {
-        if let Some(v) = value.get_untracked().uniform() {
-            on_write.run(v.stepped(s));
+        if let Some(v) = value.get_untracked() {
+            on_write.run(unit.stepped(v, s));
         }
     });
     let typed = Callback::new(move |text: String| {
-        if let Some(v) = L::from_field(&text) {
+        if let Some(v) = unit.parse(&text) {
             on_write.run(v);
         }
     });
     view! {
         <crate::Stepper
             label=property_label(property)
-            text=Signal::derive(move || value.get().uniform().map(L::field_text))
-            unit=L::UNIT
+            text=Signal::derive(move || value.get().map(|v| unit.text(v)))
+            unit=unit.suffix
             on_step=step
             on_text=typed
             reach=Reach::Property(property.id)
@@ -493,9 +638,35 @@ mod tests {
 
     #[test]
     fn a_length_shows_a_decimal_only_when_it_has_one() {
-        assert_eq!(PrintLength::<Mm>::new(20.0).field_text(), "20");
-        assert_eq!(PrintLength::<Mm>::new(12.7).field_text(), "12.7");
-        assert_eq!(PrintLength::<Mm>::new(0.04).field_text(), "0");
-        assert_eq!(Px::<StoredBoard>::new(1.5).field_text(), "1.5");
+        let mm = PrintLength::<Mm>::UNIT;
+        assert_eq!(mm.text(20.0), "20");
+        assert_eq!(mm.text(PrintLength::<Mm>::new(12.7).to_field()), "12.7");
+        assert_eq!(mm.text(0.04), "0");
+        assert_eq!(Px::<StoredBoard>::UNIT.text(1.5), "1.5");
+    }
+
+    /// `CHROME-247`: a place on the board reads either sign, a stroke width
+    /// stays positive, and a rotation reads and shows degrees.
+    #[test]
+    fn a_place_reads_either_sign_and_a_rotation_reads_degrees() {
+        let board = Px::<Board>::UNIT;
+        assert_eq!(board.parse("-12.5"), Some(-12.5));
+        assert_eq!(board.text(-3.0), "-3");
+        assert_eq!(Px::<StoredBoard>::UNIT.parse("-1"), None);
+        assert_eq!(
+            Px::<StoredBoard>::UNIT.stepped(0.2, Step::Down),
+            0.0,
+            "held at the floor"
+        );
+        let deg = Radians::UNIT;
+        let quarter = deg.parse("90").expect("a number");
+        assert!((quarter - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        assert_eq!(deg.text(quarter), "90");
+        assert_eq!(
+            deg.parse("-45").map(|v| deg.text(v)),
+            Some("-45".to_owned())
+        );
+        assert_eq!(deg.text(deg.stepped(quarter, Step::Up)), "91");
+        assert_eq!(deg.parse("a"), None);
     }
 }

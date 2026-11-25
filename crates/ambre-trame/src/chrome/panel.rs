@@ -47,6 +47,15 @@ pub struct TramePanelSignals {
     pub selection: RwSignal<PanelSelection>,
     /// The page setup and the frozen pane of the active sheet.
     pub sheet: RwSignal<Option<ActiveSheet>>,
+    /// The sheets of the workbook, for the name of the active one.
+    pub sheets: RwSignal<Vec<crate::message::SheetTab>>,
+    /// The active sheet.
+    pub active_sheet: RwSignal<ambre_core::Id<ambre_core::id::Sheet>>,
+    /// The rename sink, the one the sheet tabs use.
+    pub on_rename: Callback<(
+        ambre_core::Id<ambre_core::id::Sheet>,
+        crate::message::SheetName,
+    )>,
 }
 
 /// The command the merge toggle sends: a merged cell splits, any other cell
@@ -102,6 +111,60 @@ fn run_place(
     })
 }
 
+/// The number format list of the cells, which the panel and the range bar
+/// share: one copy of the view serves both (`CHROME-246`).
+pub(super) fn number_format(style: StyleState, on_style: Callback<StylePatch>) -> AnyView {
+    let selected = Signal::derive(move || {
+        let format = style.format.get();
+        NUMBER_FORMATS
+            .iter()
+            .position(|(f, _)| *f == format)
+            .map(Pos::<ChoiceRow>::from_usize)
+    });
+    let pick = Callback::new(move |p: Pos<ChoiceRow>| {
+        if let Some((f, _)) = p.to_index().and_then(|i| NUMBER_FORMATS.get(i)) {
+            on_style.run(StylePatch {
+                format: Some(f.clone()),
+                ..Default::default()
+            });
+        }
+    });
+    view! {
+        <Select
+            label=label(panel::NUMBER_FORMAT)
+            choices=NUMBER_FORMATS.iter().map(|(_, l)| ChoiceView::text(*l)).collect()
+            selected=selected
+            on_pick=pick
+            placeholder="Custom"
+            reach=Reach::Property(panel::NUMBER_FORMAT)
+        />
+    }
+    .into_any()
+}
+
+/// The fill of the cells, which the panel and the range bar share.
+pub(super) fn fill(
+    style: StyleState,
+    theme: RwSignal<ambre_canvas::Theme>,
+    on_style: Callback<StylePatch>,
+) -> AnyView {
+    view! {
+        <span class="ambre-kit-control" data-reach=reach(panel::FILL)>
+            <ColorPopover
+                title=label(panel::FILL)
+                icon=icondata::BiColorFillSolid
+                current=style.bg
+                default=Signal::derive(move || theme_bg_default(theme.get()))
+                reset_label="No fill (transparent)"
+                on_pick=Callback::new(move |bg: Option<Rgb>| {
+                    on_style.run(StylePatch { bg: Some(bg), ..Default::default() })
+                })
+            />
+        </span>
+    }
+    .into_any()
+}
+
 /// The title and the sections of the sheet's context panel.
 pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
     let TramePanelSignals {
@@ -111,18 +174,10 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         on_style,
         selection,
         sheet,
+        sheets,
+        active_sheet,
+        on_rename,
     } = signals;
-    let icon_command = move |id: StaticKey<Commands>, icon_of: StaticKey<Commands>| {
-        ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
-            let icon = registry::icon(icon_of).and_then(super::icons::resolve);
-            view! { <CommandButton command=c icon=icon on_command=on_command /> }
-        })
-    };
-    let icons = move |ids: &[StaticKey<Commands>]| {
-        ids.iter()
-            .filter_map(|&id| icon_command(id, id))
-            .collect_view()
-    };
     // The place in `ids` of the choice the active sheet reads.
     let place = move |ids: &'static [StaticKey<Commands>],
                       f: fn(ActiveSheet) -> Option<StaticKey<Commands>>| {
@@ -135,7 +190,41 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
     };
 
     let sheet_section = move || {
+        // The name of the active sheet. A name the rule refuses keeps its
+        // reason on the field and renames nothing (`TRAME-234`).
+        let name = move || {
+            let id = active_sheet.get();
+            sheets.with(|all| {
+                all.iter()
+                    .find(|s| s.id == id)
+                    .map(|s| s.name.as_str().to_owned())
+                    .unwrap_or_default()
+            })
+        };
         view! {
+            <Field label="Name">
+                <input
+                    class="ambre-kit-text"
+                    type="text"
+                    aria-label=label(panel::SHEET_NAME)
+                    data-reach=reach(panel::SHEET_NAME)
+                    prop:value=name
+                    on:change=move |ev| {
+                        let input = event_target::<web_sys::HtmlInputElement>(&ev);
+                        match crate::message::SheetName::new(&input.value()) {
+                            Ok(next) => {
+                                let _ = input.remove_attribute("aria-invalid");
+                                input.set_title("");
+                                on_rename.run((active_sheet.get_untracked(), next));
+                            }
+                            Err(refusal) => {
+                                input.set_title(&refusal.to_string());
+                                let _ = input.set_attribute("aria-invalid", "true");
+                            }
+                        }
+                    }
+                />
+            </Field>
             <Field label="Freeze">
                 <Select
                     label=label(panel::FREEZE)
@@ -204,21 +293,6 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 Availability::Disabled
             }
         });
-        let format_place = Signal::derive(move || {
-            let format = style.format.get();
-            NUMBER_FORMATS
-                .iter()
-                .position(|(f, _)| *f == format)
-                .map(Pos::<ChoiceRow>::from_usize)
-        });
-        let pick_format = Callback::new(move |p: Pos<ChoiceRow>| {
-            if let Some((f, _)) = p.to_index().and_then(|i| NUMBER_FORMATS.get(i)) {
-                on_style.run(StylePatch {
-                    format: Some(f.clone()),
-                    ..Default::default()
-                });
-            }
-        });
         let h_place = Signal::derive(move || {
             let at = style.h_align.get();
             H_ALIGNS
@@ -234,16 +308,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 .map(Pos::<ChoiceRow>::from_usize)
         });
         view! {
-            <Field label="Number">
-                <Select
-                    label=label(panel::NUMBER_FORMAT)
-                    choices=NUMBER_FORMATS.iter().map(|(_, l)| ChoiceView::text(*l)).collect()
-                    selected=format_place
-                    on_pick=pick_format
-                    placeholder="Custom"
-                    reach=Reach::Property(panel::NUMBER_FORMAT)
-                />
-            </Field>
+            <Field label="Number">{number_format(style, on_style)}</Field>
             <Field label="Decimals">
                 <span class="ambre-kit-control" data-reach=reach(panel::DECIMALS)>
                     <IconButton
@@ -315,18 +380,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                         })
                     />
                 </span>
-                <span class="ambre-kit-control" data-reach=reach(panel::FILL)>
-                    <ColorPopover
-                        title=label(panel::FILL)
-                        icon=icondata::BiColorFillSolid
-                        current=style.bg
-                        default=Signal::derive(move || theme_bg_default(theme.get()))
-                        reset_label="No fill (transparent)"
-                        on_pick=Callback::new(move |bg: Option<Rgb>| {
-                            on_style.run(StylePatch { bg: Some(bg), ..Default::default() })
-                        })
-                    />
-                </span>
+                {fill(style, theme, on_style)}
             </Field>
             <Field label="Horizontal">
                 <SegmentBar
@@ -385,59 +439,82 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
         .into_any()
     };
 
+    // A labelled row per command (`CHROME-249`): the name reads at a glance,
+    // where a row of bare icons asks the user to hover each one.
+    let labelled = move |id: StaticKey<Commands>, icon_of: StaticKey<Commands>| {
+        ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
+            let icon = registry::icon(icon_of).and_then(super::icons::resolve);
+            view! { <CommandButton command=c icon=icon on_command=on_command labelled=Labelled::Text /> }
+        })
+    };
+    let rows = move |ids: &[StaticKey<Commands>]| {
+        ids.iter().filter_map(|&id| labelled(id, id)).collect_view()
+    };
     let rows_cols = move || {
         view! {
-            <Field label="Rows">
-                {icons(&[registry::INSERT_ROW_ABOVE, registry::INSERT_ROW_BELOW, registry::DELETE_ROWS])}
-            </Field>
-            <Field label="Columns">
-                {icons(&[registry::INSERT_COL_LEFT, registry::INSERT_COL_RIGHT, registry::DELETE_COLS])}
-            </Field>
+            <Row>
+                {rows(&[
+                    registry::INSERT_ROW_ABOVE,
+                    registry::INSERT_ROW_BELOW,
+                    registry::INSERT_COL_LEFT,
+                    registry::INSERT_COL_RIGHT,
+                    registry::DELETE_ROWS,
+                    registry::DELETE_COLS,
+                ])}
+            </Row>
         }
         .into_any()
     };
     let sort_filter = move || {
         view! {
-            <Field label="Sort range">
-                {icons(&[registry::SORT_RANGE_ASC, registry::SORT_RANGE_DESC, registry::SORT_RANGE_MULTI])}
-            </Field>
-            <Field label="Sort sheet">
+            <Row>
+                {rows(&[registry::SORT_RANGE_ASC, registry::SORT_RANGE_DESC, registry::SORT_RANGE_MULTI])}
                 // The two sheet sorts declare one icon; the direction reads
                 // from the range sorts' arrows.
-                {icon_command(registry::SORT_SHEET_ASC, registry::SORT_RANGE_ASC)}
-                {icon_command(registry::SORT_SHEET_DESC, registry::SORT_RANGE_DESC)}
-            </Field>
-            <Field label="Filter">
-                {icons(&[registry::FILTER_COLUMN, registry::CLEAR_FILTER])}
-            </Field>
+                {labelled(registry::SORT_SHEET_ASC, registry::SORT_RANGE_ASC)}
+                {labelled(registry::SORT_SHEET_DESC, registry::SORT_RANGE_DESC)}
+                {rows(&[registry::FILTER_COLUMN, registry::CLEAR_FILTER])}
+            </Row>
         }
         .into_any()
     };
 
+    // The shape of the selection picks the sections, never its content
+    // (`CHROME-253`).
+    let shape = Memo::new(move |_| selection.with(|s| panel::SelectionShape::of(&s.reference)));
     let sections = Signal::derive(move || {
-        vec![
-            PanelSection::new(
-                panel::SHEET,
-                "Sheet",
-                icondata::MdiTableLarge,
-                sheet_section,
-            ),
-            PanelSection::new(panel::CELLS, "Cells", icondata::MdiFormatPaint, cells),
-            PanelSection::new(
-                panel::ROWS_COLS,
-                "Rows and columns",
-                icondata::MdiTableRowPlusAfter,
-                rows_cols,
-            ),
-            PanelSection::new(
-                panel::SORT_FILTER,
-                "Sort and filter",
-                icondata::MdiFilterOutline,
-                sort_filter,
-            ),
-            PanelSection::new(panel::PRINT, "Print", icondata::LuPrinter, print_section)
-                .folded_first(),
-        ]
+        shape
+            .get()
+            .sections()
+            .iter()
+            .filter_map(|&key| {
+                Some(match key {
+                    k if k == panel::SHEET => {
+                        PanelSection::new(k, "Sheet", icondata::MdiTableLarge, sheet_section)
+                    }
+                    k if k == panel::CELLS => {
+                        PanelSection::new(k, "Cells", icondata::MdiFormatPaint, cells)
+                    }
+                    k if k == panel::ROWS_COLS => PanelSection::new(
+                        k,
+                        "Rows and columns",
+                        icondata::MdiTableRowPlusAfter,
+                        rows_cols,
+                    ),
+                    k if k == panel::SORT_FILTER => PanelSection::new(
+                        k,
+                        "Sort and filter",
+                        icondata::MdiFilterOutline,
+                        sort_filter,
+                    ),
+                    k if k == panel::PRINT => {
+                        PanelSection::new(k, "Print", icondata::LuPrinter, print_section)
+                            .folded_first()
+                    }
+                    _ => return None,
+                })
+            })
+            .collect::<Vec<_>>()
     });
     PanelContent {
         title: Signal::derive(move || selection.with(|s| s.reference.as_str().to_owned())),

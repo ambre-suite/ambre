@@ -23,6 +23,7 @@
 //   - `style`       : `Toggles` / `StyleState` and the style-event mirror;
 //   - `panel`       : the sheet's sections of the context panel;
 //   - `popovers`    : the borders / colour / filter popovers;
+//   - `range_bar`   : the format bar over a range;
 //   - `formula_bar` : the editable formula bar;
 //   - `color`       : shared hex/theme colour helpers (module-private).
 // ============================================================================
@@ -35,6 +36,7 @@ mod handler;
 mod icons;
 mod panel;
 mod popovers;
+mod range_bar;
 mod relay;
 mod sheet_tabs;
 mod sort_dialog;
@@ -55,6 +57,7 @@ pub use formula_bar::FormulaBar;
 pub use handler::TrameHandler;
 pub use panel::{TramePanelSignals, trame_panel};
 pub use popovers::{FilterPopover, FilterPopoverState, SheetFilter};
+pub use range_bar::RangeBar;
 pub use relay::{TrameIntent, TrameRelay};
 pub use sheet_tabs::{ReorderSheet, SheetTabs};
 pub use sort_dialog::{SortApply, SortDialog, SortDialogState};

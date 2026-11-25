@@ -273,6 +273,8 @@ struct Wiring {
     /// The reference of the selection the context panel names (for example
     /// "B2:D5").
     selection_ref: RwSignal<ambre_trame::ui::panel::PanelSelection>,
+    /// Where the Trame range bar sits, in view pixels; `None` hides it.
+    range_bar: RwSignal<Option<ambre_trame::ui::panel::RangeBarAnchor>>,
     /// The page setup and the frozen pane of the active Trame sheet, which
     /// the context panel shows.
     sheet_setup: RwSignal<Option<ambre_trame::ui::panel::ActiveSheet>>,
@@ -348,6 +350,8 @@ struct Wiring {
     /// Whole-style edit the inspector emits back (`toile-styles`): the
     /// canvas view drains it into one `RestyleElements` over the live selection.
     toile_restyle: RwSignal<Option<ambre_toile::message::ElementStyle>>,
+    /// A write of the Toile position section.
+    toile_place: RwSignal<Option<ambre_toile::ui::panel::PlaceEdit>>,
     /// Floating selection toolbar placement + flags (`toile-styles`),
     /// republished every frame by the canvas view so the bar tracks pan/zoom;
     /// `None` hides it.
@@ -642,6 +646,7 @@ pub fn main() {
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
     let selection_ref = RwSignal::new(ambre_trame::ui::panel::PanelSelection::default());
+    let range_bar = RwSignal::new(None);
     let sheet_setup = RwSignal::new(None);
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
@@ -724,6 +729,7 @@ pub fn main() {
     // `toile_restyle`, exactly like the context-menu pair above.
     let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let toile_restyle = RwSignal::new(None::<ambre_toile::message::ElementStyle>);
+    let toile_place = RwSignal::new(None::<ambre_toile::ui::panel::PlaceEdit>);
     // Floating selection toolbar (`toile-styles`): the view republishes its placement
     // into `toile_float_bar` each frame. It drains single-field style edits from
     // `toile_quick_style`, mirroring the inspector's model / restyle pair.
@@ -763,6 +769,7 @@ pub fn main() {
     let trame_signals = ambre_trame::ui::TrameSignals {
         formula_ref,
         selection_ref,
+        range_bar,
         sheet_setup,
         formula_text,
         formula_action,
@@ -783,6 +790,7 @@ pub fn main() {
         sel_stats: sel_stats_toile,
         style_model: toile_style_model,
         restyle: toile_restyle,
+        place: toile_place,
         float_bar: toile_float_bar,
         quick_style: toile_quick_style,
         comments: toile_comments,
@@ -1542,6 +1550,7 @@ pub fn main() {
                         sel_stats: ch_toile_sel_stats,
                         style_model: ch_toile_style_model,
                         restyle: ch_toile_restyle,
+                        place: RwSignal::new(None),
                         float_bar: ch_toile_float_bar,
                         quick_style: ch_toile_quick_style,
                         comments: ch_toile_comments,
@@ -1582,6 +1591,7 @@ pub fn main() {
                         selection_ref: RwSignal::new(
                             ambre_trame::ui::panel::PanelSelection::default(),
                         ),
+                        range_bar: RwSignal::new(None),
                         sheet_setup: RwSignal::new(None),
                         formula_text: ch_formula_text,
                         formula_action: ch_formula_action,

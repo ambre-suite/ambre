@@ -26,18 +26,22 @@ use std::time::Duration;
 use crate::message::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::Reading;
 use ambre_chrome::{
-    ColourField, CommandButton, Debouncer, Field, FontField, FontSizeSelect, Labelled, LengthField,
-    PanelContent, PanelSection, Pressed, PropertyToggle, Row, Slider,
+    ColourField, ColourLayout, CommandButton, Debouncer, Field, FontField, FontSizeSelect,
+    IconButton, Labelled, LengthField, PanelContent, PanelSection, Pressed, PropertyToggle, Row,
+    Slider,
 };
 use ambre_core::Flag as _;
-use ambre_core::{Bounded, Commands, FontSize, Px, Rgba, StaticKey, StoredBoard, UnitFraction};
+use ambre_core::{
+    Board, Bounded, Commands, FontSize, Px, Radians, Rgba, StaticKey, StoredBoard, UnitFraction,
+};
 use leptos::prelude::*;
 
 use crate::ui::commands as registry;
+use crate::ui::deck::{DeckIntent, DeckSignals};
 use crate::ui::floatbar::StyleEdit;
 use crate::ui::menu;
 use crate::ui::menu::CtxScope;
-use crate::ui::panel::{self, PanelKind};
+use crate::ui::panel::{self, PanelKind, PlaceEdit, PlaceField};
 use crate::ui::style::{Mix, StyleModel};
 
 /// How long the panel waits after the last edit before emitting the coalesced
@@ -61,6 +65,12 @@ pub struct ToilePanelSignals {
     pub on_command: Callback<StaticKey<Commands>>,
     /// The whole-style edit the view turns into `RestyleElements`.
     pub restyle: RwSignal<Option<ElementStyle>>,
+    /// The write of the position section the view turns into its one
+    /// command (`CHROME-248`).
+    pub place: RwSignal<Option<PlaceEdit>>,
+    /// The board's frames, which the frames section lists, and the intent
+    /// that selects one (`CHROME-251`).
+    pub deck: DeckSignals,
     /// The count of the selection, which the subtitle reads.
     pub stats: RwSignal<Option<crate::ui::status::SelStats>>,
 }
@@ -90,6 +100,8 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         scope,
         on_command,
         restyle,
+        place,
+        deck,
         stats,
     } = signals;
     let kind = Memo::new(move |_| model.with(|m| PanelKind::of(m.as_ref())));
@@ -130,6 +142,119 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
         })
     };
 
+    // A command the registry gives no glyph, drawn compact with the glyph
+    // the panel names (`CHROME-250`).
+    let icon_command = move |id: StaticKey<Commands>, icon: icondata::Icon| {
+        ambre_chrome::commands::find(registry::COMMANDS, id).map(|c| {
+            view! {
+                <IconButton
+                    icon=icon
+                    label=(c.title)(&ambre_chrome::commands::Locale::En).into_string()
+                    chord=c.chord()
+                    reach=Some(ambre_chrome::commands::Reach::Command(id))
+                    on_press=Callback::new(move |()| on_command.run(id))
+                />
+            }
+        })
+    };
+
+    // The place, the size and the rotation of a lone shape. Each write is
+    // one command, so one undo step (`CHROME-247`, `CHROME-248`).
+    let position = move || {
+        let placed = move || model.get().and_then(|m| m.placement);
+        let field = move |get: fn(&panel::Placement) -> Px<Board>| {
+            Signal::derive(move || placed().map_or(Reading::Mixed, |p| Reading::Uniform(get(&p))))
+        };
+        let write = move |make: fn(Px<Board>) -> PlaceField| {
+            Callback::new(move |v: Px<Board>| {
+                if let Some(placement) = placed() {
+                    place.set(Some(PlaceEdit {
+                        placement,
+                        field: make(v),
+                    }));
+                }
+            })
+        };
+        let rotation = Signal::derive(move || {
+            placed().map_or(Reading::Mixed, |p| Reading::Uniform(p.rotation))
+        });
+        // One row builder serves the four places and sizes, so the section
+        // adds one view type, not four (`CHROME-247`).
+        let row = move |name: &'static str,
+                        id,
+                        get: fn(&panel::Placement) -> Px<Board>,
+                        make: fn(Px<Board>) -> PlaceField| {
+            view! {
+                <Field label=name>
+                    <LengthField property=prop(id) value=field(get) on_write=write(make) />
+                </Field>
+            }
+            .into_any()
+        };
+        let rows: Vec<AnyView> = vec![
+            row("X", panel::X, |p| Px::<Board>::new(p.frame.x0), PlaceField::X),
+            row("Y", panel::Y, |p| Px::<Board>::new(p.frame.y0), PlaceField::Y),
+            row("W", panel::WIDTH, |p| Px::<Board>::new(p.frame.width()), PlaceField::Width),
+            row("H", panel::HEIGHT, |p| Px::<Board>::new(p.frame.height()), PlaceField::Height),
+            view! {
+                <Field label="Rotation">
+                    <LengthField
+                        property=prop(panel::ROTATION)
+                        value=rotation
+                        on_write=Callback::new(move |r: Radians| {
+                            if let Some(placement) = placed() {
+                                place.set(Some(PlaceEdit { placement, field: PlaceField::Rotation(r) }));
+                            }
+                        })
+                    />
+                </Field>
+            }
+            .into_any(),
+        ];
+        rows.into_any()
+    };
+
+    // The board's frames, each with the count of its items. A press selects
+    // the frame (`CHROME-251`).
+    let frames = move || {
+        let list = move || {
+            let view = deck.view.get();
+            let rows: Vec<_> = view.slides.into_iter().chain(view.off_deck).collect();
+            if rows.is_empty() {
+                return view! { <p class="ambre-kit-empty">"No frames"</p> }.into_any();
+            }
+            rows.into_iter()
+                .map(|f| {
+                    let id = f.id.clone();
+                    let name = if f.name.is_empty() {
+                        "Untitled frame".to_owned()
+                    } else {
+                        f.name
+                    };
+                    let count = f.items.get();
+                    let items = if count == 1 {
+                        "1 item".to_owned()
+                    } else {
+                        format!("{count} items")
+                    };
+                    view! {
+                        <button
+                            class="ambre-kit-command ambre-kit-frame"
+                            on:mousedown=|ev| ev.prevent_default()
+                            on:click=move |_| deck.intent.set(Some(DeckIntent::Select(id.clone())))
+                        >
+                            <leptos_icons::Icon icon=icondata::MdiImageFrame />
+                            <span>{name}</span>
+                            <span class="ambre-kit-count">{items}</span>
+                        </button>
+                    }
+                })
+                .collect_view()
+                .into_any()
+        };
+        view! { <div class="ambre-kit-row">{list}</div> }.into_any()
+    };
+
     // Find has no control here: the palette and its chord reach it.
     let board = move || {
         view! {
@@ -152,14 +277,15 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                     default=Signal::derive(|| Rgba::from_bits(0xffff_ffff))
                     reset_label="No fill"
                     on_write=Callback::new(move |c| commit(StyleEdit::Fill(c)))
+                    layout=ColourLayout::Swatches
                 />
             </Field>
             {stroke_fields(base, commit)}
             // The link of an element is a property of the element, never of
-            // its arrangement.
+            // its arrangement. One compact row (`CHROME-250`).
             <Field label="Link">
-                {command(crate::ui::menu_bar::LINK_SET)}
-                {command(crate::ui::menu_bar::LINK_CLEAR)}
+                {icon_command(crate::ui::menu_bar::LINK_SET, icondata::MdiLinkVariant)}
+                {icon_command(crate::ui::menu_bar::LINK_CLEAR, icondata::MdiLinkVariantOff)}
             </Field>
         }
         .into_any()
@@ -240,10 +366,12 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
     };
 
     let arrange = move || {
-        let any_locked = move || scope.with(|s| s.locks.any_locked());
-        let any_unlocked = move || scope.with(|s| s.locks.any_unlocked());
         let multi = move || scope.with(CtxScope::multi);
-        let grouped = move || scope.with(|s| s.groups == menu::GroupHeld::Group);
+        // A row that shows while the scope meets `when`. The predicate is a
+        // function pointer, so every such row shares one view type.
+        let shown = move |when: fn(&CtxScope) -> bool, id: StaticKey<Commands>| {
+            (move || scope.with(when).then(|| labelled(id))).into_any()
+        };
         let framing = move || {
             scope.with(|s| {
                 s.containing_frame.is_some()
@@ -252,20 +380,19 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             })
         };
         view! {
-            <Field label="Order">
-                {command(menu::BRING_FRONT)}
-                {command(menu::FORWARD)}
-                {command(menu::BACKWARD)}
-                {command(menu::SEND_BACK)}
-            </Field>
-            <Field label="Edit">
-                <Show when=multi>{command(menu::GROUP)}</Show>
-                <Show when=grouped>{command(menu::UNGROUP)}</Show>
-                <Show when=any_unlocked>{command(menu::LOCK)}</Show>
-                <Show when=any_locked>{command(menu::UNLOCK)}</Show>
-                {command(menu::DUPLICATE)}
-                {command(menu::DELETE)}
-            </Field>
+            // Labelled rows that name their chords (`CHROME-250`).
+            <Row>
+                {labelled(menu::DUPLICATE)}
+                {shown(CtxScope::multi, menu::GROUP)}
+                {shown(|s| s.groups == menu::GroupHeld::Group, menu::UNGROUP)}
+                {shown(|s| s.locks.any_unlocked(), menu::LOCK)}
+                {shown(|s| s.locks.any_locked(), menu::UNLOCK)}
+                {labelled(menu::BRING_FRONT)}
+                {labelled(menu::FORWARD)}
+                {labelled(menu::BACKWARD)}
+                {labelled(menu::SEND_BACK)}
+                {labelled(menu::DELETE)}
+            </Row>
             <Show when=multi>
                 <Field label="Align">
                     {command(menu::ALIGN_LEFT)}
@@ -320,6 +447,12 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                 Some(match key {
                     k if k == panel::BOARD => {
                         PanelSection::new(k, "Board", icondata::MdiViewDashboardOutline, board)
+                    }
+                    k if k == panel::FRAMES => {
+                        PanelSection::new(k, "Frames", icondata::MdiImageFrame, frames)
+                    }
+                    k if k == panel::POSITION => {
+                        PanelSection::new(k, "Position", icondata::MdiArrowAll, position)
                     }
                     k if k == panel::SHAPE => {
                         PanelSection::new(k, "Shape", icondata::MdiShapeOutline, shape)
@@ -378,6 +511,7 @@ fn stroke_fields(
                 default=Signal::derive(|| Rgba::from_bits(0x3333_33ff))
                 reset_label="No stroke"
                 on_write=Callback::new(move |c| commit(StyleEdit::Stroke(c)))
+                layout=ColourLayout::Swatches
             />
         </Field>
         <Field label="Width">
