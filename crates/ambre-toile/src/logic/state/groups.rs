@@ -17,9 +17,9 @@ use crate::logic::model::{ElementKind, NodeId};
 use crate::message::{Elements, FRAME_NAME_MAX};
 
 use super::ToileState;
-use super::codec::{em_seed_group, str_of};
+use super::codec::{bool_of, em_seed_group, str_of};
 use super::codec::{has_type, value_has_type};
-use super::names::{ElementKey, FieldValues, Fields, Root};
+use super::names::{BoardKey, ElementKey, FieldValues, Fields, Root, board};
 use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
@@ -495,6 +495,54 @@ impl ToileState {
         self.emit_with_update(Vec::new())
     }
 
+    /// Whether the board asks its gestures to land on the grid. A register
+    /// a peer wrote as anything but a `bool` reads as free (`TOILE-UI-025`).
+    pub(super) fn grid_snap(&self) -> crate::message::GridSnap {
+        match bool_of(&board(&self.doc), BoardKey::GridSnap) {
+            Some(true) => crate::message::GridSnap::Snapped,
+            _ => crate::message::GridSnap::Free,
+        }
+    }
+
+    /// What the board lies on (`TOILE-UI-430`). The scaffold wrote a dark
+    /// grey that no build drew. That grey reads as the ground of the theme,
+    /// and so do a clear colour and a register of another kind.
+    pub(super) fn board_ground(&self) -> crate::message::BoardGround {
+        match board(&self.doc).value(BoardKey::BgColor) {
+            Some(LoroValue::I64(bits)) => u32::try_from(bits)
+                .ok()
+                .filter(|&b| b != 0 && b != super::BOARD_BG.bits())
+                .map_or(crate::message::BoardGround::Theme, |b| {
+                    crate::message::BoardGround::Tint(ambre_core::Rgba::from_bits(b))
+                }),
+            _ => crate::message::BoardGround::Theme,
+        }
+    }
+
+    /// Write one setting of the board, one register of `board`. A setting
+    /// already held writes nothing, so it makes no undo item.
+    pub(super) fn edit_board(&mut self, edit: crate::message::BoardEdit) -> ToileOutcome {
+        use crate::message::{BoardEdit, BoardGround, GridSnap};
+        let board = board(&self.doc);
+        let _ = match edit {
+            BoardEdit::Snap(snap) if snap != self.grid_snap() => {
+                board.insert(BoardKey::GridSnap, snap == GridSnap::Snapped)
+            }
+            // The ground of the theme is stored as the scaffold wrote it, so
+            // a board back on it reads as a board never tinted.
+            BoardEdit::Ground(ground) if ground != self.board_ground() => {
+                let bits = match ground {
+                    BoardGround::Theme => super::BOARD_BG,
+                    BoardGround::Tint(c) => c,
+                };
+                board.insert(BoardKey::BgColor, i64::from(bits.bits()))
+            }
+            _ => return ToileOutcome::display_only(Vec::new()),
+        };
+        self.doc.commit();
+        self.emit_with_update(Vec::new())
+    }
+
     /// Clamp every child of `frame` to paint after (above) the frame in
     /// `layers`. A child sitting below the frame is moved to just above it, and
     /// this repeats until the invariant holds. The caller commits, so the
@@ -911,6 +959,95 @@ mod tests {
         let mut reopened = ToileState::new();
         reopened.import_snapshot(&alice.export_snapshot()).unwrap();
         assert_eq!(reopened.document_locale(), alice.document_locale());
+    }
+
+    /// `TOILE-UI-427`: the snap is one register of the board. A write is one
+    /// undo item, the frame carries it, two peers converge on it, and a write
+    /// of the value held makes no delta.
+    #[test]
+    fn the_board_snap_is_one_undoable_register_that_converges() {
+        use crate::message::{BoardEdit, GridSnap};
+        let snap = |s| ToileCommand::EditBoard(BoardEdit::Snap(s));
+        let mut alice = ToileState::new();
+        let mut bob = ToileState::new();
+        assert_eq!(
+            alice.derive_viewport().snap,
+            GridSnap::Free,
+            "a new board lands free"
+        );
+        assert!(alice.handle_command(snap(GridSnap::Free)).update.is_none());
+        let mut from_alice = vec![alice.handle_command(snap(GridSnap::Snapped))];
+        assert_eq!(alice.derive_viewport().snap, GridSnap::Snapped);
+        from_alice.push(alice.handle_command(ToileCommand::Undo));
+        assert_eq!(
+            alice.derive_viewport().snap,
+            GridSnap::Free,
+            "one undo takes it back"
+        );
+        from_alice.push(alice.handle_command(ToileCommand::Redo));
+        let from_bob =
+            [snap(GridSnap::Snapped), snap(GridSnap::Free)].map(|c| bob.handle_command(c));
+        for out in &from_bob {
+            alice.apply_remote(out.update.as_ref().expect("a write is one delta"));
+        }
+        for out in &from_alice {
+            bob.apply_remote(out.update.as_ref().expect("a write is one delta"));
+        }
+        assert_eq!(alice.derive_viewport().snap, bob.derive_viewport().snap);
+    }
+
+    /// `TOILE-UI-427`, `TOILE-UI-430`: the background is one register of the
+    /// board. The scaffold's grey and a clear colour read as the theme's
+    /// ground. A write is one undo item, and two peers converge on it.
+    #[test]
+    fn the_board_ground_is_one_undoable_register_that_converges() {
+        use crate::logic::state::names::{BoardKey, board};
+        use crate::message::{BoardEdit, BoardGround};
+        let ground = |g| ToileCommand::EditBoard(BoardEdit::Ground(g));
+        let mint = BoardGround::Tint(ambre_core::Rgba::from_bits(0xE6F4_EAFF));
+        let sky = BoardGround::Tint(ambre_core::Rgba::from_bits(0xE8F1_FBFF));
+        let mut alice = ToileState::new();
+        let mut bob = ToileState::new();
+        assert_eq!(
+            alice.derive_viewport().ground,
+            BoardGround::Theme,
+            "the scaffold's grey"
+        );
+        let _ = board(&alice.doc).insert(BoardKey::BgColor, 0i64);
+        assert_eq!(alice.board_ground(), BoardGround::Theme, "a clear colour");
+        let _ = board(&alice.doc).insert(BoardKey::BgColor, 1.5);
+        assert_eq!(
+            alice.board_ground(),
+            BoardGround::Theme,
+            "a register of another kind"
+        );
+        assert!(
+            alice
+                .handle_command(ground(BoardGround::Theme))
+                .update
+                .is_none()
+        );
+        let mut from_alice = vec![alice.handle_command(ground(mint))];
+        assert_eq!(alice.derive_viewport().ground, mint);
+        from_alice.push(alice.handle_command(ToileCommand::Undo));
+        assert_eq!(
+            alice.board_ground(),
+            BoardGround::Theme,
+            "one undo takes it back"
+        );
+        from_alice.push(alice.handle_command(ToileCommand::Redo));
+        from_alice.push(alice.handle_command(ground(BoardGround::Theme)));
+        assert_eq!(
+            alice.board_ground(),
+            BoardGround::Theme,
+            "back on the theme"
+        );
+        let from_bob = bob.handle_command(ground(sky));
+        alice.apply_remote(from_bob.update.as_ref().expect("a write is one delta"));
+        for out in &from_alice {
+            bob.apply_remote(out.update.as_ref().expect("a write is one delta"));
+        }
+        assert_eq!(alice.board_ground(), bob.board_ground());
     }
 
     /// `TOILE-011`: the clamp ends on a paint order holding a duplicate entry,

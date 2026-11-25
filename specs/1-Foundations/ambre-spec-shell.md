@@ -173,7 +173,7 @@ context bar and the command palette reach commands whose home is elsewhere.
 
 | Region | Answers | Home of commands | Writes to the document | Examples |
 |---|---|---|---|---|
-| status bar | how I see the document | yes | never (`CHROME-149`) | the zoom, the counters, the sheet tabs of Trame; the frame rate in a development build alone (`CHROME-238`) |
+| status bar | how I see the document | yes | never (`CHROME-149`) | the zoom, the counters, the sheet tabs of Trame, the grid of Toile (`TOILE-UI-428`); the frame rate in a development build alone (`CHROME-238`) |
 | context panel | what the document or the selection is | yes | yes | the page format and the margins of Prose, the sheet and the filter of Trame, the board of Toile; the style of a selection |
 | creation bar | what I can add | yes | yes | the tools of the board and its embeds; text, a picture, a table, a separator; a function, a chart, a comment (`CHROME-180`, `CHROME-181`, `CHROME-254`, `CHROME-255`) |
 | context menu | what I do with the selection under the pointer | the clipboard alone (`CHROME-178`) | yes | the clipboard first (`CHROME-179`), then commands of the panel (`CHROME-182`, `CHROME-214` to `CHROME-216`) |

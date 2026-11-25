@@ -66,6 +66,11 @@ pub const HEIGHT: StaticKey<Properties> = StaticKey::new("toile.place.height");
 /// The rotation of a shape about its centre.
 pub const ROTATION: StaticKey<Properties> = StaticKey::new("toile.place.rotation");
 
+/// Whether the board lands its gestures on the grid (`TOILE-UI-025`).
+pub const SNAP: StaticKey<Properties> = StaticKey::new("toile.board.snap");
+/// What the board lies on (`TOILE-UI-430`).
+pub const BACKGROUND: StaticKey<Properties> = StaticKey::new("toile.board.background");
+
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
     ($($title_fn:ident: $id:expr, $label:literal;)*) => {
@@ -104,6 +109,8 @@ properties! {
     WIDTH: WIDTH, "Width";
     HEIGHT: HEIGHT, "Height";
     ROTATION: ROTATION, "Rotation";
+    SNAP: SNAP, "Snap to grid";
+    BACKGROUND: BACKGROUND, "Background";
 }
 
 /// The box and the rotation of a lone selected shape, as the board stores

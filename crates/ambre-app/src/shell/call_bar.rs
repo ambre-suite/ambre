@@ -800,6 +800,11 @@ pub(super) fn RingAlert(
 ///
 /// The bubble floats over the canvas, so it publishes its box into `cover` each time it rests,
 /// and clears it when it leaves (`CHROME-171`).
+///
+/// A press on the faces of the bubble opens its mini video. Over a picture, the box of the mini
+/// video paints nothing. The render runtime draws the picture on the canvas below it
+/// (`CALL-015`). So the bubble also publishes the box of its mini video at each move and each
+/// resize (the Murmure calls spec, section 3).
 #[component]
 pub(super) fn CallFloat(
     /// The pane the user is in, which names the shown channel.
@@ -811,8 +816,9 @@ pub(super) fn CallFloat(
     /// Where the bubble publishes the box it covers.
     cover: RwSignal<ambre_client_core::cover::Cover>,
 ) -> impl IntoView {
+    use crate::call_stage::MiniShows;
     use ambre_client_core::cover::Surface;
-    use ambre_murmure::ui::call_float::{Corner, Float, clock};
+    use ambre_murmure::ui::call_float::{Corner, Float, Mini, MiniBox, clock};
     let from = crate::call::where_from();
     let from_shown = from.clone();
     let shown = Signal::derive(move || {
@@ -908,6 +914,46 @@ pub(super) fn CallFloat(
         CallPhase::InCall(microphone) => microphone,
         _ => Microphone::Live,
     });
+    let mini = RwSignal::from(crate::call_stage::mini());
+    let mini_shows = RwSignal::from(crate::call_stage::mini_shows());
+    let mini_box = NodeRef::<leptos::html::Div>::new();
+    // The page box of the mini video, after the layout of the frame.
+    let measure = move || {
+        let open = shown.get_untracked() && mini.get_untracked() == Mini::Open;
+        let placed = open
+            .then(|| mini_box.get_untracked())
+            .flatten()
+            .map(|el| el.get_bounding_client_rect())
+            .and_then(|r| {
+                MiniBox::on_page(ambre_draw::Rect::new(
+                    r.left(),
+                    r.top(),
+                    r.right(),
+                    r.bottom(),
+                ))
+            });
+        crate::call_stage::publish_mini_box(placed);
+    };
+    // A change of place, of size or of the mini video measures again once the layout ran. The
+    // clock measures each second too, so a late font that moves the box is caught.
+    Effect::new(move |_| {
+        let _ = (
+            shown.get(),
+            corner.get(),
+            dragged.get(),
+            mini.get(),
+            mini_shows.get(),
+            tick.get(),
+        );
+        request_animation_frame(measure);
+    });
+    let on_resize = window_event_listener(leptos::ev::resize, move |_| {
+        request_animation_frame(measure);
+    });
+    on_cleanup(move || {
+        on_resize.remove();
+        crate::call_stage::publish_mini_box(None);
+    });
     view! {
         <Show when=move || shown.get()>
             <div
@@ -915,6 +961,11 @@ pub(super) fn CallFloat(
                 class="murmure-call-float"
                 role="region"
                 aria-label="Call in progress"
+                data-mini=move || match (mini.get(), mini_shows.get()) {
+                    (Mini::Folded, _) => None,
+                    (Mini::Open, MiniShows::Faces) => Some("faces"),
+                    (Mini::Open, MiniShows::Video) => Some("video"),
+                }
                 data-corner=move || corner.get().word()
                 data-dragging=move || dragged.get().is_some().then_some("true")
                 style:left=move || dragged.get().map(|(x, _)| format!("{x}px"))
@@ -944,18 +995,38 @@ pub(super) fn CallFloat(
                     <Icon icon=icondata::MdiPhone />
                     <span class="murmure-float-channel">{channel_name}</span>
                     <span class="murmure-float-clock">{elapsed}</span>
-                    <span class="murmure-float-faces">
-                        {move || {
-                            faces
-                                .get()
-                                .into_iter()
-                                .map(|initials| view! {
-                                    <span class="murmure-float-face" aria-hidden="true">{initials}</span>
-                                })
-                                .collect_view()
-                        }}
-                    </span>
                 </button>
+                <button
+                    r#type="button"
+                    class="murmure-float-faces"
+                    aria-label=move || match mini.get() {
+                        Mini::Folded => "Show the video of the call",
+                        Mini::Open => "Hide the video of the call",
+                    }
+                    aria-pressed=move || {
+                        ambre_chrome::Pressed::from_bool(mini.get() == Mini::Open).aria()
+                    }
+                    on:click=move |_| mini.update(|m| *m = m.toggled())
+                >
+                    {move || {
+                        faces
+                            .get()
+                            .into_iter()
+                            .map(|initials| view! {
+                                <span class="murmure-float-face" aria-hidden="true">{initials}</span>
+                            })
+                            .collect_view()
+                    }}
+                </button>
+                <Show when=move || mini.get() == Mini::Open>
+                    // The box the render runtime draws the picture through. It holds a word
+                    // alone while no video arrives, and nothing over a picture.
+                    <div class="murmure-float-mini" node_ref=mini_box>
+                        {move || (mini_shows.get() == MiniShows::Faces).then_some(view! {
+                            <span class="murmure-float-mini-none">"No video"</span>
+                        })}
+                    </div>
+                </Show>
                 <div class="murmure-float-controls">
                     <MuteButton microphone=microphone relay=relay />
                     <span class="murmure-float-wide">

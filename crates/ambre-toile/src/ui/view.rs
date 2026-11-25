@@ -300,6 +300,9 @@ pub struct ToileSignals {
     pub cursor: RwSignal<Option<super::palette::CanvasCursor>>,
     /// The board zoom of the camera.
     pub zoom: RwSignal<ambre_core::Scale<ambre_core::Board, ambre_core::View>>,
+    /// The look of the board for the panel and the status bar, and the
+    /// write of the board section (`TOILE-UI-429`).
+    pub board: RwSignal<super::grid::BoardLook>,
     /// The aggregates of the selection.
     pub sel_stats: RwSignal<Option<super::status::SelStats>>,
     /// The common style of the selection, read by the inspector.
@@ -489,6 +492,9 @@ pub struct ToileView {
     /// Wheel navigation preference (`toile-viewport`): `Auto` (default), or a
     /// forced `Mouse` / `Trackpad` set from the View menu.
     pointer_mode: PointerMode,
+    /// Whether this user shows the grid, toggled from the status bar. View
+    /// state, never written to the board (`CHROME-149`).
+    grid: super::grid::GridShown,
     /// Latched device guess while `pointer_mode == Auto`. Starts `false` (trackpad,
     /// the gentler wrong default, `toile-viewport`) and flips to `true` on a
     /// confident mouse-wheel signature, back on a two-axis trackpad glide.
@@ -559,6 +565,10 @@ pub struct ToileView {
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
     zoom: RwSignal<ambre_core::Scale<ambre_core::Board, ambre_core::View>>,
+    /// The look of the board the view publishes for the panel and the status
+    /// bar. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    board: RwSignal<super::grid::BoardLook>,
     /// The zoom this view last published. A signal reading anything else was
     /// written by the chip, so the camera follows it. Wasm-only.
     #[cfg(target_arch = "wasm32")]
@@ -802,6 +812,7 @@ impl ToileView {
             active_tool,
             cursor,
             zoom,
+            board,
             sel_stats,
             style_model,
             restyle,
@@ -840,6 +851,8 @@ impl ToileView {
             display: DisplayViewport {
                 version: ambre_core::Seq::ZERO,
                 grid_unit: super::grid::BASE_GRID,
+                snap: crate::message::GridSnap::Free,
+                ground: crate::message::BoardGround::Theme,
                 reactions: Default::default(),
                 pins: Vec::new(),
                 viewport: Viewport::default(),
@@ -876,6 +889,7 @@ impl ToileView {
             edge: ambre_draw::kinetic::EdgeScroll::default(),
             space_down: false,
             pointer_mode: PointerMode::default(),
+            grid: super::grid::GridShown::Shown,
             detected_mouse: false,
             text_input,
             embedded,
@@ -902,6 +916,8 @@ impl ToileView {
             cursor,
             #[cfg(target_arch = "wasm32")]
             zoom,
+            #[cfg(target_arch = "wasm32")]
+            board,
             #[cfg(target_arch = "wasm32")]
             zoom_published: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::ONE,
             #[cfg(target_arch = "wasm32")]
@@ -2299,6 +2315,44 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_place(&mut self) {}
 
+    /// Send a write of the board section as its one command. Then publish
+    /// the look of the board on change, for the panel and the status bar.
+    /// Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    fn trade_board(&mut self) {
+        let held = self.board.get_untracked();
+        if let Some(edit) = held.asked {
+            self.send_edit(ToileCommand::EditBoard(edit));
+        }
+        let look = self.board_look();
+        if held != look {
+            self.board.set(look);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn trade_board(&mut self) {}
+
+    /// The snap of the board, as the last frame carries it, and the grid of
+    /// this user.
+    pub fn board_look(&self) -> super::grid::BoardLook {
+        super::grid::BoardLook {
+            snap: self.display.snap,
+            grid: self.grid,
+            ground: self.display.ground,
+            asked: None,
+        }
+    }
+
+    /// The step a gesture lands on now, `None` when it lands free.
+    fn snap_step(&self) -> Option<Px<Board>> {
+        super::grid::snap_step(
+            self.display.snap,
+            self.grid,
+            self.cam.zoom,
+            self.display.grid_unit,
+        )
+    }
+
     /// Apply a whole style from the inspector to the live selection, locked
     /// members included: the refusal belongs to the write (`TOILE-UI-182`).
     /// The selection itself is left as it was (`TOILE-UI-176`).
@@ -2907,6 +2961,14 @@ impl ToileView {
                 self.pointer_mode = PointerMode::Trackpad;
                 return;
             }
+            // The grid of this user, view state alone (`CHROME-149`). A
+            // hidden grid also holds back the snap.
+            mb::GRID => {
+                self.grid = self.grid.toggled();
+                self.machine.set_grid(self.grid);
+                self.needs_full = true;
+                return;
+            }
             _ => {}
         }
 
@@ -3356,13 +3418,26 @@ impl ToileView {
             Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight
                 if !self.selection.is_empty() =>
             {
-                let step = if shift { NUDGE_LARGE } else { NUDGE_SMALL }.get();
-                let delta = match key {
-                    Key::ArrowUp => Vec2::new(0.0, -step),
-                    Key::ArrowDown => Vec2::new(0.0, step),
-                    Key::ArrowLeft => Vec2::new(-step, 0.0),
-                    _ => Vec2::new(step, 0.0),
+                let dir = match key {
+                    Key::ArrowUp => Vec2::new(0.0, -1.0),
+                    Key::ArrowDown => Vec2::new(0.0, 1.0),
+                    Key::ArrowLeft => Vec2::new(-1.0, 0.0),
+                    _ => Vec2::new(1.0, 0.0),
                 };
+                // On a snapping board an arrow moves the selection to the
+                // next grid line. Shift keeps the fine step of one unit, off
+                // the grid (`TOILE-UI-426`).
+                let step = self.snap_step();
+                let on_grid = step.filter(|_| !shift).and_then(|step| {
+                    super::tool::selection_bounds(&self.selection, &self.display)
+                        .map(|b| super::grid::nudge_on_grid(b.origin(), dir, step))
+                });
+                let fine = if shift && step.is_none() {
+                    NUDGE_LARGE
+                } else {
+                    NUDGE_SMALL
+                };
+                let delta = on_grid.unwrap_or_else(|| dir * fine.get());
                 self.send_edit(ToileCommand::MoveElements {
                     ids: self.selection.clone(),
                     delta,
@@ -4002,6 +4077,7 @@ impl ToileView {
         // (`toile-styles`).
         self.drain_restyle();
         self.drain_place();
+        self.trade_board();
 
         // Apply any quick-colour pick the floating bar emitted
         // (`toile-styles`).
@@ -4218,6 +4294,7 @@ impl ToileView {
             &self.gesture_overrides
         };
         let scene = Scene {
+            grid: self.grid,
             viewport: &self.display,
             palette: self.theme.palette(),
             images: &self.images,
@@ -4618,6 +4695,8 @@ impl ToileView {
         self.display = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: super::grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             reactions: Default::default(),
             pins: Vec::new(),
             viewport: Viewport::default(),

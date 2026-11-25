@@ -164,6 +164,7 @@ describe! {
     POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", None, &[], ACCOUNT, AvatarMenu;
     POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", None, &[], ACCOUNT, AvatarMenu;
     POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], ACCOUNT, AvatarMenu;
+    GRID: menu_bar::GRID, "Show grid", Some(StaticKey::<Icons>::new("dots-grid")), &[], VIEW, StatusBar;
     PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT, StatusBar;
     IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(StaticKey::<Icons>::new("file-import-outline")), &[], FILE, AmbreMenu;
     LINK_SET: menu_bar::LINK_SET, "Link...", Some(StaticKey::<Icons>::new("link-variant")), &[], OBJECT, ContextPanel;

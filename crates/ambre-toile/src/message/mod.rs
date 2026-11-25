@@ -2084,6 +2084,9 @@ pub enum ToileCommand {
     SetDocumentLocale {
         locale: ambre_client_core::DocumentLocale,
     },
+    /// Write one setting of the board, a register of `board` (`TOILE-UI-025`).
+    /// An edit, so one undo item, and a viewer's is dropped.
+    EditBoard(BoardEdit),
 
     // -- Presentation (`toile-presentation`) --
     /// Set the shared slide sequence: the frames, in playback order
@@ -2412,6 +2415,7 @@ impl fmt::Debug for ToileCommand {
                 .finish(),
             Self::SetSlideOrder { order } => fields!("SetSlideOrder", order),
             Self::SetDocumentLocale { locale } => fields!("SetDocumentLocale", locale),
+            Self::EditBoard(edit) => tuple!("EditBoard", edit),
             Self::NextSlide => f.write_str("NextSlide"),
             Self::PrevSlide => f.write_str("PrevSlide"),
             Self::GotoSlide(slide) => tuple!("GotoSlide", slide),
@@ -2534,6 +2538,7 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::RemoveFromFrames { .. }
             | Self::RenameFrame { .. }
             | Self::SetDocumentLocale { .. }
+            | Self::EditBoard(..)
             | Self::SetSlideOrder { .. }
             | Self::NextSlide
             | Self::PrevSlide
@@ -3013,6 +3018,37 @@ impl fmt::Debug for ToileEvent {
 // Data-oriented display structures (`toile-engine`)
 // =============================================================================
 
+/// Whether a board asks a drag, a resize and a nudge to land on its grid
+/// (`TOILE-UI-025`). Document state: every peer of the board snaps alike.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GridSnap {
+    /// A gesture commits where the pointer ends.
+    #[default]
+    Free,
+    /// A gesture commits on the grid step the board draws.
+    Snapped,
+}
+
+/// One setting of the board the context panel writes (`TOILE-UI-025`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoardEdit {
+    /// Whether a gesture lands on the grid.
+    Snap(GridSnap),
+    /// What the board lies on.
+    Ground(BoardGround),
+}
+
+/// What a board lies on, as its `board` register holds it (`TOILE-UI-430`).
+/// Document state: every peer sees the same board, in either theme.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BoardGround {
+    /// The warm ground of the theme, light or dark.
+    #[default]
+    Theme,
+    /// One colour, drawn as it is in both themes.
+    Tint(Rgba),
+}
+
 /// One frame of "what to paint", already culled and z-ordered. The CRDT visible
 /// set only -- presence rides its own event path (`toile-engine`).
 #[derive(Clone, Debug)]
@@ -3027,6 +3063,11 @@ pub struct DisplayViewport {
     /// value rides each frame as written: the view replaces a unit that is
     /// not finite and positive.
     pub grid_unit: Px<Board>,
+    /// Whether the board asks its gestures to land on the grid, as its
+    /// `board` register holds it (`TOILE-UI-025`).
+    pub snap: GridSnap,
+    /// What the board lies on, as its `board` register holds it.
+    pub ground: BoardGround,
     /// Back-to-front sequence mirroring the `layers` walk
     /// (`toile-z-order`): elements and connectors interleaved by
     /// z-order, painted in one pass.

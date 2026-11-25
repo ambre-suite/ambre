@@ -397,6 +397,49 @@
   Each caller then holds one opaque view in place of a copy of the control's type. Main read
   10 661 673 raw and 2 875 468 brotli, 81 598 and 15 718 bytes less. Sync did not move, at
   1 342 117. The ceiling stays at 10 710 000.
+* **The view types of leptos stay typed (2026-11-25).** The `erase_components` cfg of leptos
+  makes each component return an erased view, and gives each reactive closure of `view!` one shared
+  type. It took 468 826 raw bytes and 125 603 brotli off Main. It also slows every change of the
+  shape of a view, and the gain is one download that the cache then keeps. So the cfg stays off,
+  and the Main ceiling stays at 10 860 000.
+* **The figures of the cfg.** `just size` on the session container, over `main` at `f2f601d`, by
+  the Win back room in Main Story (`ambre-roadmap.md`).
+
+| Build | Main raw | Main brotli | Sync raw |
+|---|---|---|---|
+| `f2f601d` | 10 775 229 | 2 896 738 | 1 349 581 |
+| `erase_components` | 10 306 403 | 2 771 135 | 1 349 581 |
+
+* **Where the bytes came from.** The table below is `twiggy top` on a build that keeps the name
+  section, before the bindings. The count leaves the name section out, and reads 496 340 bytes
+  less in all.
+
+| Crate | Change | Why |
+|---|---|---|
+| `tachys` | -287 593 | The render, mount and rebuild code of each view type and each reactive closure |
+| `core`, `leptos`, `reactive_graph` | -191 781 | The closures and the effects built for each of those types |
+| `ambre-murmure`, `ambre-app`, `ambre-toile`, `ambre-chrome` | -37 933 | The component bodies, which build an erased view |
+| `.rodata` | -7 560 | The type names and the vtables of the views that left |
+| `alloc` | +12 178 | The shared box of each reactive closure |
+
+* **What the cfg costs at run time.** A wasm test under `--profile wasm-release` mounted 200 Trame
+  context panels of about 494 nodes each. It ran in headless Chrome 157 on the session container,
+  4 vCPU at 2.1 GHz. Each figure is the range of two runs, on the warm round, per panel.
+
+| Operation | Typed views | `erase_components` | Change |
+|---|---|---|---|
+| Mount | 6.7 to 6.8 ms | 8.3 to 8.4 ms | +23 % |
+| A lone cell becomes a range and back: the sections change | 1.29 to 1.41 ms | 2.00 to 2.29 ms | +62 % |
+| An arrow move between two lone cells: the values change | 15.2 to 17.3 us | 15.7 to 16.1 us | none, within the noise |
+| Wasm memory growth on the cold round | 252 KB | 469 KB | +86 %, read in 64 KB pages |
+
+| Alternative | Rejected because |
+|---|---|
+| **`erase_components` on every wasm build** | Each change of the shape of a view costs about 60 % more, and each mount about 23 % more, for every session. The 126 KB of brotli it saves are one download, which the cache keeps for good. The first download holds 856 KB of room |
+| **A lazy module for the panels** (`#[lazy]` of leptos, the `wasm_split` crates) | The macro writes `unsafe extern` and `#[unsafe(no_mangle)]` into our crate, and `unsafe_code = "forbid"` refuses them (`README.md`, the Security pillar). Trunk 0.22 has no split step. Each split module would also have to join the shared `+atomics` memory of Main |
+| **`-Z merge-functions=trampolines`** | It grew the code of Main by 41 713 bytes: each folded copy keeps a thunk of its own. `ARCH-033` refuses a `-Z` flag in a rustflags list too |
+| **`-Z merge-functions=aliases`** | It wrote the same bytes: the build already merges functions this way |
+| **An `into_any` at each section of the panels** | `twiggy` shows the kit already builds one instance per value type, about 0.5 KB each. The estimate of 30 KB to 50 KB stays short of the 100 KB of the Story |
 
 * **A budget or the Main ceiling rises only through a story of its own (`ARCH-095`).** The ceiling
   of Main rose twice in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature

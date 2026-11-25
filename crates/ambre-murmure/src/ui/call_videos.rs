@@ -1222,6 +1222,12 @@ impl Voices {
         if speaks { Voice::Speaks } else { Voice::Quiet }
     }
 
+    /// The member who spoke last, whether the hold of the outline still runs or not.
+    #[must_use]
+    pub fn latest(&self) -> Option<Id<User>> {
+        self.heard.last().map(|(member, _)| *member)
+    }
+
     /// Forgets every voice: the call ended.
     pub fn clear(&mut self) {
         self.heard.clear();

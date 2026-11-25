@@ -153,6 +153,8 @@ impl ToileState {
             grid_unit: Px::<Board>::new(
                 f64_of(&board(&self.doc), BoardKey::GridSize).unwrap_or(0.0),
             ),
+            snap: self.grid_snap(),
+            ground: self.board_ground(),
             reactions: self.reaction_counts_by_target(&visible),
             pins: self.comment_pins(&visible, &vp),
             nodes,
