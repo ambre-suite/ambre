@@ -36,6 +36,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-733` | `POST` | The check MUST accept a link receipt that another member writes on a root or in the amendments only while the root names no thread before that delta, and only a receipt that reads as a signature. | this spec section 3; `MURMURE-255`, `MURMURE-732` | `ambre_murmure::logic::thread_tests::a_link_writes_its_receipt_with_the_thread_field_alone` -- a receipt with the thread field passes, and a receipt on a named root or one that is no signature is refused with its delta; `ambre_murmure::logic::amending_tests::a_locked_record_carries_its_receipt_and_a_fold_keeps_it` -- the same in the amendments | none | verified |
 | `MURMURE-734` | `POST` | A removal MUST name, with its thread, each link receipt that the roots and the amendments of the channel hold. | this spec section 3; `MURMURE-732`; `ambre-spec-membership.md`, `SYNC-321`, `SYNC-330` | `ambre_murmure::logic::thread_tests::a_link_writes_its_receipt_with_the_thread_field_alone` -- the read of a removal names the receipt with its thread; `ambre_murmure::logic::amending_tests::a_locked_record_carries_its_receipt_and_a_fold_keeps_it` -- the amendments yield the receipt with the thread they record | none | verified |
 | `MURMURE-735` | `POST` | A fold MUST carry the link receipt of a recorded thread into its root, beside the thread. | this spec section 3; `MURMURE-484`, `MURMURE-732` | `ambre_murmure::logic::amending_tests::a_locked_record_carries_its_receipt_and_a_fold_keeps_it` -- after the fold, the segment holds the receipt beside the thread | none | verified |
+| `MURMURE-760` | `POST` | Given a removal whose census set threads apart (`SYNC-333`), the view MUST ask the owner, in one question that names each of those threads, whether to erase them. | this spec section 3; `ambre-spec-membership.md`, `SYNC-333` | `ambre_logic::channels::tests::a_confirmed_erasure_runs_the_revoke_again_with_its_threads_alone` -- the threads set apart reach the view; `ambre_murmure::tests::chrome_relay::the_unproven_threads_question_erases_on_erase_and_keeps_on_keep` -- the question opens and names each thread | none | verified |
+| `MURMURE-761` | `POST` | Erase MUST run each removal the census set apart again, with the erasure of the threads it set apart that the owner confirmed, and of no other. Keep MUST send nothing. | this spec section 3; `MURMURE-760`; `ambre-spec-membership.md`, `SYNC-333` | `ambre_logic::channels::tests::a_confirmed_erasure_runs_the_revoke_again_with_its_threads_alone` -- a confirmation of no thread set apart runs nothing, and one that names a thread past them runs the revoke again under its id, erasing the thread set apart alone; `ambre_murmure::tests::chrome_relay::the_unproven_threads_question_erases_on_erase_and_keeps_on_keep` -- Keep sends nothing, and Erase sends the erasure of the named threads once | none | verified |
 | `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | `ambre_murmure::logic::thread_tests::an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread` -- each change writes the thread, and a delete leaves the count; `::another_member_reacts_to_a_reply_and_never_edits_it` -- the check takes a reaction, and an edit is refused; `ambre_logic::channels::tests::a_change_on_a_reply_leaves_for_its_thread` -- each change leaves under the thread | none | verified |
 | `MURMURE-538` | `POST` | An edit of a reply also sent to the channel MUST write the same edit to its copy. | this spec section 3; `MURMURE-109`; `MURMURE-084` | `ambre_logic::channels::tests::a_copy_follows_the_edit_and_the_delete_of_its_reply` -- the edit leaves under the thread, then under the copy's segment, where the copy reads it; `ambre_murmure::logic::thread_tests::a_copy_is_found_from_its_reply` -- the copy is found from its reply, and a reply sent alone has none; `ambre_murmure::logic::channel::threading::copy_id_tests::a_copy_differs_from_its_reply_and_from_every_other_copy` -- over generated identifiers, a copy never takes its reply's identifier, and two replies never share a copy | none | verified |
 | `MURMURE-539` | `POST` | A delete of a reply also sent to the channel MUST delete its copy too. | this spec section 3; `MURMURE-109`; `MURMURE-087` | `ambre_logic::channels::tests::a_copy_follows_the_edit_and_the_delete_of_its_reply` -- the copy reads deleted and empty, and a reaction stayed on the reply | none | verified |
@@ -70,7 +72,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 27 `verified`, 6 `unimplemented`. The engine tests hold the thread document, the
+* **Verification.** 29 `verified`, 6 `unimplemented`. The engine tests hold the thread document, the
   link, the count, the changes on a reply, a locked root and the mentions. The Logic tests hold the
   waits, the race, the watch and the read cursor. The Sync tests hold the signal, the light thread
   and the number a read reaches. The view's host tests hold the read a thread shown sends.
@@ -126,6 +128,14 @@ the record of a locked root (`MURMURE-732`). The delta that names the thread thu
 proof, and no later delta of another member replaces it (`MURMURE-733`). A removal names each
 receipt with its thread (`MURMURE-734`), and a fold keeps it (`MURMURE-735`). The census then
 refuses to erase a thread whose receipt verifies (`ambre-spec-membership.md`, `SYNC-330`).
+
+**A thread with no proof.** A member can name a thread with code of its own, under no receipt. A
+relay can hide that thread, and nothing tells it from a phantom. So the census erases no such
+thread until the owner says so (`SYNC-333`).
+
+The view asks once, and names each thread (`MURMURE-760`). Erase runs the removal again with those
+erasures alone, and Keep leaves the member in the channel (`MURMURE-761`). An erased thread loses
+its history.
 
 **A thread not open.** A root is on screen when a segment the open channel holds carries it. Its
 thread is then held, so each delta reloads the head (`MURMURE-111`). A delta on any other thread

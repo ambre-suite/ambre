@@ -11,6 +11,7 @@
 
 use super::channels::open_in_channel;
 use super::*;
+use crate::message::MurmureEvent;
 use crate::{ChannelState, SweepStep};
 use ambre_bus::{ApiFailure, ApiRequest};
 
@@ -28,7 +29,84 @@ pub(crate) enum Removal {
     },
 }
 
+/// The removals of a channel whose census set threads apart, and those
+/// threads (`MURMURE-761`).
+#[derive(Debug, Default)]
+pub(crate) struct Unproven {
+    /// Each removal, with the space of a departure, which its answer needs.
+    removals: Vec<(Removal, Option<Id<Space>>)>,
+    /// The threads the censuses set apart.
+    threads: Vec<Id<Document>>,
+}
+
 impl<D> Runtime<D> {
+    /// The census of `removal` from `channel_id` set `threads` apart, and
+    /// its failure follows. Keep the removal, and ask the owner whether to
+    /// erase those threads (`MURMURE-760`).
+    pub fn threads_unproven(
+        &mut self,
+        channel_id: Id<Channel>,
+        removal: ambre_bus::ChannelRemoval,
+        threads: Vec<Id<Document>>,
+    ) {
+        let (removal, space) = match removal {
+            ambre_bus::ChannelRemoval::Leave => {
+                (Removal::Leave, self.leaving.get(&channel_id).copied())
+            }
+            ambre_bus::ChannelRemoval::Revoke {
+                id,
+                document_id,
+                user_id,
+            } => (
+                Removal::Revoke {
+                    id,
+                    document_id,
+                    user_id,
+                },
+                None,
+            ),
+        };
+        let held = self.unproven.entry(channel_id).or_default();
+        held.removals.push((removal, space));
+        for thread in threads {
+            if !held.threads.contains(&thread) {
+                held.threads.push(thread);
+            }
+        }
+        let threads = held.threads.clone();
+        self.emit(UiEvent::Channel {
+            channel_id,
+            event: MurmureEvent::ThreadsUnproven { threads },
+        });
+    }
+
+    /// The owner confirmed the erasure of `threads` in `channel_id`. Each
+    /// removal the census set apart runs again (`MURMURE-761`). It erases the
+    /// threads of `threads` it set apart, and no other. A confirmation with
+    /// no such thread runs nothing.
+    pub(crate) fn erase_unproven(&mut self, channel_id: Id<Channel>, threads: &[Id<Document>]) {
+        let Some(held) = self.unproven.remove(&channel_id) else {
+            return;
+        };
+        let erase: Vec<_> = held
+            .threads
+            .iter()
+            .copied()
+            .filter(|t| threads.contains(t))
+            .collect();
+        if erase.is_empty() {
+            self.unproven.insert(channel_id, held);
+            return;
+        }
+        self.confirmed.insert(channel_id, erase);
+        for (removal, space) in held.removals {
+            if let Some(space_id) = space {
+                self.leaving.insert(channel_id, space_id);
+            }
+            self.remove_from_channel(channel_id, removal);
+        }
+    }
+
     /// Send `removal` with the documents the sealed state of `channel_id`
     /// names. A channel not open here opens first, and the removal waits for
     /// it (`SYNC-320`). An open channel first reads the threads its segments
@@ -91,15 +169,17 @@ impl<D> Runtime<D> {
             SweepStep::Wait => {}
             SweepStep::Done(swept) => {
                 let document_id = meta.document_id();
+                let erase = self.confirmed.remove(&channel_id).unwrap_or_default();
                 for removal in self.removals.remove(&channel_id).unwrap_or_default() {
                     let (named, threads) = (swept.documents.clone(), swept.threads.clone());
-                    let receipts = swept.receipts.clone();
+                    let (receipts, erase) = (swept.receipts.clone(), erase.clone());
                     self.ask(match removal {
                         Removal::Leave => SyncCommand::LeaveChannel {
                             channel_id,
                             named,
                             threads,
                             receipts,
+                            erase,
                         },
                         Removal::Revoke { id, user_id, .. } => SyncCommand::RevokeFromChannel {
                             id,
@@ -108,6 +188,7 @@ impl<D> Runtime<D> {
                             named,
                             threads,
                             receipts,
+                            erase,
                         },
                     });
                 }

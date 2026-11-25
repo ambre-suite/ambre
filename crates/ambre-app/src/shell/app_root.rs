@@ -17,7 +17,7 @@ use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
     ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
     KeyList, MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay, PhoneTabs,
-    SpaceList,
+    SpaceList, UnprovenThreadsConfirm,
 };
 
 /// The table the command palette searches: the booted application's whole
@@ -132,6 +132,7 @@ pub(crate) fn MurmureShell(
             send=send
             now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
         />
+        <UnprovenThreadsConfirm relay=relay send=send />
         // The view stamps a reaction, as it stamps a deletion.
         <EmojiPicker
             relay=relay

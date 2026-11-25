@@ -1340,6 +1340,11 @@ impl<D> Runtime<D> {
         if let Some(event) = self.held_send(channel_id, &command) {
             return self.emit(UiEvent::Channel { channel_id, event });
         }
+        // A confirmed erasure may reach a channel the removal opened and
+        // closed again: it runs the removal, which opens it (`MURMURE-761`).
+        if let MurmureCommand::EraseUnproven { threads } = &command {
+            return self.erase_unproven(channel_id, threads);
+        }
         // A ring sounds on a page that may not hold its channel. The decline opens the
         // channel, and writes its end once it is open (the Murmure calls spec, the ring).
         if matches!(command, MurmureCommand::DeclineCall { .. })
@@ -1481,6 +1486,7 @@ impl<D> Runtime<D> {
             | MurmureCommand::Retry { .. }
             | MurmureCommand::FetchFile { .. }
             | MurmureCommand::ShowPicture { .. }
+            | MurmureCommand::EraseUnproven { .. }
             // A file writes no document: its message does, once it sends.
             | MurmureCommand::UploadFile { .. } => None,
             // Murmure reads and writes no format yet, so neither half exists.
@@ -1615,6 +1621,8 @@ impl<D> Runtime<D> {
                     media_ref,
                 });
             }
+            // Run before the channel is looked up, above.
+            MurmureCommand::EraseUnproven { .. } => {}
             MurmureCommand::Retry { segment } => {
                 // Sync walks the key chain again at each open, so a new open
                 // serves a missing key and damaged bytes alike (the Murmure

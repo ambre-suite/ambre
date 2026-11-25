@@ -448,6 +448,15 @@ pub enum LogicEvent {
     /// The relay removed this user from the channel, answering
     /// [`SyncCommand::LeaveChannel`](crate::SyncCommand::LeaveChannel).
     ChannelLeft { channel_id: Id<Channel> },
+    /// The census of `removal` found `threads` hidden, under no proof and no
+    /// erasure, and posted nothing (`SYNC-333`). The failure of `removal`
+    /// follows. The owner confirms their erasure, and the removal runs again
+    /// with them in its `erase`.
+    ThreadsUnproven {
+        channel_id: Id<Channel>,
+        removal: ChannelRemoval,
+        threads: Vec<Id<Document>>,
+    },
     /// A creation, a join, a delete or a leave failed, and the relay changed
     /// nothing.
     ChannelRequestFailed {
@@ -707,6 +716,21 @@ impl fmt::Debug for OpenFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
+}
+
+/// A removal from a channel, as a census that set threads apart names it
+/// back (`SYNC-333`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChannelRemoval {
+    /// This user's departure of the channel.
+    Leave,
+    /// The revoke of `user_id` from the log of `document_id`, the `meta`,
+    /// under the request id `id`.
+    Revoke {
+        id: Seq<Request>,
+        document_id: Id<Document>,
+        user_id: Id<User>,
+    },
 }
 
 /// The relay's answer to a finalize lease request (the Murmure segments

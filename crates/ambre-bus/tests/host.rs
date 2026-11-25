@@ -285,6 +285,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
         LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
         LogicEvent::ChannelLeft { .. } => "ChannelLeft",
+        LogicEvent::ThreadsUnproven { .. } => "ThreadsUnproven",
         LogicEvent::ChannelRequestFailed { .. } => "ChannelRequestFailed",
         LogicEvent::SpaceChannels { .. } => "SpaceChannels",
         LogicEvent::MemberChannels { .. } => "MemberChannels",
@@ -303,7 +304,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 53;
-const EVENT_VARIANTS: usize = 67;
+const EVENT_VARIANTS: usize = 68;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -490,6 +491,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 thread: doc,
                 signature: ambre_core::FixedBytes::from_array([4; 64]),
             }],
+            erase: vec![doc],
         },
         SyncCommand::RevokeFromChannel {
             id: Seq::<ambre_bus::Request>::new(9),
@@ -498,6 +500,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             named: vec![doc],
             threads: vec![doc],
             receipts: Vec::new(),
+            erase: Vec::new(),
         },
         SyncCommand::ListSpaceChannels { space_id: space },
         SyncCommand::ListMemberChannels,
@@ -803,6 +806,15 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::ChannelDeleted { channel_id: chan },
         LogicEvent::ChannelLeft { channel_id: chan },
+        LogicEvent::ThreadsUnproven {
+            channel_id: chan,
+            removal: ambre_bus::ChannelRemoval::Revoke {
+                id: Seq::<ambre_bus::Request>::new(9),
+                document_id: doc,
+                user_id: user,
+            },
+            threads: vec![doc, doc],
+        },
         LogicEvent::ChannelRequestFailed {
             channel_id: chan,
             failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::PinMismatch(user)),

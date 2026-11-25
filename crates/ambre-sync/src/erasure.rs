@@ -71,6 +71,8 @@ pub(crate) struct ErasureParams {
     pub hidden: Vec<Id<Document>>,
     /// The link receipts the sealed state of the channel holds (`SYNC-330`).
     pub receipts: Vec<LinkReceipt>,
+    /// The hidden threads whose erasure the owner confirmed (`SYNC-333`).
+    pub confirmed: Vec<Id<Document>>,
     /// The footing of the open of the `meta` (audit `P26`).
     pub footing: Footing,
     pub rule: LogRule,
@@ -235,6 +237,16 @@ pub(crate) fn unerased(
         .collect()
 }
 
+/// What an erasure of the hidden threads of a removal ends on.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Cleared {
+    /// Every hidden thread is under an erasure, held or posted now.
+    All,
+    /// These hidden threads hold no proof and no erasure, and the owner
+    /// has not confirmed their erasure. Nothing was posted (`SYNC-333`).
+    Unproven(Vec<Id<Document>>),
+}
+
 /// The refusal of a listing that hides a thread no erasure covers.
 fn hidden_error() -> http::HttpError {
     http::HttpError::Local(ambre_core::LocalFailure::ChannelDocumentHidden)
@@ -248,7 +260,9 @@ fn hidden_error() -> http::HttpError {
 /// erasure to each present writer instead (`SYNC-327`). A thread such a
 /// key's erasure covers passes. When one is left and this user holds such a
 /// key, this user signs an erasure of each one left, and the relay records
-/// it.
+/// it. Each thread left that the owner did not confirm is set apart, and
+/// nothing posts (`SYNC-333`). A relay that hides a thread with no receipt
+/// thus never gets it erased in silence.
 ///
 /// A thread that a valid revoke of the log caps stood in the channel. So
 /// the listing hides it, and no erasure covers it (`SYNC-329`). Neither
@@ -266,7 +280,7 @@ fn hidden_error() -> http::HttpError {
 pub(crate) async fn erase_hidden<H: ShareHttp>(
     http: &H,
     p: ErasureParams,
-) -> Result<(), http::HttpError> {
+) -> Result<Cleared, http::HttpError> {
     // The relay signed the link of such a thread, so its listing hides it,
     // and no erasure covers it (`SYNC-330`).
     if p.hidden
@@ -293,10 +307,20 @@ pub(crate) async fn erase_hidden<H: ShareHttp>(
     let listed: ErasuresResponse = http.get_json(&erasures_url).await?;
     let left = unerased(p.channel_id, &p.hidden, &listed.erasures, &owners);
     if left.is_empty() {
-        return Ok(());
+        return Ok(Cleared::All);
     }
     if !owners.contains(&p.author.public()) {
         return Err(hidden_error());
+    }
+    // Only the owner's word erases a thread no proof covers. The set apart
+    // is a subset of `hidden`, so a forged field keeps no more than it names.
+    let unconfirmed: Vec<_> = left
+        .iter()
+        .copied()
+        .filter(|t| !p.confirmed.contains(t))
+        .collect();
+    if !unconfirmed.is_empty() {
+        return Ok(Cleared::Unproven(unconfirmed));
     }
     for thread in left {
         let body = EraseRequest {
@@ -308,7 +332,7 @@ pub(crate) async fn erase_hidden<H: ShareHttp>(
             return Err(hidden_error());
         }
     }
-    Ok(())
+    Ok(Cleared::All)
 }
 
 #[cfg(test)]
