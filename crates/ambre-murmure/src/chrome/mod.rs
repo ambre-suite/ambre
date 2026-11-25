@@ -346,6 +346,10 @@ impl PageVisibility {
     }
 }
 
+/// The channel a removal left, with the threads it set apart for the
+/// owner's word (`MURMURE-737`).
+pub type UnprovenThreads = (Id<Channel>, Vec<Id<Document>>);
+
 /// The view state of a Murmure page, fed by the events of the Logic thread
 /// (`ARCH-018`). The launcher hands it every event, and sends the commands
 /// it answers. It names no variant itself.
@@ -410,7 +414,7 @@ pub struct MurmureRelay {
     returned: RwSignal<Option<AskedAll>>,
     /// The threads a removal from a channel set apart, which the dialog asks
     /// the owner to erase or keep (`MURMURE-737`). `None` once answered.
-    pub unproven: RwSignal<Option<(Id<Channel>, Vec<Id<Document>>)>>,
+    pub unproven: RwSignal<Option<UnprovenThreads>>,
     /// The drafts the device keeps. A lost channel takes its own, and a
     /// sign-out takes them all (`MURMURE-215`, `MURMURE-216`).
     drafts: StoredValue<DraftShelf, LocalStorage>,
