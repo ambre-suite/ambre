@@ -20,7 +20,7 @@ use ambre_murmure::ui::call_videos::{GridPages, Turn};
 use ambre_murmure::ui::call_volumes::{
     Gain, gain_from_slider, slider_of_gain, slider_of_volume, volume_from_slider,
 };
-use ambre_murmure::ui::commands::{PIN_COMMAND, UNPIN_COMMAND, call_command};
+use ambre_murmure::ui::commands::{call_command, pin_command};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -299,14 +299,7 @@ fn RosterButton(
                     .map_or_else(|| "A participant".to_owned(), |n| n.as_str().to_owned());
                 let (titled, pressed, icon) = (pinned.clone(), pinned.clone(), pinned.clone());
                 // A pin acts on one participant, so it runs no verb of the palette.
-                let tip = Signal::derive(move || {
-                    let command = if titled.get() == Some(member) {
-                        &UNPIN_COMMAND
-                    } else {
-                        &PIN_COMMAND
-                    };
-                    CommandTip::of(command)
-                });
+                let tip = Signal::derive(move || CommandTip::of(pin_command(member, titled.get())));
                 let icon = Signal::derive(move || {
                     if icon.get() == Some(member) {
                         icondata::MdiPinOff

@@ -785,6 +785,18 @@ pub const COMMANDS: &[Command] = &[
     UNPIN_COMMAND,
 ];
 
+/// The command the pin of `member` runs while `pinned` is the pinned participant: unpin
+/// the pinned one, pin any other. A pin acts on one participant, so it runs no verb of the
+/// palette, and the launcher reads it here (`ARCH-018`).
+#[must_use]
+pub fn pin_command(member: Id<User>, pinned: Option<Id<User>>) -> &'static Command {
+    if pinned == Some(member) {
+        &UNPIN_COMMAND
+    } else {
+        &PIN_COMMAND
+    }
+}
+
 /// The command of `verb`, whose description the icon of the verb reads for its tooltip
 /// (`MURMURE-730`).
 #[must_use]
