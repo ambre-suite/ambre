@@ -375,6 +375,18 @@ mod tests {
             .filter(|c| matches!(c, SyncCommand::FetchChannelCalls))
             .count();
         assert_eq!(fetched, 1, "the watch asks for the live calls once");
+        // A listing after a reconnect starts no watch, so it asks for no live call.
+        list(&mut state, &[(channel, meta)]);
+        answer(
+            &mut state,
+            &[(channel, segment, ChannelDocumentKind::Segment)],
+        );
+        assert!(
+            !drain(&sync)
+                .iter()
+                .any(|c| matches!(c, SyncCommand::FetchChannelCalls)),
+            "a listing that watches nothing new asks nothing"
+        );
 
         let shown = Id::<Channel>::mint();
         let held = ChannelState::create(

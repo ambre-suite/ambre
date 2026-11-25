@@ -275,6 +275,8 @@ asks for each live call of each held channel at the same interval.
 A channel never opened shows its live call too (`MURMURE-691`). The ring cue of its call message
 names the call, and the end cue takes it away. Once per listing, the relay names each live call
 that started before the watch (`CALL-162`). The tick then asks for that call as for a held one.
+Only a listing that starts a watch asks: the boot of a page, or a channel the user joined since.
+A reconnect starts none, so a restart of the relay sends no burst of asks.
 
 `ZK-024` holds for each such ask: the relay learns the session, the call, the channel and the
 instant, and stores none of it. An ask for a channel the view does not show tells it no more.
