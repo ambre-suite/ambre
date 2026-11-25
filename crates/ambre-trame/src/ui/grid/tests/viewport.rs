@@ -4,9 +4,10 @@
 use super::super::{COL_WIDTH, PADDING_COLS, PADDING_ROWS, ROW_HEIGHT};
 use super::*;
 use crate::TrameCommand;
+use ambre_client_core::cover::Clearance;
 use ambre_core::Flag as _;
 use ambre_core::index::{Delta, Len, Pos};
-use ambre_core::{Px, Surface};
+use ambre_core::{Css, Px, Surface};
 
 /// A cell at `(row, col)`, hidden by the filter when `filtered`.
 fn cell(row: u32, col: u32, filtered: crate::message::RowFilter) -> DisplayCell {
@@ -343,7 +344,7 @@ fn a_zoom_to_the_selection_shows_it_whole_and_keeps_it() {
         grid.select(at(from.0, from.1));
         grid.select_extend(at(to.0, to.1));
         let selection = grid.selection.clone();
-        grid.zoom_to_selection();
+        grid.zoom_to_selection(Clearance::default());
         assert_eq!(grid.selection, selection, "the selection stays");
         let range = TrameUiState::ZOOM_RANGE;
         assert!(grid.zoom >= range.floor() && grid.zoom <= range.ceiling());
@@ -363,6 +364,68 @@ fn a_zoom_to_the_selection_shows_it_whole_and_keeps_it() {
     }
 }
 
+/// `ZOOM-011`: a zoom to the selection lands it whole inside the part of
+/// the canvas that the floating surfaces leave clear. The phone sheet takes
+/// the bottom strip, and the call bubble may take any edge.
+#[test]
+fn a_fit_lands_clear_of_the_floating_surfaces() {
+    let strips = |left: f32, top: f32, right: f32, bottom: f32| Clearance {
+        left: Px::<Css>::new(left),
+        top: Px::<Css>::new(top),
+        right: Px::<Css>::new(right),
+        bottom: Px::<Css>::new(bottom),
+    };
+    let phone = (390.0, 700.0);
+    let laptop_size = (1200.0, 700.0);
+    let mut checked = 0;
+    for (size, clear) in [
+        (phone, strips(0.0, 0.0, 0.0, 320.0)),
+        (laptop_size, strips(0.0, 0.0, 0.0, 0.0)),
+        (laptop_size, strips(0.0, 0.0, 0.0, 280.0)),
+        (laptop_size, strips(0.0, 0.0, 300.0, 0.0)),
+        (laptop_size, strips(260.0, 0.0, 0.0, 0.0)),
+        (laptop_size, strips(0.0, 180.0, 0.0, 0.0)),
+        (laptop_size, strips(230.0, 150.0, 0.0, 0.0)),
+    ] {
+        for (from, to) in [
+            ((40, 9), (44, 11)),
+            ((100, 20), (102, 21)),
+            ((60, 6), (90, 14)),
+        ] {
+            let mut grid =
+                TrameUiState::new(Px::<Surface>::new(size.0), Px::<Surface>::new(size.1));
+            grid.select(at(from.0, from.1));
+            grid.select_extend(at(to.0, to.1));
+            let selection = grid.selection.clone();
+            grid.zoom_to_selection(clear);
+            assert_eq!(grid.selection, selection, "the selection stays");
+            if grid.zoom == TrameUiState::ZOOM_RANGE.floor() {
+                continue;
+            }
+            let first = grid.cell_pixel_rect(at(from.0, from.1)).expect("on screen");
+            let last = grid.cell_pixel_rect(at(to.0, to.1)).expect("on screen");
+            let eps = 1e-6;
+            let room = (
+                f64::from(clear.left.get()),
+                f64::from(clear.top.get()),
+                size.0 - f64::from(clear.right.get()),
+                size.1 - f64::from(clear.bottom.get()),
+            );
+            assert!(
+                first.x0 >= room.0 - eps
+                    && first.y0 >= room.1 - eps
+                    && last.x1 <= room.2 + eps
+                    && last.y1 <= room.3 + eps,
+                "{from:?}..{to:?} lands in {room:?}: {first:?} {last:?} at {:?}",
+                grid.zoom
+            );
+            checked += 1;
+        }
+    }
+    // The floor exempts a case, so the cases checked must cover most.
+    assert!(checked >= 18, "{checked} cases checked");
+}
+
 /// `ZOOM-007`: a range larger than the floor can show stops at the floor,
 /// and one cell stops at the ceiling.
 #[test]
@@ -370,10 +433,10 @@ fn a_zoom_to_the_selection_clamps_to_the_grid_range() {
     let mut grid = laptop();
     grid.select(at(0, 0));
     grid.select_extend(at(5000, 200));
-    grid.zoom_to_selection();
+    grid.zoom_to_selection(Clearance::default());
     assert_eq!(grid.zoom, TrameUiState::ZOOM_RANGE.floor());
     let mut grid = laptop();
     grid.select(at(3, 3));
-    grid.zoom_to_selection();
+    grid.zoom_to_selection(Clearance::default());
     assert_eq!(grid.zoom, TrameUiState::ZOOM_RANGE.ceiling());
 }

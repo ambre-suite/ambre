@@ -183,7 +183,7 @@ impl ProseState {
         focus: (BlockId, Pos<DocChar>),
     ) -> ProseOutcome {
         let mut fold = MarkFold::default();
-        for (block, span) in self.selected_spans(anchor, focus) {
+        for (block, span) in self.block_spans(anchor, focus) {
             fold.take_block(
                 &self.paragraph_style_of(&block),
                 self.paragraph_kind_of(&block),
@@ -312,6 +312,24 @@ impl ProseState {
             }
         }
         self.commit_with(self.links_touched(None))
+    }
+
+    /// The spans of the blocks a block property reaches, in document order.
+    ///
+    /// A selection that ends at the start of a block selects no character of
+    /// it, so that block is left out. A selection with no character at all
+    /// keeps the block of its caret.
+    pub(super) fn block_spans(
+        &self,
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+    ) -> Vec<(BlockId, Span<DocChar>)> {
+        let spans = self.selected_spans(anchor, focus);
+        let any_text = spans.iter().any(|(_, span)| !span.is_empty());
+        spans
+            .into_iter()
+            .filter(|(_, span)| !any_text || !span.is_empty())
+            .collect()
     }
 
     pub(super) fn selected_spans(

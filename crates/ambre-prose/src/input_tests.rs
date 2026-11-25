@@ -3323,8 +3323,8 @@ fn each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item() {
             rig.input(ProseInput::Copy(ClipboardWrite::Cut));
             rig.deliver();
         } else if id == PASTE || id == PASTE_PLAIN {
-            // At a caret: a paste over a selection takes the selection out
-            // first, as a step of its own.
+            // At a caret: `a_paste_over_a_selection_is_one_undo_item` holds
+            // the paste over a selection (`CHROME-184`).
             rig.ui.cursor = Some(CursorPosition {
                 block_id: block,
                 offset: Pos::<DocChar>::new(5),
@@ -3370,6 +3370,109 @@ fn each_command_the_view_runs_keeps_the_zoom_and_is_one_undo_item() {
     );
 }
 
+/// `CHROME-184`: a paste over a text selection leaves as one command, and one
+/// undo takes back the paste and the text it replaced. Four forms of paste
+/// run: one plain line, several lines, an HTML half and this application's
+/// own bytes. Each runs over a selection in one block and across two.
+#[test]
+fn a_paste_over_a_selection_is_one_undo_item() {
+    // An undone block creation hides the block in the tree (`PROSE-134`).
+    // The oracle so reads the live blocks: identity, type, text and marks.
+    let live = |rig: &Rig| -> Vec<_> {
+        rig.logic
+            .root_blocks()
+            .into_iter()
+            .map(|block| {
+                (
+                    block,
+                    rig.logic.block_type_of(&block),
+                    rig.logic.marks_of(&block),
+                )
+            })
+            .collect()
+    };
+    enum Over {
+        OneBlock,
+        TwoBlocks,
+    }
+    let plain = |text: &str| ProseInput::Paste {
+        text: text.to_owned(),
+        html: None,
+        rich: None,
+    };
+    for over in [Over::OneBlock, Over::TwoBlocks] {
+        let own = {
+            let mut source = Rig::new(&["copied"]);
+            let block = source.blocks()[0];
+            let copied = source.logic.handle_command(ProseCommand::CopyRange {
+                anchor: (block, Pos::<DocChar>::ZERO),
+                focus: (block, Pos::<DocChar>::new(6)),
+            });
+            let Some(ProseEvent::Clipboard { payload, .. }) = copied.display.into_iter().next()
+            else {
+                panic!("a copy answers with the clipboard");
+            };
+            ProseInput::Paste {
+                text: "copied".to_owned(),
+                html: None,
+                rich: Some(payload),
+            }
+        };
+        let html = ProseInput::Paste {
+            text: "pasted".to_owned(),
+            html: Some("<b>pasted</b>".to_owned()),
+            rich: None,
+        };
+        for (name, paste) in [
+            ("one line", plain("pasted")),
+            ("lines", plain("one\ntwo")),
+            ("html", html),
+            ("own bytes", own),
+        ] {
+            let mut rig = Rig::new(&["hello world", "second"]);
+            let blocks = rig.blocks();
+            match over {
+                Over::OneBlock => rig.select(blocks[0], 0, 5),
+                Over::TwoBlocks => {
+                    rig.ui.cursor = Some(CursorPosition {
+                        block_id: blocks[1],
+                        offset: Pos::<DocChar>::new(3),
+                        anchor: Some((blocks[0], Pos::<DocChar>::new(6))),
+                    });
+                }
+            }
+            let before = live(&rig);
+            rig.input(paste);
+            let [command @ ProseCommand::Paste { over: Some(_), .. }] = &rig.sent[..] else {
+                panic!(
+                    "{name}: a paste over a selection is one command: {:?}",
+                    rig.sent
+                );
+            };
+            // The HTML half waits on the markup module, as the Logic
+            // dispatcher runs it.
+            let outcome = rig.logic.handle_converted_in_family(command.clone());
+            rig.outbox.clear();
+            for event in &outcome.display {
+                rig.ui.apply_event(event);
+            }
+            rig.lay();
+            let text = rig.logic.text_of(&blocks[0]).unwrap_or_default();
+            match over {
+                Over::OneBlock => assert!(!text.contains("hello"), "{name}: {text:?}"),
+                Over::TwoBlocks => assert!(!text.contains("world"), "{name}: {text:?}"),
+            }
+            assert_ne!(live(&rig), before, "{name} writes");
+            rig.logic.handle_command(ProseCommand::Undo);
+            assert_eq!(
+                live(&rig),
+                before,
+                "{name}: one undo takes back the paste and the text it replaced"
+            );
+        }
+    }
+}
+
 /// `CHROME-174`: an import writes once its file is read, on the Logic
 /// thread. The view takes every event of the import and keeps its zoom.
 #[test]
@@ -3398,8 +3501,66 @@ fn an_import_keeps_the_zoom() {
     assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
 }
 
-/// `PROSE-UI-265`: each write of the context panel leaves as one command
-/// over the selection the view holds. One undo takes it back, whatever the
+/// `PROSE-UI-274`: the suggestion-mode command turns the mode on, then off.
+/// A control, the chord and the palette each hand the intent of
+/// `review_intent`. The view asks for the mode the Logic thread did not
+/// last report.
+#[test]
+fn the_suggestion_mode_command_turns_the_mode_on_then_off() {
+    use crate::events::EditMode;
+    use crate::view::annotate::{AnnotationIntent, review_intent};
+    let mut rig = Rig::new(&["one"]);
+    rig.logic
+        .set_user_id(ambre_core::id::Id::<ambre_core::id::User>::mint());
+    assert_eq!(rig.ui.edit_mode, EditMode::Editing);
+    for expected in [EditMode::Suggesting, EditMode::Editing] {
+        let intent = review_intent(crate::commands::SUGGEST_CHANGES, None);
+        assert_eq!(intent, Some(AnnotationIntent::ToggleSuggesting));
+        let command = rig
+            .ui
+            .take_intent(AnnotationIntent::ToggleSuggesting, Instant::new(0))
+            .expect("the toggle asks for a mode");
+        assert_eq!(
+            command,
+            ProseCommand::EnableTrackChanges { mode: expected },
+            "the other mode than the one reported"
+        );
+        rig.take_sent(vec![command]);
+        rig.deliver();
+        assert_eq!(
+            rig.ui.edit_mode, expected,
+            "the view reads the reported mode"
+        );
+        assert_eq!(rig.logic.is_suggesting(), expected == EditMode::Suggesting);
+    }
+}
+
+/// `CHROME-254`: text, a table and a separator of the creation bar each
+/// land after the block the caret sits in, and need no selection. With no
+/// caret, the bar inserts nothing.
+#[test]
+fn each_insert_of_the_creation_bar_lands_after_the_caret_block() {
+    use crate::commands::{INSERT_SEPARATOR, INSERT_TABLE, INSERT_TEXT};
+    use crate::events::BlockType;
+    for (id, kind) in [
+        (INSERT_TEXT, BlockType::Paragraph),
+        (INSERT_TABLE, BlockType::Table),
+        (INSERT_SEPARATOR, BlockType::HRule),
+    ] {
+        let mut rig = Rig::new(&["first", "last"]);
+        assert_eq!(rig.format(id), None, "{id:?} with no caret");
+        let first = rig.blocks()[0];
+        caret_at(&mut rig, first, 2);
+        assert!(rig.format(id).is_some(), "{id:?}");
+        let blocks = rig.blocks();
+        assert_eq!(blocks.len(), 3, "{id:?}");
+        assert_eq!(blocks.first(), Some(&first));
+        assert_eq!(rig.logic.block_type_of(&blocks[1]), Some(kind), "{id:?}");
+    }
+}
+
+/// `PROSE-UI-265`, `PROSE-UI-267`: each write of the context panel leaves
+/// as one command over the selection the view holds. One undo takes it back, whatever the
 /// number of blocks. A default font needs no selection.
 #[test]
 fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
@@ -3436,6 +3597,7 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
         TextWrite::Kind(crate::message::ParagraphKind::Heading(
             crate::message::HeadingLevel::H2,
         )),
+        TextWrite::Indent(crate::message::IndentStep::In),
         default_font,
     ];
     // What a write may change, block by block, and the document defaults.
@@ -3455,7 +3617,8 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
         let command = rig.ui.text_write(write.clone()).expect("one command");
         if let ProseCommand::MarkSelection { anchor, focus, .. }
         | ProseCommand::SetSelectionParagraph { anchor, focus, .. }
-        | ProseCommand::SetSelectionKind { anchor, focus, .. } = &command
+        | ProseCommand::SetSelectionKind { anchor, focus, .. }
+        | ProseCommand::IndentSelection { anchor, focus, .. } = &command
         {
             assert_eq!(*anchor, (first, Pos::<DocChar>::new(2)), "{write:?}");
             assert_eq!(*focus, (second, Pos::<DocChar>::new(6)), "{write:?}");

@@ -12,7 +12,7 @@ use ambre_core::{Categories, Commands, Icons, StaticKey};
 use crate::mark::MarkRoot;
 
 /// Taking the document out as a file.
-const FILE: StaticKey<Categories> = StaticKey::<Categories>::new("file");
+const FILE: StaticKey<Categories> = ambre_commands::shared::FILE;
 /// Inline formatting: the format bar and its chords.
 const FORMAT: StaticKey<Categories> = StaticKey::<Categories>::new("format");
 /// Moving text through the system clipboard.
@@ -21,6 +21,20 @@ const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 /// Stepping through the local history.
 const HISTORY: StaticKey<Categories> = StaticKey::<Categories>::new("history");
+/// Adding a new object to the page, such as a picture.
+const INSERT: StaticKey<Categories> = ambre_commands::shared::INSERT;
+/// Ruling on the suggestions of a review.
+const REVIEW: StaticKey<Categories> = StaticKey::<Categories>::new("review");
+
+/// Accept the suggestion at the caret (`PROSE-UI-273`).
+pub const ACCEPT_SUGGESTION: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.review.accept");
+/// Reject the suggestion at the caret (`PROSE-UI-273`).
+pub const REJECT_SUGGESTION: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.review.reject");
+/// Turn suggestion mode on when it is off, and off when it is on
+/// (`PROSE-UI-274`).
+pub const SUGGEST_CHANGES: StaticKey<Commands> = StaticKey::<Commands>::new("prose.review.suggest");
 
 /// Undo this peer's last change (`UNDO-001`).
 pub const UNDO: StaticKey<Commands> = StaticKey::<Commands>::new("prose.history.undo");
@@ -84,6 +98,14 @@ pub const EXPORT_HTML_REVIEWED: StaticKey<Commands> =
 /// Put a picture from a file after the block the caret sits in
 /// (`PROSE-FEAT-316`).
 pub const INSERT_PICTURE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.picture");
+
+/// Put a paragraph of text after the block the caret sits in (`CHROME-180`).
+pub const INSERT_TEXT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.text");
+/// Put a table after the block the caret sits in (`CHROME-180`).
+pub const INSERT_TABLE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.table");
+/// Put a separator after the block the caret sits in (`CHROME-180`).
+pub const INSERT_SEPARATOR: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.insert.separator");
 
 /// Take the document out as a PDF of the pages the screen shows
 /// (`PROSE-IO-033`).
@@ -173,6 +195,14 @@ pub fn mark_key(id: StaticKey<Commands>) -> Option<MarkRoot> {
         .map(|(_, key)| *key)
 }
 
+/// Whether `id` formats the selection: a mark, or clearing every mark. The
+/// view drains such an id from the one signal a control, a chord and a menu
+/// entry each set (`PROSE-UI-056`, `CHROME-214`).
+#[must_use]
+pub fn formats_selection(id: StaticKey<Commands>) -> bool {
+    id == CLEAR_FORMATTING || mark_key(id).is_some()
+}
+
 fn superscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Superscript")
 }
@@ -229,6 +259,18 @@ fn paste_plain_title(_: &Locale) -> ambre_core::Validated<ambre_commands::Comman
     ambre_core::Validated::new("Paste as plain text")
 }
 
+fn accept_suggestion_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Accept the suggestion")
+}
+
+fn reject_suggestion_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Reject the suggestion")
+}
+
+fn suggest_changes_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Suggest changes")
+}
+
 fn undo_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Undo")
 }
@@ -277,6 +319,18 @@ fn insert_picture_title(_: &Locale) -> ambre_core::Validated<ambre_commands::Com
     ambre_core::Validated::new("Insert a picture")
 }
 
+fn insert_text_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Insert text")
+}
+
+fn insert_table_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Insert a table")
+}
+
+fn insert_separator_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Insert a separator")
+}
+
 fn import_html_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Import an HTML document")
 }
@@ -309,6 +363,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::B)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: ITALIC,
@@ -317,6 +372,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::I)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: UNDERLINE,
@@ -325,6 +381,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::U)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: STRIKETHROUGH,
@@ -333,6 +390,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary_shift(KeyChar::X)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: CODE,
@@ -341,6 +399,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::E)],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SUPERSCRIPT,
@@ -349,6 +408,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SUBSCRIPT,
@@ -357,6 +417,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: CLEAR_FORMATTING,
@@ -365,6 +426,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::new('\\'))],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: LINK,
@@ -373,6 +435,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: COMMENT,
@@ -381,6 +444,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FORMAT,
         home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: SAVE_FILE,
@@ -389,6 +453,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_MARKDOWN,
@@ -397,6 +462,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_MARKDOWN,
@@ -405,6 +471,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_WORD,
@@ -413,6 +480,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_WORD,
@@ -421,6 +489,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_WORD_REVIEWED,
@@ -429,6 +498,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_ODT,
@@ -437,6 +507,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_ODT,
@@ -445,6 +516,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_ODT_REVIEWED,
@@ -453,6 +525,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: IMPORT_HTML,
@@ -461,6 +534,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_HTML,
@@ -469,6 +543,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: EXPORT_HTML_REVIEWED,
@@ -477,14 +552,43 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
+    },
+    Command {
+        id: INSERT_TEXT,
+        title: insert_text_title,
+        icon: Some(StaticKey::<Icons>::new("format-text")),
+        keybindings: &[],
+        category: INSERT,
+        home: Home::CreationBar,
+        description: None,
     },
     Command {
         id: INSERT_PICTURE,
         title: insert_picture_title,
-        icon: Some(StaticKey::<Icons>::new("file-import-outline")),
+        icon: Some(StaticKey::<Icons>::new("image-outline")),
         keybindings: &[],
-        category: FILE,
+        category: INSERT,
         home: Home::CreationBar,
+        description: None,
+    },
+    Command {
+        id: INSERT_TABLE,
+        title: insert_table_title,
+        icon: Some(StaticKey::<Icons>::new("table-plus")),
+        keybindings: &[],
+        category: INSERT,
+        home: Home::CreationBar,
+        description: None,
+    },
+    Command {
+        id: INSERT_SEPARATOR,
+        title: insert_separator_title,
+        icon: Some(StaticKey::<Icons>::new("border-horizontal")),
+        keybindings: &[],
+        category: INSERT,
+        home: Home::CreationBar,
+        description: None,
     },
     Command {
         id: EXPORT_PDF,
@@ -493,6 +597,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[],
         category: FILE,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: CUT,
@@ -501,6 +606,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::CUT_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: COPY,
@@ -509,6 +615,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::COPY_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: PASTE,
@@ -517,6 +624,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::PASTE_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
     },
     Command {
         id: PASTE_PLAIN,
@@ -525,6 +633,35 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::PASTE_PLAIN_CHORDS,
         category: CLIPBOARD,
         home: Home::ContextMenu,
+        description: None,
+    },
+    Command {
+        id: ACCEPT_SUGGESTION,
+        title: accept_suggestion_title,
+        icon: None,
+        keybindings: &[],
+        category: REVIEW,
+        home: Home::ContextPanel,
+        description: None,
+    },
+    Command {
+        id: REJECT_SUGGESTION,
+        title: reject_suggestion_title,
+        icon: None,
+        keybindings: &[],
+        category: REVIEW,
+        home: Home::ContextPanel,
+        description: None,
+    },
+    Command {
+        id: SUGGEST_CHANGES,
+        title: suggest_changes_title,
+        icon: Some(StaticKey::<Icons>::new("file-document-edit-outline")),
+        // The chord Word gives the same mode, so a reviewer's hand knows it.
+        keybindings: &[KeyBinding::primary_shift(KeyChar::E)],
+        category: REVIEW,
+        home: Home::ContextPanel,
+        description: None,
     },
     Command {
         id: UNDO,
@@ -533,6 +670,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::UNDO_CHORDS,
         category: HISTORY,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: REDO,
@@ -541,6 +679,7 @@ pub const COMMANDS: &[Command] = &[
         keybindings: ambre_commands::shared::REDO_CHORDS,
         category: HISTORY,
         home: Home::AmbreMenu,
+        description: None,
     },
     Command {
         id: PALETTE,
@@ -549,12 +688,17 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
         home: Home::AmbreMenu,
+        description: None,
     },
 ];
 
 /// Bind the chords the shell routes for Prose.
 pub fn bind_keys(keymap: &mut Keymap) {
-    for id in FORMAT_BAR.map(|(id, _)| id).into_iter().chain([PALETTE]) {
+    for id in FORMAT_BAR
+        .map(|(id, _)| id)
+        .into_iter()
+        .chain([PALETTE, SUGGEST_CHANGES])
+    {
         if let Some(chord) = ambre_commands::find(COMMANDS, id).and_then(Command::chord) {
             keymap.bind(chord, id);
         }
@@ -592,6 +736,9 @@ mod tests {
             EXPORT_HTML_REVIEWED,
             EXPORT_PDF,
             INSERT_PICTURE,
+            INSERT_TEXT,
+            INSERT_TABLE,
+            INSERT_SEPARATOR,
         ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");
@@ -637,5 +784,35 @@ mod tests {
                 assert_eq!(keymap.resolve(*chord), None);
             }
         }
+    }
+    /// `CHROME-214`: every entry of the context menu past the clipboard
+    /// formats the selection, so the handler hands it to the view. An entry
+    /// that formats nothing would close the menu and change nothing.
+    #[test]
+    fn every_menu_entry_past_the_clipboard_formats_the_selection() {
+        for id in CONTEXT_MENU {
+            assert!(
+                MENU_CLIPBOARD.contains(&id) || formats_selection(id),
+                "{id:?} reaches nothing"
+            );
+        }
+        assert!(!formats_selection(PALETTE));
+        assert!(!formats_selection(CUT));
+    }
+
+    /// `PROSE-UI-276`: the suggestion-mode command is declared once, and its
+    /// chord resolves to it, so a control, the chord and the palette run one
+    /// id.
+    #[test]
+    fn the_suggestion_mode_command_is_declared_once_and_its_chord_resolves_to_it() {
+        let declared = COMMANDS.iter().filter(|c| c.id == SUGGEST_CHANGES).count();
+        assert_eq!(declared, 1);
+        let mut keymap = Keymap::new();
+        bind_keys(&mut keymap);
+        assert_eq!(
+            keymap.resolve(KeyBinding::primary_shift(KeyChar::E)),
+            Some(SUGGEST_CHANGES)
+        );
+        assert!(!formats_selection(SUGGEST_CHANGES));
     }
 }

@@ -49,6 +49,9 @@ thread_local! {
     /// How much of the channel region the call takes, which the fill button sets.
     static FILL: ArcRwSignal<Fill> = ArcRwSignal::new(Fill::Band);
     /// Whether the header shows the list of the participants (the Murmure calls spec, section 3, the video region).
+    /// Whether the header shows the panel of the devices (the Murmure calls spec, section 3, the devices).
+    static DEVICES: ArcRwSignal<ambre_chrome::Openness> =
+        ArcRwSignal::new(ambre_chrome::Openness::Closed);
     static ROSTER: ArcRwSignal<ambre_chrome::Openness> =
         ArcRwSignal::new(ambre_chrome::Openness::Closed);
     /// The page of the grid the member turned to (the Murmure calls spec, the video region).
@@ -106,6 +109,11 @@ pub(crate) fn toggle_fill() {
 /// Whether the header shows the list of the participants of the call.
 pub(crate) fn roster() -> ArcRwSignal<ambre_chrome::Openness> {
     ROSTER.with(ArcRwSignal::clone)
+}
+
+/// Whether the header shows the panel of the devices, for the devices button and the palette.
+pub(crate) fn devices() -> ArcRwSignal<ambre_chrome::Openness> {
+    DEVICES.with(ArcRwSignal::clone)
 }
 
 /// The page of the grid the member turned to, for the page buttons of the header.

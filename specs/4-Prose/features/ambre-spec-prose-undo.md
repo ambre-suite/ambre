@@ -53,7 +53,8 @@ The caret moves there (`PROSE-UI-045`), and an open selection collapses to it
 (`PROSE-UI-073`). Both are view state, and neither is written back (`PROSE-UI-074`).
 
 **What is one undo item.** A replace-all is one (`ambre-spec-find.md`, `FIND-006`;
-`features/ambre-spec-prose-find-replace.md`); everything else is section 5.
+`features/ambre-spec-prose-find-replace.md`). A paste over a selection is one (`ambre-spec-shell.md`,
+`CHROME-184`). Everything else is section 5.
 
 **The block an undo puts back.** An undo of a deletion clears the hidden marker on the same
 node (`PROSE-133`). An undo of an insertion writes that marker, and its redo clears it on the same
@@ -94,11 +95,11 @@ document. Prose's own, all of them design:
 
 The shared gaps are in `ambre-spec-undo.md section 6`. Prose's own:
 
-* **What merges into one undo item is undecided, and something already depends on it.** The
-  selection-delete and the insertion that replaces it are sent as two commands and named as one
-  step nowhere. The track-changes grouping window declares itself "aligned with the undo merge
-  interval" (`features/ambre-spec-prose-track-changes.md`), an interval no document defines. One
-  rule is written today, and it is replace-all.
+* **What merges into one undo item is undecided, and something already depends on it.** Typing
+  over a selection sends the selection-delete and the insertion as two commands, and no rule
+  names them one step. The track-changes grouping window declares itself "aligned with the undo
+  merge interval" (`features/ambre-spec-prose-track-changes.md`), an interval no document
+  defines. Two rules are written today: replace-all, and a paste over a selection.
 * **Nothing rules on the redo history after a new edit.** Whether typing after an undo drops what
   was undone is the behaviour users meet first, and no rule states it.
 * **Nothing rules on undoing an edit whose text a peer has deleted.** The history leaves such a

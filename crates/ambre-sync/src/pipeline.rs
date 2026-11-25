@@ -994,6 +994,7 @@ impl SnapshotDraft {
                 covered_seq: self.public_data.covered_seq,
                 author: &self.public_data.pub_key,
                 blob: &blob,
+                head: None,
             },
         )
     }
@@ -1032,6 +1033,8 @@ pub struct BlobConfirmation {
     pub signature: FixedBytes<Signature>,
     /// The digest of the blob the confirmer checked.
     pub blob: FixedBytes<ambre_core::SnapshotDigest>,
+    /// The log head the transcript names, if any (`AUTHOR-038`).
+    pub head: Option<ambre_protocol::LogHead>,
 }
 
 /// Signs the confirmation of `confirmed` under `signing_key`.
@@ -1043,6 +1046,7 @@ pub fn sign_confirmation(
     BlobConfirmation {
         signature: ambre_crypto::signature::sign_message(signing_key, &transcript),
         blob: *confirmed.blob,
+        head: confirmed.head,
     }
 }
 

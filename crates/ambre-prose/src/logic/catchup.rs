@@ -265,6 +265,29 @@ impl ProseState {
                 sync.predicting = Prediction::Barrier;
                 command
             }
+            // A paste over a selection takes the place of the deletion the
+            // view sent before it, so its range moves as that deletion did.
+            // A paste at a caret passes as it came.
+            ProseCommand::Paste {
+                at,
+                over: Some(over),
+                text,
+                html,
+                payload,
+            } => {
+                let (start, end) = if at.0 == over.0 && over.1 < at.1 {
+                    (over, at)
+                } else {
+                    (at, over)
+                };
+                ProseCommand::Paste {
+                    at: (start.0, sync.position(start.1, start.0)),
+                    over: Some((end.0, sync.end(end.1, end.0))),
+                    text,
+                    html,
+                    payload,
+                }
+            }
             // A range the view does not draw: its ends move through what the
             // view had not seen. Text typed at its end stays outside it
             // (`PROSE-UI-185`).
@@ -342,6 +365,18 @@ impl ProseState {
                     anchor,
                     focus,
                     kind,
+                }
+            }
+            ProseCommand::IndentSelection {
+                anchor,
+                focus,
+                step,
+            } => {
+                let (anchor, focus) = sync.selection(anchor, focus);
+                ProseCommand::IndentSelection {
+                    anchor,
+                    focus,
+                    step,
                 }
             }
             ProseCommand::ReadMarks { anchor, focus } => {

@@ -87,12 +87,32 @@ impl SpaceState {
         payloads: &[LoroPayloadRef<'_>],
     ) -> Result<Self, MurmureError> {
         let doc = schema::admit_space(payloads, space_id)?;
-        Ok(Self {
+        Ok(Self::opened(space_id, doc))
+    }
+
+    /// [`SpaceState::open`] from what an opening kept. A signed delta under a
+    /// PeerID another session registered is left out (`AUTHOR-037`).
+    ///
+    /// # Errors
+    /// As [`SpaceState::open`].
+    pub(crate) fn open_kept(
+        space_id: Id<Space>,
+        kept: &[crate::logic::delta::Kept],
+    ) -> Result<Self, MurmureError> {
+        let document_id = space_id.document_id();
+        let doc = schema::admit_space_with(space_id, |doc| {
+            crate::logic::delta::import_kept(doc, kept, document_id)
+        })?;
+        Ok(Self::opened(space_id, doc))
+    }
+
+    fn opened(space_id: Id<Space>, doc: LoroDoc) -> Self {
+        Self {
             space_id,
             doc,
             session: None,
             created: None,
-        })
+        }
     }
 
     /// Write the document under the PeerID the Sync worker issued for this

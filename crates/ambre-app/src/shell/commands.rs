@@ -201,6 +201,12 @@ impl CommandPath {
                 read_clipboard(self.clipboard_paste.clone(), self.toasts, form);
             }
             ShellAction::JoinCall { call, channel } => crate::call::join(call, channel),
+            ShellAction::Call(verb) => {
+                // The call verbs are Murmure's: no other application declares their commands.
+                if let Some(murmure) = self.handler.murmure() {
+                    super::call_bar::run(verb, murmure.relay);
+                }
+            }
             ShellAction::RefreshDocuments => {
                 self.to_logic.send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),

@@ -46,12 +46,18 @@ mod style;
 pub use commands::{
     BOLD, CLEAR_FILTER, COMMANDS, COPY, CUT, CtxScope, DELETE_COLS, DELETE_ROWS, DOC_TYPE,
     EXPORT_CSV, FILTER_COLUMN, FIND, IMPORT_CSV, INSERT_COL_LEFT, INSERT_COL_RIGHT,
-    INSERT_ROW_ABOVE, INSERT_ROW_BELOW, ITALIC, MERGE, MenuScope, PALETTE, PASTE, REDO, REPLACE,
-    SAVE_FILE, SAVE_SEALED_FILE, SORT_RANGE_ASC, SORT_RANGE_DESC, SORT_RANGE_MULTI, SORT_SHEET_ASC,
-    SORT_SHEET_DESC, UNDO, UNMERGE, ZOOM_TO_SELECTION, bind_keys, command_to_app, context_entries,
-    context_entries_for, init_command_states, mirror_event, new_doc_label, notify_event,
-    status_label,
+    INSERT_FUNCTION, INSERT_ROW_ABOVE, INSERT_ROW_BELOW, ITALIC, MERGE, MenuScope, PALETTE, PASTE,
+    REDO, REPLACE, SAVE_FILE, SAVE_SEALED_FILE, SORT_RANGE_ASC, SORT_RANGE_DESC, SORT_RANGE_MULTI,
+    SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO, UNMERGE, ZOOM_TO_SELECTION, bind_keys, command_to_app,
+    context_entries, context_entries_for, init_command_states, mirror_event, new_doc_label,
+    notify_event, status_label,
 };
+/// The glyph a command of the sheet declares, resolved to its asset.
+#[must_use]
+pub fn icon_of(command: &ambre_chrome::commands::Command) -> Option<icondata::Icon> {
+    command.icon.and_then(icons::resolve)
+}
+
 pub use find_replace::{FindMode, FindPosition, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;
 pub use handler::TrameHandler;

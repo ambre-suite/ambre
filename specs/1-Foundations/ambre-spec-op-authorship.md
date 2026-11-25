@@ -48,7 +48,7 @@ prefix is `AUTHOR`, and it belongs to this document alone.
 | `AUTHOR-014` | `FRAME` | Refusing a delta MUST NOT change the document, its registry or its export cursor. | this spec section 3 | `ambre_logic::authorship_tests::a_delta_carrying_an_operation_not_its_signers_is_refused_whole` -- the document's version vector is unchanged, nothing is sent, and the next edit carries this session alone | none | verified |
 | `AUTHOR-032` | `FAIL` | Given a delta of a Trame, Toile or Prose document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; section 6 | `ambre_logic::authorship_tests::a_peer_id_another_session_registered_is_refused` -- a delta under Alice's PeerID with another nonce leaves the document as it was, live and in a replay; `::a_replay_keeps_a_peer_id_for_its_first_session` -- inside one replay, the first session keeps the PeerID and a free PeerID lands; `::an_entry_planted_by_another_peer_claims_nothing` -- an entry Mallory writes under Alice's PeerID does not refuse Alice | none | verified |
 | `AUTHOR-033` | `FAIL` | Given a delta of an open Murmure channel or space document whose PeerID carries a registry entry that the session of that PeerID wrote under another nonce, the client MUST refuse the whole delta before import. | this spec section 3, the margin of a PeerID; `AUTHOR-032` | `ambre_murmure::logic::authorship_tests::a_segment_delta_under_a_peer_id_another_session_registered_is_refused` -- a segment delta under Alice's PeerID with another nonce leaves every document as it was, and her own session writes on; `::a_meta_delta_under_a_peer_id_another_session_registered_is_refused` -- the name of `meta` stays hers; `ambre_logic::spaces::tests::a_space_delta_under_a_peer_id_another_session_registered_is_refused` -- the catalogue of an open space stays as it was | none | verified |
-| `AUTHOR-037` | `FAIL` | Given a delta of a channel `meta` or a space document that arrives before that document opens, under a PeerID whose registry entry another session wrote, the client MUST refuse it before import. | this spec section 6; `AUTHOR-033` | not built | unbuilt -- lands with the `A PeerID is never shared by two accounts` Story (`ambre-roadmap.md` MVP). An opening keeps these payloads as bytes, with no signer, and imports them whole once the document opens | unimplemented |
+| `AUTHOR-037` | `FAIL` | Given a delta of a channel `meta` or a space document that arrives before that document opens, under a PeerID whose registry entry another session wrote, the client MUST refuse it before import. | this spec section 3, the margin of a PeerID; `AUTHOR-033` | `ambre_murmure::logic::authorship_tests::a_meta_delta_before_the_open_under_a_peer_id_another_session_registered_is_refused` -- a `meta` delta under Alice's PeerID with another nonce, kept while the channel opens, leaves the name hers, and the same delta under her session lands; `ambre_logic::spaces::tests::a_space_delta_before_the_open_under_a_peer_id_another_session_registered_is_refused` -- such a space delta lists nothing once the space opens, and under her session it lists the channel; `ambre_logic::spaces::tests::a_replayed_space_delta_before_the_open_under_a_claimed_peer_id_is_refused` -- a replay that reaches an opening space is checked the same way | none | verified |
 
 ### 1.4 Open from a snapshot
 
@@ -65,6 +65,7 @@ Another member checks it against the signed deltas before anyone opens from it.
 | `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the relay refuses a report signed over another author, and acts on one signed over the right one; `ambre_protocol::snapshot_report::tests::the_transcript_names_the_document_the_snapshot_and_the_author` -- what is signed changes with each of the three | none | verified |
 | `AUTHOR-030` | `FAIL` | A client MUST adopt a snapshot whole only when it built it, or when another member signed a confirmation of the very blob it downloaded. | this spec section 3; `SRV-284`; audit `N31` | `ambre_sync::snapshot_trust::tests::a_snapshot_the_relay_alone_calls_confirmed_is_held_back` -- a snapshot the relay calls confirmed is held back under no signature, its author's, one over another horizon or one of a key the log never bound; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_for_the_blob_it_names_alone` -- a genuine confirmation served beside another blob under the same identifier and horizon trusts nothing, and the blob it names is adopted; `ambre_sync::snapshot_trust::tests::the_reference_is_the_start_only_under_its_signed_confirmation` -- the reference is the start only under its signed confirmation, and the first delta otherwise; `ambre_sync::updates::tests::a_start_blob_signed_by_another_author_is_refused` -- the blob adopted must verify under the author the confirmation names; `ambre_sync::membership_log::tests::an_anchored_log_grants_confirmation_to_its_members_alone` -- the keys an anchored log grants | none | verified |
 | `AUTHOR-031` | `POST` | A confirmation MUST be signed by its confirmer over the document, the snapshot, the horizon, the author and the digest of the sealed blob it checked. | this spec section 3; `SRV-284` | `ambre_protocol::snapshot_confirm::tests::the_transcript_names_the_document_the_snapshot_the_horizon_the_author_and_the_blob` -- each of the five changes the bytes signed; `ambre_sync::updates::tests::a_checked_snapshot_is_confirmed_or_reported_to_the_relay` -- the confirmation posted verifies under the checker's key, over the horizon, the key the blob verified under and the digest of the blob checked, and the request carries that digest; `ambre_sync::snapshot_trust::tests::a_confirmation_holds_for_the_blob_it_names_alone` -- a genuine confirmation served with another blob under the same identifier and horizon is not adopted | none | verified |
+| `AUTHOR-038` | `POST` | Given a walk that readmits a writer, a confirmation MUST sign the head of that walk, and the relay MUST keep and serve that head with the signature. A client whose state holds a write its walk refuses MUST confirm nothing. | this spec section 3; `AUTHOR-031`, `SRV-284`; `ambre-spec-membership.md`, `SYNC-301`, `SYNC-317` | `ambre_protocol::snapshot_confirm::tests::a_confirmation_signs_the_head_it_names` -- the head signs under its own domain, another place or last entry changes the bytes, and no head keeps the bytes of version 2; `ambre_sync::updates::tests::a_confirmation_signs_the_head_of_a_walk_that_readmits` -- the confirmation names the head of the walk that readmits Bob and verifies over it, and a state holding his write of the exclusion confirms nothing; `ambre_sync::membership_log::tests::a_confirmed_head_past_the_grant_proves_a_fold_past_its_lifted_cap` -- a walk that readmits nobody names no head; `ambre_server::routes::tests::handler_tests::a_confirmation_keeps_the_log_head_its_confirmer_signed` -- a head the signature does not cover is refused, and the signed head is served with the signature, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `AUTHOR-034` | `FAIL` | Given a confirmation whose confirmer's key the snapshot's author bound to a member, and an author the log holds as no owner, a client MUST NOT adopt the snapshot whole on it. | this spec section 3; `AUTHOR-030` | `ambre_sync::membership_log::tests::a_confirmer_the_author_bound_does_not_count_for_that_author` -- the key of an account an editor invited counts for no snapshot of that editor, and still counts for another author; `ambre_sync::snapshot_trust::tests::a_confirmer_the_author_bound_does_not_make_a_snapshot_trusted` -- such a confirmation leaves the snapshot held back, and the same confirmer makes a snapshot of another author the start | none | verified |
 | `AUTHOR-035` | `FAIL` | Given a confirmation whose confirmer's key the log holds for no present member, a client MUST NOT adopt the snapshot whole on it. | this spec section 3; `AUTHOR-030` | `ambre_sync::membership_log::tests::a_removed_member_confirms_nothing` -- a member an owner revoked confirms no snapshot, and a present member does; `ambre_sync::snapshot_trust::tests::an_owner_snapshot_opens_under_a_confirmer_the_owner_invited` -- a confirmation by a key outside the present members leaves the snapshot held back | none | verified |
 | `AUTHOR-036` | `POST` | Given a confirmation of a snapshot whose author the log holds as a present owner, a client MUST count a present confirmer that owner bound. | this spec section 3; `AUTHOR-034` | `ambre_sync::membership_log::tests::an_owner_counts_the_confirmers_the_owner_invited` -- Bob, whom the owner invited, counts for her snapshot, and no longer once she is demoted to editor; `ambre_sync::snapshot_trust::tests::an_owner_snapshot_opens_under_a_confirmer_the_owner_invited` -- the open adopts such a snapshot whole | none | verified |
@@ -100,8 +101,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 36 `verified`, 1 `unimplemented`. Every delta is checked, and every row on it
-  holds by a test.
+* **Verification.** 38 `verified`. Every delta is checked, and every row on it holds by a test.
 
 ---
 
@@ -220,6 +220,13 @@ serves it with the snapshot (`SRV-284`). The relay sees every byte of the blob, 
 new. The digest binds the signature to one blob. A writer who seals a second blob under the same
 identifier and horizon carries no confirmation over to it (audit `W101`).
 
+**A confirmation signs a head where the walk readmits** (`AUTHOR-038`). A confirmer whose walk
+readmits a writer signs the head of that walk too, under a new domain. Its state took each delta of
+that writer under the head the delta signed, so the head dates what it vouches for. An open then
+admits a fold past the lifted cap (`ambre-spec-membership.md`, `SYNC-317`). A state that holds a
+write the walk refuses is read again, and confirms nothing. A confirmation with no head keeps the
+bytes of version 2, so no stored signature changes.
+
 **A cold open trusts a snapshot whole only under that signature** (`AUTHOR-030`, audit `N31`).
 The relay's word that a member confirmed a snapshot proves nothing. The open checks four things:
 
@@ -283,6 +290,10 @@ counts, so an entry another writer planted claims nothing. A collision search bu
 and no operation under the PeerID of another member. The relay cannot hold this check: the nonce
 and the PeerID ride sealed (`AUTHOR-010`).
 
+An open Murmure channel and an open space hold the check (`AUTHOR-033`). A `meta` or a space
+delta that arrives while its document opens keeps its signer. The open then checks each delta in
+arrival order, against the registry the payloads before it built (`AUTHOR-037`).
+
 **Code.**
 
 * `crates/ambre-crypto/src/peer.rs` -- the nonce, the derivation, the signed entry and its resolution;
@@ -293,7 +304,9 @@ and the PeerID ride sealed (`AUTHOR-010`).
 * `crates/ambre-logic/src/data.rs` -- the gate on edits, the check before import, and the unsent
   edits of earlier sessions;
 * `crates/ambre-murmure/src/logic/delta.rs` -- the check of a channel delta, the registry
-  included;
+  included, and the check of a payload kept while its document opens;
+* `crates/ambre-murmure/src/logic/opening.rs` -- the `meta` deltas an opening channel keeps;
+* `crates/ambre-murmure/src/logic/runtime/spaces.rs` -- the deltas an opening space keeps;
 * `crates/ambre-logic/src/persistence.rs` -- the sessions the local store keeps;
 * `crates/ambre-trame/src/logic/sync.rs` -- the entry write and the export cursor, as in Toile
   and Prose.
@@ -340,10 +353,7 @@ The binding has no control of its own.
 
 * **A PeerID holds 64 bits of margin, and no more.** Section 3 states why the registry binds it
   and the derivation does not. A delta can wait on an operation, and its PeerID's first entry with
-  it. The next delta under that PeerID is then checked against the registry the peer holds. An
-  open Murmure channel and an open space hold the check (`AUTHOR-033`). A `meta` or a space
-  delta that arrives while its document opens is kept as bytes with no signer, and is not
-  checked (`AUTHOR-037`).
+  it. The next delta under that PeerID is then checked against the registry the peer holds.
 
 * **A local restore is not checked.** It imports with no check, so whoever wrote the local store
   can still place any operation in it. A snapshot from the relay is checked (section 1.4).
