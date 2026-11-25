@@ -50,6 +50,8 @@ struct Frame {
     relay: MurmureRelay,
     /// What the channel list sent the Logic thread, in order.
     sent: RwSignal<Vec<LogicCommand>>,
+    /// The invite link the toolbar shows, none at first.
+    invite_link: RwSignal<Option<super::InviteLink>>,
     /// Unmounts the shell on drop.
     _handle: Box<dyn std::any::Any>,
 }
@@ -108,6 +110,7 @@ impl Frame {
             pane: relay.pane,
             relay,
             sent,
+            invite_link,
             _handle: Box::new(handle),
         }
     }
@@ -235,7 +238,12 @@ impl Acme {
 
     /// The sidebar of a desktop, filled as at start.
     async fn frame(&self) -> Frame {
-        let frame = Frame::with(1025, MurmureRelay::new()).await;
+        self.frame_at(1025).await
+    }
+
+    /// The sidebar in a window of `width` pixels, filled as at start.
+    async fn frame_at(&self, width: u32) -> Frame {
+        let frame = Frame::with(width, MurmureRelay::new()).await;
         let opened = frame.absorb(self.members(&[])).await;
         assert!(
             matches!(opened[..], [LogicCommand::OpenSpace { space_id }] if space_id == self.space),
@@ -1963,6 +1971,49 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
     frame.search_field().dispatch_event(&key.unwrap()).unwrap();
     leptos::task::tick().await;
     assert!(frame.query(".murmure-search").is_none(), "Escape closes it");
+}
+
+/// The results of a search stay inside the window at every width, the
+/// phone included (`MURMURE-732`). Anchored on the box, they crossed the
+/// left edge of a window of 1440 px. An invite link widens the bar past a
+/// phone, and the open field then scrolled the page sideways.
+#[wasm_bindgen_test]
+async fn the_search_results_stay_inside_the_window_at_every_width() {
+    let acme = Acme::new();
+    for width in [360, 599, 600, 1024, 1025, 1440, 1920] {
+        let frame = acme.frame_at(width).await;
+        frame.select("general").await;
+        frame.invite_link.set(Some(super::InviteLink {
+            document_id: Id::<ambre_core::id::Document>::mint(),
+            inviter: ambre_core::FixedBytes::from_array([7; 32]),
+        }));
+        frame.relay.open_search();
+        leptos::task::tick().await;
+        frame.search_field().focus().unwrap();
+        frame.type_search("budget").await;
+        let answer = UiEvent::MessageSearch {
+            query: ambre_core::Validated::<ambre_core::SearchQuery>::parse("budget".to_owned())
+                .expect("a word"),
+            channels: Vec::new(),
+        };
+        assert!(frame.absorb(answer).await.is_empty());
+        let _ = frame.frame.offset_width();
+        let results = frame
+            .query(".murmure-search-results")
+            .expect("the results are open")
+            .get_bounding_client_rect();
+        assert!(results.width() > 0.0, "{width} px: the results show");
+        assert!(
+            results.left() >= 0.0,
+            "{width} px: left edge {}",
+            results.left()
+        );
+        assert!(
+            results.right() <= f64::from(width),
+            "{width} px: right edge {}",
+            results.right()
+        );
+    }
 }
 
 /// The list of keys shows its keys on a phone as on a desktop. The chip of

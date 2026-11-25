@@ -20,6 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-148` | `INV` | A search MUST cover the active segment and every segment already loaded. | this spec section 3 | `ambre_murmure::logic::channel_tests::a_search_reads_the_held_segments_and_lists_the_rest` -- the live segments, then a loaded final one | none | verified |
 | `MURMURE-314` | `INV` | A segment index MUST be signed by the client that finalized its segment. | this spec section 3 | not built | unbuilt -- lands with the `Search on a new device` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-320` | `INV` | The index of a segment MUST live in the private file system of the origin, read from a worker, never whole in memory. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Search on a new device` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-732` | `OBS` | The result list MUST stay inside the window at every width. | this spec section 3; `ambre-spec-adaptive-layout.md` | `ambre_app::shell::murmure_regions::the_search_results_stay_inside_the_window_at_every_width` -- wasm tier, frames of 360 to 1920 px under the shell stylesheet hold both edges of the list inside the frame | none | verified |
 
 ### 1.2 Search
 
@@ -55,7 +56,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a search over the loaded segments reads memory the client holds, inside the rows
   of `ambre-spec-budgets.md section 6`.
 * **Boundary.** none: the query never leaves the client, and the relay searches nothing.
-* **Verification.** 7 `verified`, 11 `unimplemented`: the search over the loaded segments and its
+* **Verification.** 8 `verified`, 11 `unimplemented`: the search over the loaded segments and its
   box are built, and no index exists.
 
 ---
