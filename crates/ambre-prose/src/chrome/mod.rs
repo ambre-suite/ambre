@@ -540,7 +540,6 @@ pub fn ProseFormatBar(
             <FormatBar anchor=anchor controls=controls cover=cover>
                 <span class="ambre-format-sep" aria-hidden="true"></span>
                 {bar_kind_list(signals, kind)}
-                {bar_comment(signals)}
                 {bar_prompt(signals, draft, bar.active.as_ref().and_then(|m| m.link.clone()))}
             </FormatBar>
         })
@@ -582,29 +581,8 @@ fn bar_kind_list(
     }
 }
 
-/// The comment button of the bar, which opens the comment field.
-fn bar_comment(signals: ProseSignals) -> impl IntoView {
-    let command = ambre_commands::find(crate::commands::COMMANDS, crate::commands::COMMENT);
-    let label = command
-        .map(|command| command.title.pick(&ambre_chrome::language()).into_string())
-        .unwrap_or_default();
-    command.and_then(icon_of).map(|icon| {
-        view! {
-            <ambre_chrome::IconButton
-                icon=icon
-                label=label
-                size=ambre_chrome::ControlSize::Large
-                look=ambre_chrome::IconLook::Ghost
-                reach=Some(ambre_commands::Reach::Command(crate::commands::COMMENT))
-                on_press=Callback::new(move |()| {
-                    signals.open_prompt(crate::commands::COMMENT);
-                })
-            />
-        }
-    })
-}
-
-/// The field a link or a comment press opened, under the bar. Enter hands
+/// The field a link press or the comment of the creation bar opened, under
+/// the bar. Enter hands
 /// its text to the view; Escape closes it. An empty address takes the link
 /// off (`PROSE-UI-188`).
 fn bar_prompt(

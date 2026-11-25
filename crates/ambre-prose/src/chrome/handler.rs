@@ -83,8 +83,13 @@ impl CommandHandler for ProseHandler {
         // A menu entry that formats lands where a control or a chord
         // leaves its id; the view drains it (`CHROME-214`).
         // A command of the creation bar that inserts a block lands there
-        // too, and the view resolves it at the caret (`CHROME-180`).
-        if formats_selection(id) || crate::view::slash::inserted(id).is_some() {
+        // too, and the view resolves it at the caret (`CHROME-254`). The
+        // comment of the bar lands there as well, and the view opens its
+        // field over a selection alone (`CHROME-180`, `PROSE-UI-287`).
+        if formats_selection(id)
+            || crate::view::slash::inserted(id).is_some()
+            || crate::view::toolbar::BarPrompt::of(id).is_some()
+        {
             self.format.set(Some(id));
             return Vec::new();
         }
