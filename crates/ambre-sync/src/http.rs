@@ -1218,8 +1218,13 @@ fn read_json<R: serde::de::DeserializeOwned>(
     resp: &Incoming,
 ) -> Result<R, HttpError> {
     expect_ok(request, resp)?;
-    // Only the decode is generic: the error mapping is `unreadable`, once.
-    serde_json::from_slice(resp.body.as_bytes()).map_err(|e| unreadable(request, &e))
+    // Only the decode is generic: the error mapping is `unreadable`, once. The decode spells
+    // out what `serde_json::from_slice` does, so each answer type costs one function in the
+    // wasm instead of three.
+    let mut de = serde_json::Deserializer::from_slice(resp.body.as_bytes());
+    R::deserialize(&mut de)
+        .and_then(|value| de.end().map(|()| value))
+        .map_err(|e| unreadable(request, &e))
 }
 
 /// The error of a successful answer whose JSON body did not decode.
