@@ -172,6 +172,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-329` | `FAIL` | Given a removal on the log of a channel's `meta` whose listing leaves out a thread that a valid revoke of that log caps, the census MUST fail the removal before it posts, and MUST take no erasure of that thread, held or its own. | this spec section 3; `SYNC-322`, `SYNC-323`, `SYNC-311`; `ambre-spec-server.md`, `SRV-358` | `ambre_sync::sharing::tests::a_thread_a_signed_revoke_caps_takes_no_erasure` -- under a log whose revoke caps a thread, a listing that hides it fails the census with a held erasure of the owner and with none, and reads or posts no erasure, while a thread no revoke caps still takes the owner's erasure | none | verified |
 | `SYNC-370` | `FAIL` | Given a removal on the log of a channel's `meta` whose listing leaves out a thread under a link receipt that counts (`SYNC-371`), the census MUST fail the removal before any request, and MUST take no erasure of that thread, held or its own. | this spec section 3; `SYNC-322`, `SYNC-329`; `ambre-spec-sequencer.md`, `SRV-390`; `5-Murmure/features/ambre-spec-murmure-threads.md`, `MURMURE-739` | `ambre_sync::sharing::tests::a_thread_under_a_link_receipt_takes_no_erasure` -- under a receipt of the relay, a listing that hides the thread fails the census with a held erasure of the owner and with none, and no request leaves | none | verified |
 | `SYNC-371` | `FAIL` | Given a link receipt that the link key this build pins did not sign over that channel and that thread, the census MUST count it as no receipt. | this spec section 3; `SYNC-370`; `ambre-spec-sequencer.md`, `SRV-390` | `ambre_sync::sharing::tests::a_thread_under_a_link_receipt_takes_no_erasure` -- a receipt over another channel, of another thread, or by another key proves nothing, and the owner erases the thread as before | none | verified |
+| `SYNC-380` | `FAIL` | Given a thread registration whose answer carries no link receipt that counts (`SYNC-371`), the client MUST write no `thread` field on its root. | this spec section 3; `SYNC-370`, `SYNC-371`; `ambre-spec-sequencer.md`, `SRV-390` | `ambre_sync::sharing::tests::a_link_under_no_receipt_that_counts_names_no_thread` -- an answer with no receipt, a receipt that is no signature, one over another thread or another channel, or one by another key fails the link, and a lost registration deletes its own document first; `ambre_sync::sharing::tests::a_lost_registration_deletes_the_thread_it_created` -- a receipt of the link key passes through to the root | none | verified |
+| `SYNC-381` | `FAIL` | Given a root whose `thread` field holds no link receipt that counts, a client that replies in that thread MUST first write beside the field a receipt that counts. | this spec section 3; `SYNC-370`, `SYNC-380`; `5-Murmure/features/ambre-spec-murmure-threads.md`, `MURMURE-738` | not built | unbuilt -- lands with the `A thread named with no receipt that counts gets one` Story (`ambre-roadmap.md` V1) | unimplemented |
 | `SYNC-303` | `FAIL` | Given a document of a Murmure channel that applied a delta past the cap of a revoke, the client MUST end the whole channel, erase the local copy of each of its documents and open the channel again. | this spec section 3; `SYNC-300`, `SYNC-233` | `ambre_logic::channels::tests::a_channel_read_again_drops_each_copy_and_opens_anew` -- each document closes in Sync and leaves the store, the channel then asks the relay again, and a document no channel holds reads nothing | none | verified |
 | `SYNC-304` | `FAIL` | Given an open, a snapshot that folds a delta past the cap of its writer MUST open nothing, and the open MUST replay from a start under every cap (`SYNC-307`). A reopen whose local copy applied such a delta MUST read the document again. | this spec section 3; `SYNC-300`, `RESID-010` | `ambre_sync::updates::tests::an_open_refuses_a_delta_past_the_cap_of_its_writer` -- the owner's snapshot that folds a clock past the cap opens nothing, the replay starts at the first delta and lands the clock at the cap alone, and a snapshot under the cap opens; `ambre_sync::light::tests::a_reopen_past_a_revoke_cap_reads_the_document_again` -- the clocks of an evicted session travel to its reopen, which reads the document again past a cap and not under one | none | verified |
 | `SYNC-307` | `FAIL` | Given an open whose start folds a delta past a cap, the open MUST start from the trusted reference when the reference folds none, and replay the deltas past its horizon alone; with no such reference, it MUST replay from the first delta. Either start MUST reach the clocks a full replay of the same log reaches. | this spec section 3; `SYNC-304`, `AUTHOR-030`, `SRV-127` | `ambre_sync::updates::tests::a_snapshot_past_a_cap_starts_from_the_reference_as_a_full_replay_does` -- the open starts from the reference and asks past its horizon, applies the deltas a full replay applies past it and reaches its clocks, and a reference past the cap replays from the first delta; `ambre_sync::snapshot_trust::tests::a_trusted_latest_keeps_the_trusted_reference_to_fall_back_on` -- only a trusted reference older than the start is a fallback | none | verified |
@@ -185,9 +187,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 126 `verified`. Every pure transform holds, out of the browser: the wrap, the
-  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
-  run against a live relay.
+* **Verification.** 127 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
+  browser: the wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is
+  the branches that only run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -752,6 +754,11 @@ development build pins the key of a public seed, which a development relay signs
 build pins none, so no receipt counts there, and an erasure works as before. A member cannot forge
 a receipt, so a phantom thread still takes the erasure.
 
+**A link under no receipt names no thread.** A relay hostile at the link could answer it with no
+receipt, then hide the thread and get it erased. So a client names a thread only under a receipt
+that counts (`SYNC-380`). It fails the link otherwise, and the relay gains nothing by withholding
+the receipt. A release build pins one key and never the development key (`ZK-062`).
+
 **A direct message has no owner, so each writer erases.** The log of a direct message invites each
 member as an editor, then lowers its creator to editor (`SRV-175`). Nobody can sign as an owner
 there, so a phantom thread would fail every departure. A log that holds no present owner thus
@@ -870,6 +877,8 @@ authority: the role here hides what the relay would refuse anyway.
 | A link receipt the relay signs proves a thread | a link entry the first replier signs into the root | any member can sign such an entry for a thread the relay never linked. A phantom would then fail every removal, and its author could never be removed. Only the relay can tell what it linked |
 | A link receipt the relay signs proves a thread | a link entry signed into the `meta` | the relay could serve the root that names the thread and withhold the delta of the `meta`. The receipt rides in the delta that names the thread, so a census that reads the name holds the proof |
 | The build pins the link key | the relay serves its key, kept on first use | the relay could serve a key to the linker and another to the eraser. The eraser would then hold no receipt that counts, and would erase |
+| A link under no receipt that counts fails | the client links and writes the field with no receipt | a relay hostile at the link withholds the receipt, then hides the thread and gets it erased. The receipt would then hold only against a relay that turns after the link |
+| A hidden thread with no receipt that counts takes the erasure | the census counts such a thread as linked when this client read content of it | a member can seal content into a document it owns and name it with no link. Every removal would then fail, its author's own included |
 | The census checks the receipt | the check of the Murmure engine verifies it on each delta | the Logic thread would link the signature code and the pinned key. A receipt that does not count harms nothing: the census treats the thread as if it had none |
 
 ---
@@ -911,13 +920,16 @@ authority: the role here hides what the relay would refuse anyway.
 * **A departure cap is the leaver's own word.** A leaver who names a clock past its writes keeps
   writing up to it. An honest leaver names its last clock, so a key stolen later writes nothing.
   A departure with no cap caps nothing.
-* **The first linker writes the receipt.** The member who names the thread first writes its
-  receipt in the same delta (`MURMURE-738`). A member who wins that race and writes no receipt, or
-  a false one, leaves the thread with no proof. A relay that hides it then gets it erased, as before
-  the receipt. The same holds for a link that an older relay answered with no receipt.
-* **No gate holds the pin of a release build.** `AMBRE_THREAD_LINK_KEY` names the key at build
-  time, and a build without it pins none. No check refuses a release build that pins the
-  development key, under which any member can sign a receipt and block each removal.
+* **A member who names a thread outside the client leaves it with no proof.** An honest client
+  names a thread only under a receipt that counts (`SYNC-380`). A member who writes the field with
+  code of its own, under no receipt or a false one, leaves the thread with no proof. No later
+  writer can add one (`MURMURE-738`), so a relay that hides that thread gets it erased. The same
+  holds for a field written before `SYNC-380`. `SYNC-381` binds the fix.
+* **A published client pins the link key of one deployment.** A release pins its key at build
+  time (`ZK-062`). Its client counts the receipts of the relay that holds the seed of that key
+  alone. A deployment with a seed of its own builds its own client, as one with its own issuer
+  does. The relay checks its seed against the key its deployment names (`SRV-420`), never
+  against the client it serves.
 * **A removal opens each segment of the channel twice.** The Logic thread reads it for its threads,
   then the census opens it again for its clocks (`SYNC-312`). The read opens one document at a
   time, so its wait grows with the history of the channel.

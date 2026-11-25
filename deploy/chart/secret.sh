@@ -29,6 +29,18 @@ trap 'rm -f "$key"' EXIT
 openssl genpkey -algorithm ed25519 -outform DER -out "$key" 2>/dev/null
 admission_seed=$(tail -c 32 "$key" | tohex)
 admission_key=$(openssl pkey -inform DER -in "$key" -pubout -outform DER | tail -c 32 | tohex)
+# The link key of a thread: the relay signs each link with the seed, and the
+# client build pins the public key (`ZK-062`, `SRV-420`). A stack that already
+# drew the pair, as the chart test does, passes both in the environment.
+if [ -n "${THREAD_LINK_SEED:-}" ] && [ -n "${THREAD_LINK_KEY:-}" ]; then
+    link_seed=$THREAD_LINK_SEED
+    link_key=$THREAD_LINK_KEY
+else
+    openssl genpkey -algorithm ed25519 -outform DER -out "$key" 2>/dev/null
+    link_seed=$(tail -c 32 "$key" | tohex)
+    link_key=$(openssl pkey -inform DER -in "$key" -pubout -outform DER | tail -c 32 | tohex)
+fi
+echo "secret.sh: the client of this deployment must pin AMBRE_THREAD_LINK_KEY=$link_key" >&2
 
 cat <<YAML
 apiVersion: v1
@@ -46,5 +58,7 @@ stringData:
   jwt-signing-seed: "$(hex 32)"
   call-admission-seed: "$admission_seed"
   sfu-admission-key: "$admission_key"
+  thread-link-seed: "$link_seed"
+  thread-link-key: "$link_key"
   metrics-token: "$(hex 32)"
 YAML

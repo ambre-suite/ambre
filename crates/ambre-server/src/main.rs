@@ -209,6 +209,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(jwt_seed);
     drop(admission_seed);
     drop(link_seed);
+    // The deployment names the link key its client pins, and a seed of
+    // another key fails the start (`SRV-420`). The public half is logged, as
+    // the admission key is, for a client build to pin.
+    jwt_keys.holds_link_key(jwt::named_link_key()?)?;
+    if let Some(key) = jwt_keys.link_key() {
+        tracing::info!("THREAD_LINK_KEY={}", key.to_hex());
+    }
     // The public key alone: the SFU verifies the admissions of a call with it.
     if let Some(key) = jwt_keys.admission_key() {
         tracing::info!("SFU_ADMISSION_KEY={}", key.to_hex());

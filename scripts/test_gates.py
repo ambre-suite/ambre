@@ -42,6 +42,7 @@ import crate_table  # noqa: E402
 import feature_inventory  # noqa: E402
 import fixture_provenance  # noqa: E402
 import image_provenance  # noqa: E402
+import link_key  # noqa: E402
 import freeze_provenance  # noqa: E402
 import instructions  # noqa: E402
 import locale_table  # noqa: E402
@@ -87,6 +88,7 @@ SCRIPTS = {
     "garage_init": TOOL,
     "glossary": TOOL,
     "image_provenance": GATE,
+    "link_key": GATE,
     "instructions": GATE,
     "locale_table": GENERATOR,
     "merge_generated": TOOL,
@@ -319,6 +321,16 @@ class GatesFailWithNoFlag(unittest.TestCase):
         self.fails("image_provenance", [
             mock.patch.object(image_provenance, "WORKFLOWS", self.dir),
         ], run=lambda: image_provenance.main(["check"]))
+
+    def test_link_key(self) -> None:
+        # A web build with no check lets a release pin no key (`ZK-062`).
+        dockerfile, release = self.dir / "Dockerfile", self.dir / "release.yml"
+        dockerfile.write_text("FROM toolchain AS web-build\nRUN trunk build --release\n")
+        release.write_text("jobs: {}\n")
+        self.fails("link_key", [
+            mock.patch.object(link_key, "DOCKERFILE", dockerfile),
+            mock.patch.object(link_key, "RELEASE", release),
+        ], run=lambda: link_key.main(["lint"]))
 
     def test_checkout_credentials(self) -> None:
         self.fails("checkout_credentials", [

@@ -108,12 +108,41 @@ fn verifies(channel_id: Id<Channel>, erasure: &ErasureEntry) -> bool {
     holds(&erasure.signer, &transcript, &erasure.signature)
 }
 
+/// The link key a build names in `AMBRE_THREAD_LINK_KEY`, read as the crate
+/// compiles (`ZK-062`). An empty name names none, as a build argument left
+/// empty does. A name that spells no key fails the build, and so does
+/// the development key, under which any member forges a receipt. Each panic
+/// runs in the compiler alone: a const item never evaluates at run time.
+const NAMED_LINK_KEY: Option<FixedBytes<PublicKey>> = match option_env!("AMBRE_THREAD_LINK_KEY") {
+    None => None,
+    Some(text) if text.is_empty() => None,
+    Some(text) => {
+        let Some(key) = FixedBytes::<PublicKey>::from_hex_const(text) else {
+            panic!("AMBRE_THREAD_LINK_KEY must name 32 bytes in 64 hex digits");
+        };
+        let (mut named, mut dev): (&[u8], &[u8]) = (
+            key.as_array(),
+            ambre_protocol::thread_erasure::DEV_LINK_KEY.as_array(),
+        );
+        let mut same = true;
+        while let ([one, named_rest @ ..], [other, dev_rest @ ..]) = (named, dev) {
+            same &= *one == *other;
+            (named, dev) = (named_rest, dev_rest);
+        }
+        assert!(
+            !same,
+            "AMBRE_THREAD_LINK_KEY names the development link key"
+        );
+        Some(key)
+    }
+};
+
 /// The link key this build pins (`SYNC-371`). A release build names it at
-/// build time. A development build or a test pins the key of the public dev
-/// seed. Any other build pins none, so no receipt proves a link.
+/// build time (`ZK-062`). A development build or a test pins the key of the
+/// public dev seed. Any other build pins none, so no receipt proves a link.
 fn link_key() -> Option<FixedBytes<PublicKey>> {
-    match option_env!("AMBRE_THREAD_LINK_KEY") {
-        Some(hex) => FixedBytes::from_hex(hex).ok(),
+    match NAMED_LINK_KEY {
+        Some(key) => Some(key),
         None if cfg!(any(test, feature = "dev-login")) => {
             Some(ambre_protocol::thread_erasure::DEV_LINK_KEY)
         }

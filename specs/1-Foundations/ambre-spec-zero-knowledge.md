@@ -68,6 +68,7 @@ that component's prefix instead.
 | `ZK-049` | `INV` | The gate of `ZK-045` MUST run on every stripped build of the client, whatever profile name Trunk was given. | this spec section 2, the development sign-in; `ZK-045` | ci-gate -- `scripts/trunk_post_build.py` guards a build whose wasm carries no `name` section, the mark of the stripped `wasm-release` profile. `scripts/test_trunk_post_build.py` `DevLoginGate.test_an_optimised_build_is_guarded_whatever_its_trunk_profile` and `DevLoginGate.test_the_hook_refuses_an_optimised_debug_build_with_the_sign_in` feed it an optimised wasm under the debug profile | none | verified |
 | `ZK-050` | `INV` | Each participant of a call proof MUST sign in through an identity provider, never through the development sign-in. So the optimised build of the proofs holds no development sign-in, and the gate of `ZK-049` passes it. | this spec section 2, the development sign-in; `ZK-045`; `ZK-049`; `ambre-spec-call-proofs.md` section 2 | `ambre_belt::proof::run::the_proof_host_reads_a_call_through_its_probe` -- browser tier: each sender returns from the provider of the belt, and no page of the run asks the development sign-in; `ambre_belt::provider::tests::the_page_of_a_phone_stores_the_state_and_opens_the_return` -- the sign-in page of a phone | none | verified |
 | `ZK-053` | `INV` | The `wasm-phone` profile MUST inherit the `dev` profile and strip nothing, so each wasm it builds keeps its `name` section. | this spec section 2, the development sign-in; `ZK-049` | ci-gate -- `scripts/test_trunk_post_build.py` `PhoneProfile.test_the_phone_profile_is_a_development_build_that_strips_nothing` reads the profile in the root `Cargo.toml` | none | verified |
+| `ZK-062` | `INV` | A release build of the client MUST pin a link key other than the development link key. | this spec section 2, the link key of a release; `ambre-spec-membership.md`, `SYNC-371`, `SYNC-380` | ci-gate -- `scripts/link_key.py check` refuses no key, a key that is not 64 hex digits and the development key, and the `web-build` of `deploy/Dockerfile` and the client digest of `.github/workflows/release.yml` run it before each release build. `scripts/link_key.py lint`, run by `just link-key` in the CI `lint` job, refuses a release path without it, and `scripts/test_link_key.py` plants each one. The build of `ambre-sync` refuses a named key that spells no key or the development key, and `ambre_core::fixed_bytes::tests::the_const_hex_read_agrees_with_the_runtime_read` holds the read it rests on | none | verified |
 | `ZK-051` | `INV` | What a device keeps of a session at rest MUST be limited to `{one record of the refresh token, the seed and the profile of the person, sealed under an AES-GCM key that cannot be exported, and that key}`. | this spec section 2, the kept session; `ambre-spec-session.md`, `SRV-323`, `SRV-325` | type-level -- the record the Sync worker seals holds the refresh token, the seed in its 24-word form and the profile alone; `ambre_sync::kept::tests::a_kept_record_opens_as_the_same_person_token_and_seed`; `ambre_belt::provider::tests::a_reload_resumes_the_session_with_no_provider_round_trip` -- browser tier: the record holds three fields, its key is an AES-GCM key that does not export, and the sealed bytes hold no address of the person | none | verified |
 | `ZK-052` | `INV` | The access token, the passphrase, the document keys and the bytes of the key that seals the kept session MUST NOT be at rest on the device. | this spec section 2, the kept session; `ZK-051` | type-level -- the kept record has no field for an access token, a passphrase or a document key; `ambre_belt::provider::tests::a_reload_resumes_the_session_with_no_provider_round_trip` -- browser tier: the record holds the key object and no key bytes, and an export of the key is refused | none | verified |
 | `ZK-044` | `INV` | What the SFU learns of a choice of videos MUST be limited to `{the senders each receiver chose, by their sender index, the one it marks large, the instant of each choice}`. | this spec section 2, the choice of videos of a call; `ambre-spec-call-media.md section 3`, the choice of videos; `ZK-021` | type-level -- `ambre_protocol::signaling::VideoChoice` holds the sender indexes and the large one alone, and the SFU reads it on its own socket; `ambre_sync::call_link::tests::a_choice_of_videos_reaches_the_sfu_alone_and_never_the_relay` -- the relay reads none of it | none | verified |
@@ -80,7 +81,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 54 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 55 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -498,6 +499,14 @@ The limit that remains is `ZK-040`. A browser checks no digest before it runs a 
 cannot check itself: the check would be code of the same origin. A relay can therefore serve a
 changed page to one chosen user, and no audit of the page the others receive finds it. Only a
 check outside the origin closes that gap, for example a browser extension or a signed web bundle.
+
+**The link key of a release.** A census refuses to erase a thread under a receipt that the pinned
+link key verifies (`SYNC-370`). A build that pins no key counts no receipt. One that pins the
+development key counts a receipt any member signs, since its seed is public. A release therefore
+pins one key, and never that one (`ZK-062`).
+
+The key is public: a repository variable holds it, and the seed stays with the deployment. The
+release notes name the key, so a rebuild reaches the same client digest.
 
 **The development sign-in.** The Sync worker derives a development seed from a bare name, so
 anyone who knows the name derives every key. That sign-in sits behind the `dev-login` feature, and

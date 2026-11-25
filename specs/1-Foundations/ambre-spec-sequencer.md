@@ -182,6 +182,7 @@ it to every writer that asks.
 | `SRV-213` | `POST` | A registration by a writer of the channel MUST link the caller's document to a root message of the channel as its one thread document. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-threads.md`, `MURMURE-105` | `ambre_server::db::channels::tests::a_root_registers_one_thread_document` -- database tier, a second ask answers the same document, and another root takes its own; `ambre_server::routes::channels::tests::a_writer_registers_a_thread_and_a_late_one_learns_it` -- database tier, a viewer and a document of another member are refused | none | verified |
 | `SRV-215` | `FRAME` | A thread registration MUST NOT change any other document of the channel. | this spec section 3 | `ambre_server::db::channels::tests::a_root_registers_one_thread_document` -- database tier, every other row of the channel reads the same columns after both registrations | none | verified |
 | `SRV-390` | `POST` | A thread registration MUST answer the link receipt of the relay: its signature, under its link key, over the channel and the document it holds for the root, the winner's after a lost race. | this spec section 3; `SRV-213`, `SRV-214`; `ambre-spec-membership.md`, `SYNC-370` | `ambre_server::routes::channels::tests::a_registration_answers_a_receipt_of_the_link_it_holds` -- database tier, the winner and the late writer each get a receipt of the winner's document. It verifies under the link key over that channel and that document alone, and neither as an erasure nor under the access-token key | none | verified |
+| `SRV-420` | `PRE` | Given `THREAD_LINK_KEY` set, the relay MUST refuse to start when the public half of its link seed is not that key. | this spec section 3; `SRV-390`; `ambre-spec-membership.md`, `SYNC-380`; `ambre-spec-zero-knowledge.md`, `ZK-062` | `ambre_server::jwt::tests::a_link_seed_of_another_key_than_the_named_one_fails_the_start` -- the public half of the seed and no named key pass, while the dev key under another seed, or a key with no link seed set, fails | none | verified |
 
 ### 1.13 Two thread registrations race
 
@@ -209,7 +210,7 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 90 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 91 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -460,6 +461,7 @@ other caller is answered it (`SRV-214`). The relay learns the identifier of the 
 
 Each answer carries the link receipt, signed over the channel and the thread (`SRV-390`,
 `SYNC-370`). `THREAD_LINK_SEED` holds the seed of its key, apart from every other key of the relay.
+A seed of another key than `THREAD_LINK_KEY` fails the start (`SRV-420`).
 
 **A thread erasure.** A root names its thread in a sealed field, which any member sets while it is
 absent. An owner of the `meta` signs the channel and a thread id, and posts the signature. Under the

@@ -100,6 +100,10 @@ services:
       AWS_SECRET_ACCESS_KEY: ${GARAGE_KEY_SECRET}
       JWT_SIGNING_SEED: ${JWT_SIGNING_SEED:?run setup.sh first}
       CALL_ADMISSION_SEED: ${CALL_ADMISSION_SEED:?run setup.sh first}
+      # The relay signs each thread link under this seed, and refuses to start
+      # when it is not the seed of the key the client of `web` pins (`SRV-420`).
+      THREAD_LINK_SEED: ${THREAD_LINK_SEED:?run setup.sh first}
+      THREAD_LINK_KEY: ${THREAD_LINK_KEY:?run setup.sh first}
       # The metrics listen off the loopback of the container, so the relay
       # starts only with a scrape token (`SRV-318`). An `.env` written before
       # it lacks the token: add one, as `openssl rand -hex 32` draws it.
@@ -179,6 +183,8 @@ services:
         # The client follows the sign-in to the host of this issuer alone
         # (`CHROME-139`), and offers it in place of Google.
         AMBRE_OIDC_ISSUER: ${OIDC_ISSUER:-}
+        # The client pins the link key of the relay beside it (`ZK-062`).
+        AMBRE_THREAD_LINK_KEY: ${THREAD_LINK_KEY:?run setup.sh first}
     image: ambre-web:local
     restart: unless-stopped
     network_mode: host

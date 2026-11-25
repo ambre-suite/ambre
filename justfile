@@ -959,7 +959,8 @@ chart-test:
     kind create cluster --name ambre-chart --config deploy/chart/test/kind.yaml --wait 180s
     trap 'status=$?; [ $status -eq 0 ] || { kubectl $kube get pods -o wide; kubectl $kube describe pods | tail -n 80; for p in $(kubectl $kube get pods -o name); do kubectl $kube logs --all-containers "$p" | tail -n 40; done; }; kind delete cluster --name ambre-chart; exit $status' EXIT
     kind load docker-image --name ambre-chart ambre-relay:local ambre-sfu:local ambre-web:local ambre-init:local
-    sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
+    # The client of `just selfhost-up` pins the link key of its `.env`, so the relay takes its seed.
+    THREAD_LINK_SEED=$(sed -n 's/^THREAD_LINK_SEED=//p' target/selfhost/.env) THREAD_LINK_KEY=$(sed -n 's/^THREAD_LINK_KEY=//p' target/selfhost/.env) sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
     helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
     for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
     curl -skf -o /dev/null https://localhost/api/auth/config
@@ -991,6 +992,12 @@ chart-test-release LIST REF SHA:
 # verifies each image before it pulls one (`scripts/image_provenance.py`).
 image-provenance:
     python3 scripts/image_provenance.py check
+
+# `ZK-062`: each release build of the client pins a link key, and never the
+# development key: the web image of `deploy/Dockerfile` and the client digest
+# of the release workflow run `scripts/link_key.py check` before they build.
+link-key:
+    python3 scripts/link_key.py lint
 
 # The dev container (`.devcontainer/README.md`): the toolchain, the relay and
 # the client in one container, PostgreSQL, Redis and Garage beside it from the
