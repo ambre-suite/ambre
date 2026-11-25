@@ -714,21 +714,20 @@ impl Outgoing {
     /// and the rest is [`Outgoing::with_json`] once (`ambre-spec-budgets.md`
     /// section 5).
     fn json<T: Serialize>(method: Method, url: Target, body: &T) -> Result<Self, HttpError> {
-        Self::with_json(
-            method,
-            url,
-            serde_json::to_vec(body).map(Payload::<HttpBody>::new),
-        )
+        let mut bytes = Vec::new();
+        let encoded = body.serialize(&mut serde_json::Serializer::new(&mut bytes));
+        Self::with_json(method, url, Payload::new(bytes), encoded)
     }
 
-    /// A request carrying `encoded` as JSON, or the refusal of a body that
-    /// did not encode.
+    /// A request carrying `body` as JSON, or the refusal of a body whose
+    /// encode failed.
     fn with_json(
         method: Method,
         url: Target,
-        encoded: Result<Payload<HttpBody>, serde_json::Error>,
+        body: Payload<HttpBody>,
+        encoded: Result<(), serde_json::Error>,
     ) -> Result<Self, HttpError> {
-        let body = encoded.map_err(|e| {
+        encoded.map_err(|e| {
             crate::log::warning!("Sync: {} {url}: serialize error: {e}", method.as_str());
             HttpError::Local(LocalFailure::Encode)
         })?;
@@ -932,9 +931,7 @@ impl Transport for Fetch {
         if let Some(checksum) = &request.checksum {
             // The link signs this header, so the store checks the body
             // against it and refuses any other (`SRV-313`).
-            use base64::Engine as _;
-            let value = base64::engine::general_purpose::STANDARD.encode(checksum.as_array());
-            builder = builder.header("x-amz-checksum-sha256", &value);
+            builder = builder.header("x-amz-checksum-sha256", &checksum.to_base64());
         }
         let sent = match &request.body {
             Some((content_type, bytes)) => {

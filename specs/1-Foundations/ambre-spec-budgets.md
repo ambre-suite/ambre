@@ -1096,6 +1096,50 @@
   reads 3 249 391 bytes of brotli. A cut under the former ceiling of 1 310 000 needs a cut that is
   refused: `wasm-opt`, or the size level of `curve25519-dalek`.
 
+* **Six cuts took Sync to 1 325 809 raw bytes on 2026-11-25, so the next stories have room.**
+  Merged over `ccr-cd7c4606-wmq4hy` at `52013a7`, the phantom thread put Sync at 1 356 102 raw
+  bytes by `just size`. That is 6 102 over its ceiling of 1 350 000. `twiggy` found no crate
+  that a small call pulled in whole beyond the two the roadmap named. So each other cut removes a
+  copy that the code made per type, and every byte on the wire stays:
+  1. A codec of `ambre-core` replaces the `base64` crate. It writes the padded base64 of RFC 4648
+     for the sealed values and the checksum header (`SRV-348`).
+  2. A socket frame is the postcard of the tuple of the version byte and the message, so the
+     `to_extend` writer leaves the worker (`SRV-349`).
+  3. The JSON read hands a field name to the field visitor of its struct as a string. The key read
+     of `serde_json` then links once, out of line. The fields of one struct share one buffer.
+  4. A request body keeps `T::serialize` alone generic.
+  5. `FixedBytes` reads and writes its bytes through one visitor and one copy for every role.
+  6. `Uuid` reads its 16 bytes through that loop. The derive of `[u8; 16]` unrolled 16 reads.
+* **No budget of section 1 moves.** The cuts touch the REST answers, the base64 of sealed values
+  and the decode of fixed-width values, which no hot path reads. A field name costs one copy into
+  a buffer per field. No security check moves, and the level of `curve25519-dalek` stays 3.
+* **The method.** The rows marked `just size` are `trunk build --release`, then
+  `scripts/wasm_size.py`, on the session container. The tries are
+  `cargo build --profile wasm-release -p ambre-sync`, then `wasm-bindgen` 0.2.122 with
+  `--target no-modules`. That build reads 1 342 117 bytes at `52013a7`. It reads 1 355 410 with
+  the phantom thread merged.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| `52013a7` | 1 342 117 | -- | before the story |
+| cut 1: the base64 codec of `ambre-core` | 1 335 652 | -6 465 | kept |
+| cut 2: one postcard writer for the frames | 1 333 486 | -2 166 | kept |
+| `-Zmerge-functions=aliases` on the profile | 1 333 178 | -308 | dropped: a flag of every instance for 308 bytes; `trampolines` grew by 909 |
+| cut 3: a field name read once, as a string | 1 331 326 | -2 160 | kept |
+| cut 5: the hex and tuple reads of `FixedBytes` shared | 1 329 959 | -1 367 | kept |
+| cut 4, and the key read out of line | 1 328 794 | -1 165 | kept |
+| the reader of an answer opened out of line | 1 332 664 | +3 870 | dropped, it grew |
+| one buffer per struct for its field names | 1 328 858 | +64 | kept: one copy per field in place of one allocation |
+| cut 6: the tuple loop of `Uuid` | 1 327 488 | -1 370 | kept |
+| cut 5: one visitor of `FixedBytes` for every role | 1 326 340 | -1 148 | kept |
+| the decode of `Encoded` by the values of its role | 1 326 430 | +90 | dropped, it grew |
+| cut 5: one write and one copy of `FixedBytes` | 1 325 934 | -406 | kept |
+| the kept cuts, by `just size` | 1 325 809 | -- | 400 894 brotli; no `just size` of `52013a7` alone was taken |
+| the kept cuts with the phantom thread merged, by `just size` | 1 339 608 | -16 494 | 404 025 brotli; read against 1 356 102 |
+
+  With the phantom thread merged, the ceiling of 1 350 000 holds 10 392 bytes of room. The
+  ceiling does not move.
+
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread
   (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). Three cuts came before the

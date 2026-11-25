@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | `ambre_server::ws::handler::message::ephemeral_binding_tests::a_presence_entry_is_the_ciphertext_as_received` -- the stored entry decodes to exactly the bytes the sample sealed, so the relay neither reads nor rewrites them | none | verified |
 | `SRV-102` | `INV` | The socket MUST carry no wire message of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | type-level -- `WsClientMsg` and `WsServerMsg` carry no channel variant | none | verified |
 | `SRV-166` | `INV` | A change to the shape of any wire message MUST change the version byte every wire message opens on. | this spec section 3; `ambre-spec-sync.md`, `SYNC-137` | `ambre_protocol::tests::the_wire_layout_is_frozen_under_its_version` -- a digest of one wire message per variant, frozen under the version byte, where the decoder counts the variants so that one with no sample fails | none | verified |
+| `SRV-349` | `INV` | A wire message MUST travel as one frame: the version byte, then the postcard bytes of the message, and no other byte. | this spec section 3; `SRV-166` | `ambre_protocol::tests::a_frame_keeps_the_bytes_of_the_extend_writer` -- an update of any length, past each width of the length prefix, in both directions; `::every_sample_frame_keeps_the_bytes_of_the_extend_writer` -- one frame of every variant | none | verified |
 
 ### 1.2 A connection opens, and closes
 
@@ -85,7 +86,7 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 31 `verified`. A handler test drives the caps, the rate bucket, the presence
+* **Verification.** 32 `verified`. A handler test drives the caps, the rate bucket, the presence
   expiry and removal, the channel gates and the thread signal. What is loose is everything about the
   connection rather than the message. Each needs a live socket, and two tests alone open one, each
   to see it refused (`ambre-spec-testing.md section 9`).
