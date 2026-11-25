@@ -61,6 +61,8 @@ pub const INDENT_IN: StaticKey<Properties> = StaticKey::new("prose.paragraph.ind
 pub const KIND: StaticKey<Properties> = StaticKey::new("prose.paragraph.kind");
 /// The body font of the document.
 pub const BODY_FONT: StaticKey<Properties> = StaticKey::new("prose.defaults.body_font");
+/// The font of every heading of the document.
+pub const HEADING_FONT: StaticKey<Properties> = StaticKey::new("prose.defaults.heading_font");
 
 /// The paper of the page.
 pub const PAPER: StaticKey<Properties> = StaticKey::new("prose.page.paper");
@@ -108,6 +110,7 @@ properties! {
     INDENT_IN: INDENT_IN, "Increase indent", "Augmenter le retrait";
     KIND: KIND, "Paragraph style", "Style de paragraphe";
     BODY_FONT: BODY_FONT, "Body font", "Police du corps";
+    HEADING_FONT: HEADING_FONT, "Heading font", "Police des titres";
 }
 
 /// The title of a property no table describes.
@@ -268,8 +271,8 @@ pub enum TextWrite {
     /// One step in or out for every block of the selection: a list item
     /// changes level, another block moves its left indent.
     Indent(crate::message::IndentStep),
-    /// The body font of the document. It needs no selection.
-    DefaultFont(ambre_core::FontFamily),
+    /// A default font of the document. It needs no selection.
+    DefaultFont(crate::message::DefaultFont),
 }
 
 /// The line spacings the paragraph section offers. `None` is the

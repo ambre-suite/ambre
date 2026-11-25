@@ -2461,3 +2461,119 @@ async fn the_call_bubble_publishes_its_box_and_clears_it_when_it_leaves() {
     crate::call::where_from().set(None);
     drop(handle);
 }
+
+/// `MURMURE-699`: the bubble publishes the box of its mini video once a press on its faces opens
+/// it. The faces are a button with its name and its pressed state (`MURMURE-693`). Over a
+/// picture, the mini box is the topmost element at its centre and paints nothing, so the canvas
+/// below shows through. The way back clears the box. Under the phone width, the pill publishes
+/// no mini video.
+#[wasm_bindgen_test]
+async fn the_bubble_publishes_the_box_of_its_mini_video() {
+    use super::call_bar::CallFloat;
+    use crate::call_stage::{MiniShows, mini, mini_box, mini_shows};
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone};
+    use ambre_murmure::ui::call_float::{Mini, MiniBox};
+    let acme = Acme::new();
+    for width in [1025, 390] {
+        let frame = Frame::with(width, MurmureRelay::new()).await;
+        frame.absorb(acme.members(&[])).await;
+        frame.absorb(acme.catalogue()).await;
+        frame.relay.pane.set(MurmurePane::channel(acme.board));
+        let root = frame.inner.create_element("div").unwrap();
+        frame.inner.body().unwrap().append_child(&root).unwrap();
+        let phase = RwSignal::new(CallPhase::InCall(Microphone::Live));
+        let (pane, relay) = (frame.relay.pane, frame.relay);
+        let cover = RwSignal::new(ambre_client_core::cover::Cover::default());
+        crate::call::where_from().set(Some((acme.sales, crate::host::now())));
+        mini().set(Mini::Folded);
+        mini_shows().set(MiniShows::Faces);
+        let handle = mount_to(root.clone().unchecked_into(), move || {
+            view! { <CallFloat pane=pane phase=Signal::from(phase) relay=relay cover=cover /> }
+        });
+        leptos::task::tick().await;
+        two_frames().await;
+        let within = |selector: &str| root.query_selector(selector).unwrap();
+        let rect_of = |selector: &str| {
+            let r = within(selector).expect(selector).get_bounding_client_rect();
+            ambre_draw::Rect::new(r.left(), r.top(), r.right(), r.bottom())
+        };
+        assert_eq!(
+            mini_box(),
+            None,
+            "{width}: a folded bubble shows no mini video"
+        );
+        let faces: web_sys::HtmlElement = within(".murmure-float-faces").unwrap().unchecked_into();
+        assert_eq!(faces.tag_name(), "BUTTON");
+        assert_eq!(
+            faces.get_attribute("aria-label").as_deref(),
+            Some("Show the video of the call")
+        );
+        assert_eq!(
+            faces.get_attribute("aria-pressed").as_deref(),
+            Some("false")
+        );
+        faces.focus().unwrap();
+        assert!(frame.inner.active_element().is_some_and(|e| e == *faces));
+        faces.click();
+        leptos::task::tick().await;
+        two_frames().await;
+        assert_eq!(faces.get_attribute("aria-pressed").as_deref(), Some("true"));
+        assert_eq!(
+            faces.get_attribute("aria-label").as_deref(),
+            Some("Hide the video of the call")
+        );
+        if width > 599 {
+            let bubble = rect_of(".murmure-call-float");
+            let placed = rect_of(".murmure-float-mini");
+            assert_eq!(mini_box(), MiniBox::on_page(placed));
+            assert_eq!(bubble.intersect(placed), placed, "inside the bubble");
+            // A picture arrives: the box paints nothing, and no control covers it.
+            mini_shows().set(MiniShows::Video);
+            leptos::task::tick().await;
+            let float = within(".murmure-call-float").unwrap();
+            assert_eq!(float.get_attribute("data-mini").as_deref(), Some("video"));
+            let view = frame.inner.default_view().unwrap();
+            let background = |el: &web_sys::Element| {
+                view.get_computed_style(el)
+                    .unwrap()
+                    .unwrap()
+                    .get_property_value("background-color")
+                    .unwrap()
+            };
+            let mini_el = within(".murmure-float-mini").unwrap();
+            assert_eq!(background(&float), "rgba(0, 0, 0, 0)");
+            assert_eq!(background(&mini_el), "rgba(0, 0, 0, 0)");
+            assert!(within(".murmure-float-mini-none").is_none());
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a coordinate of the frame fits an f32"
+            )]
+            let at = |x: f64, y: f64| frame.inner.element_from_point(x as f32, y as f32);
+            let c = placed.center();
+            for (x, y) in [
+                (c.x, c.y),
+                (placed.x0 + 2.0, placed.y0 + 2.0),
+                (placed.x1 - 2.0, placed.y1 - 2.0),
+            ] {
+                let top = at(x, y);
+                assert_eq!(
+                    top.as_ref(),
+                    Some(&mini_el),
+                    "the mini box is topmost at ({x}, {y}), not {:?}",
+                    top.as_ref().map(web_sys::Element::class_name)
+                );
+            }
+        } else {
+            assert_eq!(mini_box(), None, "the pill shows no video");
+        }
+        let grip: web_sys::HtmlElement = within(".murmure-float-grip").unwrap().unchecked_into();
+        grip.click();
+        leptos::task::tick().await;
+        two_frames().await;
+        assert_eq!(mini_box(), None, "{width}: the channel of the call in view");
+        crate::call::where_from().set(None);
+        mini().set(Mini::Folded);
+        mini_shows().set(MiniShows::Faces);
+        drop(handle);
+    }
+}

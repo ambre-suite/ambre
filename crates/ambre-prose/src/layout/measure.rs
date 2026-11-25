@@ -160,6 +160,13 @@ impl EffectiveStyle {
     ) -> Self {
         let paragraph = doc::read_paragraph_style(tree, id);
         let mut style = Self::from_parts(defaults, &paragraph, weight);
+        // A heading takes the heading font, and the body font while the
+        // document names none: the version 1 rule (`PROSE-UI-266`).
+        if let Some(family) = defaults.heading_font_family.as_ref()
+            && doc::block_type_of(tree, id) == Some(crate::events::BlockType::Heading)
+        {
+            style.font_family = family.clone();
+        }
         // The built-in quote: italic, and set in from the left unless the
         // paragraph names its own indent (`PROSE-UI-263`).
         if doc::style_of(tree, id).and_then(|s| doc::BuiltInStyle::of(&s))

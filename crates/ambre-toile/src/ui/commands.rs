@@ -135,6 +135,7 @@ describe! {
     POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", "Pointeur\u{a0}: automatique", None, &[], ACCOUNT, AvatarMenu;
     POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", "Pointeur\u{a0}: souris (la molette zoome)", None, &[], ACCOUNT, AvatarMenu;
     POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", "Pointeur\u{a0}: pav\u{e9} tactile (la molette d\u{e9}place)", None, &[], ACCOUNT, AvatarMenu;
+    GRID: menu_bar::GRID, "Show grid", "Afficher la grille", Some(StaticKey::<Icons>::new("dots-grid")), &[], VIEW, StatusBar;
     PRESENT_START: menu_bar::PRESENT, "Start presentation", "Lancer la pr\u{e9}sentation", None, &[], PRESENT, StatusBar;
     IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", "Importer un fichier...", Some(StaticKey::<Icons>::new("file-import-outline")), &[], FILE, AmbreMenu;
     LINK_SET: menu_bar::LINK_SET, "Link...", "Lien...", Some(StaticKey::<Icons>::new("link-variant")), &[], OBJECT, ContextPanel;

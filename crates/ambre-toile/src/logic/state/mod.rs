@@ -255,6 +255,9 @@ fn write_edits(text: &loro::LoroText, edits: &[Edit]) -> loro::LoroResult<()> {
 
 /// The board background the scaffolding stores: a dark grey, opaque.
 const BOARD_BG: Rgba = Rgba::from_bits(0x1E1E_1EFF);
+// No build drew that grey, so it reads as the ground of the theme
+// (`TOILE-UI-430`). The scaffold keeps it: its bytes are its identity
+// (`TOILE-265`).
 
 /// The board scaffolding, which every peer writes on open, before any edit.
 fn write_scaffold(doc: &LoroDoc) {
@@ -628,6 +631,7 @@ impl ToileState {
             ToileCommand::RemoveFromFrames { ids } => self.remove_from_frames(&ids),
             ToileCommand::RenameFrame { frame, name } => self.rename_frame(&frame, &name),
             ToileCommand::SetDocumentLocale { locale } => self.set_document_locale(&locale),
+            ToileCommand::EditBoard(edit) => self.edit_board(edit),
             ToileCommand::SetSlideOrder { order } => self.set_slide_order(&order),
             ToileCommand::NextSlide => self.next_slide(),
             ToileCommand::PrevSlide => self.prev_slide(),

@@ -1100,7 +1100,7 @@ fn two_peers_setting_the_body_font_converge() {
     let set = |state: &mut ProseState, label: &str| {
         state
             .handle_command(ProseCommand::SetDefaultFont {
-                family: ambre_core::FontFamily::from_label(label),
+                font: crate::message::DefaultFont::Body(ambre_core::FontFamily::from_label(label)),
             })
             .update
             .expect("a delta")

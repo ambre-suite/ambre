@@ -20,7 +20,7 @@ use leptos::prelude::*;
 use super::ProseSignals;
 use crate::doc::{Orientation, PageFormat};
 use crate::events::{Align, ParagraphStyle, TriState};
-use crate::message::{IndentStep, ParagraphKind, SelectionValues};
+use crate::message::{DefaultFont, IndentStep, ParagraphKind, SelectionValues};
 use crate::view::annotate::review_intent;
 use crate::view::panel::{self, CaretSuggestion, Margins, PanelKind, Paper, TextWrite};
 use crate::view::toolbar::state_of;
@@ -438,9 +438,21 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     value=Signal::derive(move || Reading::Uniform(Some(fonts().body)))
                     on_write=Callback::new(move |f: Option<ambre_core::FontFamily>| {
                         if let Some(f) = f {
-                            text_write(TextWrite::DefaultFont(f));
+                            text_write(TextWrite::DefaultFont(DefaultFont::Body(f)));
                         }
                     })
+                />
+            </Field>
+            // The entry that names no family deletes the key, so the
+            // headings follow the body font (`PROSE-UI-266`).
+            <Field label="Headings">
+                <FontField
+                    property=prop(panel::HEADING_FONT)
+                    value=Signal::derive(move || Reading::Uniform(fonts().heading))
+                    on_write=Callback::new(move |f: Option<ambre_core::FontFamily>| {
+                        text_write(TextWrite::DefaultFont(DefaultFont::Heading(f)));
+                    })
+                    default_label="Body font"
                 />
             </Field>
         }

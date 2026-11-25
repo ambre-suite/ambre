@@ -32,7 +32,7 @@ use ambre_core::{Payload, SnapshotBytes};
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`SCHEMA-018`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(2);
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -83,11 +83,25 @@ pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
 
 /// Prose's registry: one row per version bump, appended never rewritten.
 ///
-/// Version 1 is the first layout, and no build before it shipped, so the list
-/// is empty. A document with no version reads as 0 (`SCHEMA-005`), and the walk
-/// finds no step from 0 and refuses it. The first layout change after the
-/// release adds its row here.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
+/// Version 1 is the first layout. A document with no version reads as 0
+/// (`SCHEMA-005`), and the walk finds no step from 0 and refuses it.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: Version::new(1),
+    to: Version::new(2),
+    apply: heading_font_v2,
+}];
+
+/// Version 1 to 2: `meta/defaults` may carry the heading font
+/// (`PROSE-UI-266`).
+///
+/// The step rewrites nothing but the register. A version 1 document names no
+/// heading font, and an absent key sets each heading in the body font, the
+/// version 1 rule. So no block moves (`PROSE-146`).
+fn heading_font_v2(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
 
 /// The full-state read rule, applied before the caller touches a single
 /// container (`SCHEMA-006`, `PROSE-097`).
@@ -284,6 +298,85 @@ mod tests {
             before,
             "a refused read must not write the document back"
         );
+    }
+
+    /// The styled document as a version 1 build wrote it, frozen before the
+    /// heading font raised the version (`PROSE-146`).
+    const VERSION_1: &[u8] =
+        include_bytes!("../../../fixtures/frozen/prose/styled_document@v1-s1.ambre");
+
+    /// The same generator, run by this build.
+    const CURRENT: &[u8] = include_bytes!("../../../fixtures/current/prose/styled_document.ambre");
+
+    /// A document opened from a container file, under a pinned peer.
+    fn opened(file: &[u8], peer: u64) -> ProseState {
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(peer)).expect("a document is built");
+        state
+            .import_ambre_plaintext(&Payload::new(file.to_vec()))
+            .expect("the file opens");
+        state
+    }
+
+    /// The runs of every root block, in document order.
+    fn every_run(state: &ProseState) -> Vec<Vec<(String, crate::style::ResolvedStyle)>> {
+        state
+            .root_blocks()
+            .iter()
+            .map(|id| state.resolved_runs(id))
+            .collect()
+    }
+
+    /// A version 1 document opens under version 2. Every block resolves as
+    /// this build resolves the same commands, so no heading moves to
+    /// another font (`PROSE-146`).
+    #[test]
+    fn a_version_1_document_opens_with_every_block_resolved_as_before() {
+        let old = opened(VERSION_1, 1);
+        assert_eq!(old.schema_version(), SCHEMA_VERSION);
+        assert_eq!(old.defaults().heading_font_family, None);
+        let runs = every_run(&old);
+        assert_eq!(runs, every_run(&opened(CURRENT, 1)));
+        let headings: Vec<_> = old
+            .root_blocks()
+            .into_iter()
+            .filter(|id| old.block_type_of(id) == Some(crate::events::BlockType::Heading))
+            .collect();
+        assert!(!headings.is_empty(), "the fixture holds a heading");
+        for id in headings {
+            for (_, style) in old.resolved_runs(&id) {
+                assert_eq!(style.font_family, Some(old.defaults().font_family));
+            }
+        }
+    }
+
+    /// Two peers open one version 1 document, and each migrates it and
+    /// types. Both edits survive with equal version vectors, so the step
+    /// wrote one set of operations, not two rivals (`SCHEMA-020`).
+    #[test]
+    fn two_peers_migrating_a_version_1_document_keep_both_edits() {
+        let (mut alice, mut bob) = (opened(VERSION_1, 1), opened(VERSION_1, 2));
+        let first = alice.root_blocks()[0];
+        assert_eq!(bob.root_blocks()[0], first);
+        let write = |state: &mut ProseState, text: &str| {
+            state
+                .handle_command(ProseCommand::InsertText {
+                    block_id: first,
+                    pos: Pos::<DocChar>::ZERO,
+                    text: text.to_owned(),
+                })
+                .update
+                .expect("a delta")
+        };
+        let from_alice = write(&mut alice, "A");
+        let from_bob = write(&mut bob, "B");
+        bob.apply_remote(&from_alice);
+        alice.apply_remote(&from_bob);
+        assert_eq!(alice.document().oplog_vv(), bob.document().oplog_vv());
+        let text = alice.text_of(&first).expect("a text");
+        assert_eq!(bob.text_of(&first).as_ref(), Some(&text));
+        assert!(text.contains('A') && text.contains('B'), "{text}");
+        assert_eq!(alice.schema_version(), SCHEMA_VERSION);
     }
 
     #[test]

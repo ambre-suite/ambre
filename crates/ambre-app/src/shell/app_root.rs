@@ -532,6 +532,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_style_model,
         toile_restyle,
         toile_place,
+        toile_board,
         toile_float_bar,
         toile_quick_style,
         shell_cover,
@@ -951,6 +952,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_command,
             restyle: toile_restyle,
             place: toile_place,
+            board: toile_board,
             deck: toile_deck,
             stats: sel_stats_toile,
         })
@@ -1086,6 +1088,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             stats=sel_stats_toile
                             perf=perf_snap
                             zoom=board_zoom
+                            board=toile_board
                             on_command=on_command
                         />
                     }
@@ -1564,7 +1567,7 @@ mod tests {
             .append_child(&container)
             .expect("appended");
         let target: web_sys::HtmlElement = container.clone().dyn_into().expect("an element");
-        leptos::mount::mount_to(target, move || {
+        StoredValue::new_local(leptos::mount::mount_to(target, move || {
             view! {
                 <leptos_router::components::Router>
                     <HeaderTitle
@@ -1577,8 +1580,7 @@ mod tests {
                     />
                 </leptos_router::components::Router>
             }
-        })
-        .forget();
+        }));
         let query = |selector: &str| container.query_selector(selector).expect("a selector");
         let click = |selector: &str| {
             query(selector)
@@ -1699,7 +1701,7 @@ mod tests {
             >::of::<8>());
         let to_logic = crate::outbox::ShellOutbox::new(to_logic);
         let ran = RwSignal::new(None::<StaticKey<Commands>>);
-        leptos::mount::mount_to(target, move || {
+        StoredValue::new_local(leptos::mount::mount_to(target, move || {
             view! {
                 <leptos_router::components::Router>
                     <header class="ambre-header">
@@ -1722,8 +1724,7 @@ mod tests {
                     </header>
                 </leptos_router::components::Router>
             }
-        })
-        .forget();
+        }));
         leptos::task::tick().await;
         let header = container
             .query_selector(".ambre-header")
@@ -1905,24 +1906,26 @@ mod tests {
         let current_doc = RwSignal::new(None);
         let palette = palette_command(DocType::Trame);
         let on_command = Callback::new(|_| {});
-        leptos::mount::mount_to(inner.body().expect("a body"), move || {
-            view! {
-                <leptos_router::components::Router>
-                    <header class="ambre-header">
-                        <HeaderTitle
-                            docs=docs
-                            current_doc=current_doc
-                            palette=palette
-                            table=trame_chrome::COMMANDS
-                            on_command=on_command
-                            about_open=RwSignal::new(ambre_chrome::Openness::Closed)
-                        />
-                        {palette.map(|command| view! { <ambre_chrome::CommandSearch command=command on_command=on_command /> })}
-                    </header>
-                </leptos_router::components::Router>
-            }
-        })
-        .forget();
+        StoredValue::new_local(leptos::mount::mount_to(
+            inner.body().expect("a body"),
+            move || {
+                view! {
+                    <leptos_router::components::Router>
+                        <header class="ambre-header">
+                            <HeaderTitle
+                                docs=docs
+                                current_doc=current_doc
+                                palette=palette
+                                table=trame_chrome::COMMANDS
+                                on_command=on_command
+                                about_open=RwSignal::new(ambre_chrome::Openness::Closed)
+                            />
+                            {palette.map(|command| view! { <ambre_chrome::CommandSearch command=command on_command=on_command /> })}
+                        </header>
+                    </leptos_router::components::Router>
+                }
+            },
+        ));
         let _ = frame.offset_width();
         inner
             .query_selector(".ambre-brand .ambre-header-menu-button")

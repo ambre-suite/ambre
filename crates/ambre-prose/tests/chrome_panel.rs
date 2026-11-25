@@ -39,7 +39,10 @@ where
     let container = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&container).unwrap();
     let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-    mount_to(target, f).forget();
+    // The mount lives as long as the owner of the test, and leaves with the
+    // signals it reads. A forgotten mount kept effects that could run in the
+    // next test and read disposed signals.
+    StoredValue::new_local(mount_to(target, f));
     container
 }
 
@@ -1002,6 +1005,7 @@ async fn with_no_selection_the_panel_shows_the_default_fonts() {
     let signals = ProseSignals::new();
     signals.fonts.set(Some(ambre_prose::doc::DocFonts {
         body: ambre_core::FontFamily::from_label("Lora"),
+        heading: None,
     }));
     let root = mount_prose_panel(signals);
     leptos::task::tick().await;
@@ -1025,6 +1029,62 @@ async fn with_no_selection_the_panel_shows_the_default_fonts() {
     assert_eq!(
         ambre_chrome::unreached_controls(&root),
         Vec::<String>::new()
+    );
+    root.remove();
+}
+
+/// The heading picker shows "Body font" while the document names no
+/// heading font. A family hands its pick to the view, and the "Body font"
+/// entry hands the deletion of the key (`PROSE-UI-266`).
+#[wasm_bindgen_test]
+async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
+    use ambre_prose::message::DefaultFont;
+    use ambre_prose::view::panel::TextWrite;
+    let signals = ProseSignals::new();
+    signals.fonts.set(Some(ambre_prose::doc::DocFonts {
+        body: ambre_core::FontFamily::from_label("Lora"),
+        heading: None,
+    }));
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    let field = "[aria-label=\"Heading font\"]";
+    let shown = root
+        .query_selector(&format!("{field} .ambre-select-value"))
+        .unwrap()
+        .expect("the heading picker shows")
+        .text_content();
+    assert_eq!(shown.as_deref(), Some("Body font"));
+    let option = |n: usize| -> web_sys::HtmlElement {
+        root.query_selector(&format!("{field} [role=\"option\"]:nth-child({n})"))
+            .unwrap()
+            .expect("an entry")
+            .dyn_into()
+            .unwrap()
+    };
+    assert_eq!(
+        option(1).get_attribute("aria-selected").as_deref(),
+        Some("true")
+    );
+    option(3).click();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::DefaultFont(DefaultFont::Heading(Some(
+            ambre_core::FontFamily::Serif
+        ))))
+    );
+    signals.fonts.set(Some(ambre_prose::doc::DocFonts {
+        body: ambre_core::FontFamily::from_label("Lora"),
+        heading: Some(ambre_core::FontFamily::Serif),
+    }));
+    leptos::task::tick().await;
+    assert_eq!(
+        option(3).get_attribute("aria-selected").as_deref(),
+        Some("true")
+    );
+    option(1).click();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::DefaultFont(DefaultFont::Heading(None)))
     );
     root.remove();
 }

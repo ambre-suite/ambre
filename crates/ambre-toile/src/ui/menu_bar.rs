@@ -49,6 +49,9 @@ pub const POINTER_MOUSE: StaticKey<Commands> =
     StaticKey::<Commands>::new("toile.view.pointer_mouse");
 pub const POINTER_TRACKPAD: StaticKey<Commands> =
     StaticKey::<Commands>::new("toile.view.pointer_trackpad");
+/// Show or hide the grid for this user alone (`TOILE-UI-025`). View-local:
+/// it writes nothing, and a hidden grid holds back the snap.
+pub const GRID: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.grid");
 /// Open the comments panel on the whole board (`toile-comments` section 4). A
 /// UI-only intent: the panel is chrome, and the board keeps no open flag.
 pub const COMMENTS: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.comments");
@@ -128,6 +131,7 @@ pub const MENU_BAR_COMMANDS: &[StaticKey<Commands>] = &[
     POINTER_AUTO,
     POINTER_MOUSE,
     POINTER_TRACKPAD,
+    GRID,
     COMMENTS,
     PRESENT,
     DECK,

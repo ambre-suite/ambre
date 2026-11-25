@@ -2370,6 +2370,7 @@ ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_announcement() | ret | 
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&str>	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | kind_name() | ret | &'static str	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | selection_announcement() | ret | Option<String>	free-text	label, message or user text
+ambre-toile | src/ui/grid.rs | crate::ui::grid | TINTS | const | [(&str,ambre_core::Rgba);6]	free-text	the name a person reads on each background swatch of the board section
 ambre-toile | src/ui/arrow.rs | crate::ui::arrow | holds_element() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	free-text	the comment body the user typed in the panel
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text
@@ -3484,6 +3485,7 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockS
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockSixtieth as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
 ambre-trame | src/logic/schema.rs | crate::logic::schema | document_locale_v3() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-toile | src/logic/schema.rs | crate::logic::schema | document_locale_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-prose | src/schema.rs | crate::schema | heading_font_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/ui/locale.rs | crate::ui::locale | date_preview() | ret | Option<String>	free-text	the long form of a typed date, as the formula bar shows it to a reader
 ambre-trame | src/ui/locale.rs | crate::ui::locale | date_preview(typed) | param | &str	free-text	what a reader is typing in the formula bar
 ambre-trame | src/ui/locale.rs | crate::ui::locale | locale_notice() | ret | Option<String>	free-text	the notice the status bar shows a reader
@@ -4954,6 +4956,8 @@ ambre-chrome | src/controls.rs | crate::controls | SLIDER_STEPS | const | f32	fo
 ambre-chrome | src/controls.rs | crate::controls | SegmentBar(label) | param | String	free-text	the accessible name of a radio group, display text
 ambre-chrome | src/controls.rs | crate::controls | Select(label) | param | String	free-text	the accessible name of a list, display text
 ambre-chrome | src/controls.rs | crate::controls | Select(placeholder) | param | Signal<String>	free-text	the words a list shows for a mixed selection, or for a value no choice names
+ambre-chrome | src/font.rs | crate::font | FontPicker(default_label) | param | Option<&'static str>	free-text	the words the entry that names no family shows, display text
+ambre-chrome | src/kit.rs | crate::kit | FontField(default_label) | param | Option<&'static str>	free-text	the words the entry that names no family shows, handed to the picker, display text
 ambre-chrome | src/controls.rs | crate::controls | Slider(label) | param | String	free-text	the accessible name of a range input, display text
 ambre-chrome | src/controls.rs | crate::controls | Stepper(label) | param | String	free-text	the accessible name of a stepper, display text
 ambre-chrome | src/controls.rs | crate::controls | Stepper(on_text) | param | Callback<String>	foreign-api	the value an `<input>` reports; the property shim of `kit` parses it into its length at once
