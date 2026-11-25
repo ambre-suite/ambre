@@ -89,6 +89,8 @@ pub struct Scene<'s> {
     /// fill for this frame. Empty when no transition is active. Fade-only ids
     /// (a new or gone element) still appear here so their opacity ramp holds.
     pub anim: &'s HashMap<Id<Element>, AnimatedElement>,
+    /// Whether this user shows the grid. A hidden grid leaves the ground bare.
+    pub grid: grid::GridShown,
 }
 
 /// Paint the persistent content layer: board background + adaptive grid, then
@@ -111,16 +113,18 @@ pub fn paint_content<S: DrawSurface>(
         palette,
         images,
         anim,
+        grid: shown,
     } = scene;
     let BoardWalk {
         font_cx,
         text_cache,
     } = walk;
     // 1. Background + adaptive grid (screen space). Focus mode drops the grid.
-    if mode.is_presenting() {
-        grid::paint_background(surface, cam, palette);
+    let ground = grid::GroundColours::of(palette, vp.ground);
+    if mode.is_presenting() || shown == grid::GridShown::Hidden {
+        grid::paint_background(surface, cam, ground);
     } else {
-        grid::paint_grid(surface, cam, palette, vp.grid_unit);
+        grid::paint_grid(surface, cam, ground, vp.grid_unit);
     }
 
     // 2. The board walk, in board units under the camera. The body or the
@@ -790,11 +794,76 @@ mod tests {
         assert_eq!(format!("{:?}", FrameTitle::Untitled), "FrameTitle(None)");
     }
 
+    /// `TOILE-UI-428`: a user who hides the grid sees the ground bare, and
+    /// the same board shows its dots to a user who shows it.
+    #[test]
+    fn a_hidden_grid_paints_the_ground_and_no_dot() {
+        let mut vp = DisplayViewport {
+            version: ambre_core::Seq::ZERO,
+            grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Snapped,
+            ground: crate::message::BoardGround::Theme,
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: Vec::new(),
+        };
+        let fills = |vp: &DisplayViewport, shown| {
+            let mut surface = RecordingSurface::new();
+            let mut font_cx = FontContext::new();
+            let mut tc = TextCache::new();
+            paint_content(
+                &mut surface,
+                &cam(),
+                Scene {
+                    grid: shown,
+                    viewport: vp,
+                    palette: &LIGHT_PALETTE,
+                    images: &HashMap::default(),
+                    anim: &HashMap::default(),
+                },
+                BoardWalk {
+                    font_cx: &mut font_cx,
+                    text_cache: &mut tc,
+                },
+                None,
+                PresentMode::Editing,
+            );
+            surface
+                .ops()
+                .iter()
+                .filter_map(|o| match o {
+                    DrawOp::FillRect { color, .. } => Some(*color),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let hidden = fills(&vp, grid::GridShown::Hidden);
+        assert_eq!(hidden, vec![LIGHT_PALETTE.ground]);
+        let shown = fills(&vp, grid::GridShown::Shown);
+        assert!(
+            shown
+                .iter()
+                .filter(|c| **c == LIGHT_PALETTE.grid_dot)
+                .count()
+                > 1
+        );
+        // `TOILE-UI-430`: a tinted board lies on its tint, under dots of its own.
+        let (_, tint) = grid::TINTS[2];
+        vp.ground = crate::message::BoardGround::Tint(tint);
+        let tinted = grid::GroundColours::of(&LIGHT_PALETTE, vp.ground);
+        let painted = fills(&vp, grid::GridShown::Shown);
+        assert_eq!(painted.first(), Some(&tinted.ground));
+        assert!(painted.iter().skip(1).all(|c| *c == tinted.dot) && painted.len() > 1);
+    }
+
     #[test]
     fn content_walk_balances_transform_and_paints_each_node() {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -810,6 +879,7 @@ mod tests {
             &mut surface,
             &cam(),
             Scene {
+                grid: crate::ui::grid::GridShown::Shown,
                 viewport: &vp,
                 palette: &LIGHT_PALETTE,
                 images: &HashMap::default(),
@@ -851,6 +921,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -878,6 +950,7 @@ mod tests {
             &mut surface,
             &cam(),
             Scene {
+                grid: crate::ui::grid::GridShown::Shown,
                 viewport: &vp,
                 palette: &LIGHT_PALETTE,
                 images: &HashMap::default(),
@@ -939,6 +1012,7 @@ mod tests {
             &mut surface,
             &cam(),
             Scene {
+                grid: crate::ui::grid::GridShown::Shown,
                 viewport: vp,
                 palette: &LIGHT_PALETTE,
                 images: &HashMap::default(),
@@ -966,6 +1040,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1025,6 +1101,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1165,6 +1243,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1240,6 +1320,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1264,6 +1346,7 @@ mod tests {
             &mut surface,
             &cam(),
             Scene {
+                grid: crate::ui::grid::GridShown::Shown,
                 viewport: &vp,
                 palette: &LIGHT_PALETTE,
                 images: &images,
@@ -1301,6 +1384,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1343,6 +1428,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1516,6 +1603,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1555,6 +1644,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1612,6 +1703,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1677,6 +1770,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1713,6 +1808,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1743,6 +1840,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1787,6 +1886,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1859,6 +1960,8 @@ mod tests {
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1941,6 +2044,8 @@ mod tests {
         DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: grid::BASE_GRID,
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1966,6 +2071,7 @@ mod tests {
             &mut surface,
             cam,
             Scene {
+                grid: crate::ui::grid::GridShown::Shown,
                 viewport: vp,
                 palette: &LIGHT_PALETTE,
                 images: &pass.images,

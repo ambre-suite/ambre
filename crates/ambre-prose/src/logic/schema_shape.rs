@@ -399,6 +399,10 @@ pub(super) fn document_of_every_key() -> ProseState {
             keep_with_next: Some(crate::events::KeepWithNext::WithNext),
         },
     });
+    // Seed leaves the heading font absent, so only a pick writes the key.
+    state.handle_command(ProseCommand::SetDefaultFont {
+        font: crate::message::DefaultFont::Heading(Some(ambre_core::FontFamily::Serif)),
+    });
     for init in [
         BlockInit::Heading {
             level: HeadingLevel::H2,
@@ -671,9 +675,22 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// The canonical document of the version a step leaves: that version's
 /// layout, holding what the step rewrites, written under a fixed identity.
 /// Each step reads its own, so a step added later never moves what an earlier
-/// one writes. The registry holds no step yet, so no version has one.
+/// one writes.
 fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
-    panic!("the step from version {from} has no canonical document: write one here")
+    match from.get() {
+        // Version 1: a document with no heading font. The step to 2 rewrites
+        // nothing but the register.
+        1 => {
+            let doc = LoroDoc::new();
+            doc.set_peer_id(1).expect("a fixed peer");
+            let _ = doc
+                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 1_i64);
+            doc.commit();
+            doc
+        }
+        _ => panic!("the step from version {from} has no canonical document: write one here"),
+    }
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical
@@ -732,6 +749,43 @@ fn each_migration_step_writes_what_its_version_froze() {
          migrates the same document another way. Restore the step, or raise \
          SCHEMA_VERSION and append a section."
     );
+}
+
+/// Version 2 adds one key to version 1 and moves no other line. A version 1
+/// reader ignores a key it does not know, so it loses the heading font
+/// alone. The key is optional: seed leaves it absent, and an
+/// absent key reads as the body font (`PROSE-146`).
+#[test]
+fn version_2_adds_the_optional_heading_font_and_moves_no_other_line() {
+    let lines = |v: u32| -> BTreeSet<String> {
+        frozen_section(ambre_core::Version::new(v))
+            .expect("a frozen section")
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    };
+    let (one, two) = (lines(1), lines(2));
+    let added: Vec<_> = two.difference(&one).cloned().collect();
+    assert_eq!(added, ["meta/defaults/heading_font_family: string"]);
+    assert_eq!(one.difference(&two).count(), 0, "version 2 drops no line");
+
+    let fresh = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+    let path = "meta/defaults/heading_font_family";
+    assert!(
+        !render(&shape_of(&fresh.doc)).contains(path),
+        "seed writes no heading font"
+    );
+    let defaults = fresh.defaults();
+    assert_eq!(defaults.heading_font_family, None);
+    let heading = crate::style::resolve(
+        &std::collections::BTreeMap::new(),
+        crate::style::BlockContext {
+            block_type: crate::events::BlockType::Heading,
+            heading_level: Some(HeadingLevel::H1),
+        },
+        &defaults,
+    );
+    assert_eq!(heading.font_family, Some(defaults.font_family));
 }
 
 #[test]

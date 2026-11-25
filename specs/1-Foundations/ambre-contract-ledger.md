@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5184 rows: 4789 shipped, of which 14 loose. 395 unbuilt.**
+**5191 rows: 4799 shipped, of which 14 loose. 392 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1786 | 583 | 996 | 846 | 564 | 4775 |
+| `verified` | 1786 | 583 | 1003 | 848 | 565 | 4785 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 144 | 42 | 21 | 21 | 167 | 395 |
+| `unimplemented` | 144 | 42 | 20 | 20 | 166 | 392 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -141,9 +141,9 @@
 | `ambre-spec-toile-tools.md` | 36 | 36 | 36 |  |  |
 | `ambre-spec-toile-undo.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-toile-vector-paths.md` | 14 | 13 | 13 |  | 1 |
-| `ambre-spec-toile-viewport.md` | 37 | 35 | 35 |  | 2 |
+| `ambre-spec-toile-viewport.md` | 43 | 42 | 42 |  | 1 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 16 |  |  |
-| `ambre-spec-prose-schema.md` | 28 | 28 | 28 |  |  |
+| `ambre-spec-prose-schema.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-prose-clipboard.md` | 30 | 29 | 29 |  | 1 |
 | `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |
@@ -166,14 +166,14 @@
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 47 | 47 | 47 |  |  |
 | `ambre-spec-prose-text-editing.md` | 45 | 45 | 45 |  |  |
-| `ambre-spec-prose-toolbar.md` | 36 | 35 | 35 |  | 1 |
+| `ambre-spec-prose-toolbar.md` | 36 | 36 | 36 |  |  |
 | `ambre-spec-prose-track-changes.md` | 45 | 43 | 43 |  | 2 |
 | `ambre-spec-prose-undo.md` | 6 | 6 | 6 |  |  |
 | `ambre-spec-prose-viewport.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-prose-word-count.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 19 | 18 | 18 |  | 1 |
-| `ambre-spec-murmure-calls.md` | 102 | 93 | 93 |  | 9 |
+| `ambre-spec-murmure-calls.md` | 102 | 94 | 94 |  | 8 |
 | `ambre-spec-murmure-channels.md` | 58 | 43 | 43 |  | 15 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
@@ -285,7 +285,7 @@
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123,125,127..128,136..143 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039,103..104 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076,228..230,257 |
-| `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..028,030..032,085..097,118..122,144..145 |
+| `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..028,030..032,085..097,118..122,144..146 |
 | `ambre-spec-prose-selection.md` | PROSE-UI-008..009,031..039,070..072,151..171,186..187,233 |
 | `ambre-spec-prose-slash-command.md` | PROSE-UI-058..062,087..095,174..175,193..196 |
 | `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112,333..335; PROSE-UI-247..248 |
@@ -338,7 +338,7 @@
 | `ambre-spec-toile-tools.md` | TOILE-UI-008..009,036..042,243..261,369..370,393..394,407..410 |
 | `ambre-spec-toile-undo.md` | TOILE-014,094,097..098,290..292 |
 | `ambre-spec-toile-vector-paths.md` | TOILE-FEAT-006,018,033..037,112; TOILE-UI-057..058,102..105 |
-| `ambre-spec-toile-viewport.md` | TOILE-UI-002..004,010,025..030,278..298,360,378..380,421,424 |
+| `ambre-spec-toile-viewport.md` | TOILE-UI-002..004,010,025..030,278..298,360,378..380,421,424..430 |
 | `ambre-spec-toile-z-order.md` | TOILE-057..061,119..129 |
 | `ambre-spec-trame-autofill.md` | TRAME-UI-067..074,133..134,180 |
 | `ambre-spec-trame-cell-editing.md` | TRAME-FEAT-020..024,047..050; TRAME-UI-010..011,015,050..058,091..092,155..171,176,183 |

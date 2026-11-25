@@ -52,7 +52,10 @@ mod tests {
         let container = document().create_element("div").unwrap();
         document().body().unwrap().append_child(&container).unwrap();
         let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-        mount_to(target, move || view! { <SyncBadge status=status.into() /> }).forget();
+        StoredValue::new_local(mount_to(
+            target,
+            move || view! { <SyncBadge status=status.into() /> },
+        ));
         assert_eq!(text(&container, ".label"), "Synced");
 
         status.set(ChromeStatus {
@@ -87,13 +90,12 @@ mod tests {
         inner.head().unwrap().append_child(&sheet).unwrap();
 
         let status = Signal::stored(ChromeStatus::default());
-        mount_to(inner.body().unwrap(), move || {
+        StoredValue::new_local(mount_to(inner.body().unwrap(), move || {
             view! {
                 <SyncBadge status=status />
                 <Kbd binding=KeyBinding::primary(KeyChar::K) />
             }
-        })
-        .forget();
+        }));
         // Settle the outer layout, so the frame has its width when read.
         let _ = frame.offset_width();
 

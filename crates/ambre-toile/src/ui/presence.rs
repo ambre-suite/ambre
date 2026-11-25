@@ -471,6 +471,8 @@ mod tests {
         DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: Px::<Board>::new(20.0),
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),

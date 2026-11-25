@@ -1027,6 +1027,7 @@ mod pdf_tests {
             &mut board,
             &pages[0].camera,
             crate::ui::render::Scene {
+                grid: crate::ui::grid::GridShown::Shown,
                 viewport: &pages[0].viewport,
                 palette: ambre_canvas::Theme::Light.palette(),
                 images: &ambre_core::hash::HashMap::default(),

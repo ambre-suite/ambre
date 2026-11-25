@@ -3912,6 +3912,181 @@ pub(crate) mod tests {
         }
     }
 
+    /// `MURMURE-699`, `MURMURE-698`: Ada and Bob are in a call from #general. Ada sends her
+    /// camera while the fake microphone of Chrome beeps, so she speaks. Bob opens #random, and
+    /// the call floats over it as a bubble. A press on its faces opens the mini video.
+    ///
+    /// Bob's canvas draws Ada's video inside the box the bubble published: two readbacks differ,
+    /// and every moved pixel lies in that box. A shot of the whole page, cut to the box, moves
+    /// too. The box of the bubble holds only still words. So those moved pixels are the canvas
+    /// seen through it, and no outline or shadow of the bubble covers them. No video element
+    /// enters the page (`CALL-015`).
+    ///
+    /// The host draws the mini video over the overlay of every application alike. Only Murmure
+    /// runs it here, since a call ends with a switch of application (`MURMURE-726`).
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_press_on_the_faces_of_the_bubble_shows_the_video_of_the_speaker() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        prompt(&ada_page, ".murmure-space", "murmure-new-channel", "random").await;
+        open(&bob_page, "random").await;
+        open(&bob_page, "general").await;
+        open(&ada_page, "general").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        read_until(
+            &bob_page,
+            "Ada and Bob in the call",
+            |h| in_call(h, &[&ada, &bob]),
+            ROSTER_WAIT,
+        )
+        .await;
+        click_header(&ada_page, ".murmure-call-camera").await;
+        camera_pressed(&ada_page, "true").await;
+        bob_page
+            .browser
+            .wait_for(
+                "ten paints of a video in the region",
+                "return performance.getEntriesByName('ambre:video-paint').length >= 10;",
+                std::time::Duration::from_secs(40),
+            )
+            .await;
+
+        // Bob shows another channel: the call floats over it, folded.
+        open(&bob_page, "random").await;
+        let faces = bob_page
+            .browser
+            .wait_for(
+                "the faces of the bubble",
+                "const f = document.querySelector('.murmure-call-float .murmure-float-faces'); \
+                 return f ? [f.getAttribute('aria-label'), f.getAttribute('aria-pressed')] : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(faces, json!(["Show the video of the call", "false"]));
+        bob_page
+            .browser
+            .script(
+                "document.querySelector('.murmure-float-faces').click(); \
+                 document.activeElement?.blur(); return true;",
+                json!([]),
+            )
+            .await;
+        // The mini video opens on Ada's camera once her voice names her the speaker.
+        bob_page
+            .browser
+            .wait_for(
+                "the mini video of the bubble",
+                "return document.querySelector('.murmure-call-float')?.dataset.mini === 'video';",
+                std::time::Duration::from_secs(20),
+            )
+            .await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let placed = bob_page
+            .browser
+            .script(
+                "const m = document.querySelector('.murmure-float-mini').getBoundingClientRect(); \
+                 const c = document.querySelector(arguments[0]).getBoundingClientRect(); \
+                 return [m.left - c.left, m.top - c.top, m.right - c.left, m.bottom - c.top, \
+                   window.devicePixelRatio || 1];",
+                json!([CHANNEL]),
+            )
+            .await;
+        let at = |i: usize| placed[i].as_f64().unwrap_or(0.0);
+        let ratio = at(4);
+        let first = canvas_alone(&bob_page).await;
+        let seen = shot_of(&bob_page, ".murmure-float-mini").await;
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let second = canvas_alone(&bob_page).await;
+        let seen_after = shot_of(&bob_page, ".murmure-float-mini").await;
+        let (moved, bounds) = changed(&first, &second);
+        assert!(
+            moved >= 300,
+            "only {moved} pixels moved under the mini video"
+        );
+        let [left, top, right, bottom] = bounds.expect("a box of moved pixels");
+        let inside = |v: u32, low: f64, high: f64| {
+            let v = f64::from(v);
+            v >= low * ratio - 2.0 && v <= high * ratio + 2.0
+        };
+        assert!(
+            inside(left, at(0), at(2))
+                && inside(right, at(0), at(2))
+                && inside(top, at(1), at(3))
+                && inside(bottom, at(1), at(3)),
+            "the moved pixels {bounds:?} leave the box {placed}"
+        );
+        let (shown, _) = changed(&seen, &seen_after);
+        assert!(
+            shown >= 300,
+            "only {shown} pixels of the page moved in the box: the bubble covers the canvas"
+        );
+        assert_eq!(
+            video_elements(&bob_page).await,
+            json!(0),
+            "a video element in the page"
+        );
+        let mut paints = video_paints(&bob_page).await;
+        paints.sort_by(f64::total_cmp);
+        let q = |q: f64| paints[((paints.len() as f64 - 1.0) * q).round() as usize];
+        eprintln!(
+            "video paints with the bubble: {} frames, median {:.2} ms, p95 {:.2} ms",
+            paints.len(),
+            q(0.5),
+            q(0.95)
+        );
+
+        // A second press folds it, and the bubble publishes no mini video.
+        bob_page
+            .browser
+            .script(
+                "document.querySelector('.murmure-float-faces').click(); return true;",
+                json!([]),
+            )
+            .await;
+        bob_page
+            .browser
+            .wait_for(
+                "the folded bubble",
+                "return !document.querySelector('.murmure-float-mini');",
+                STEP,
+            )
+            .await;
+        bob_page
+            .browser
+            .script(
+                "document.querySelector('.murmure-call-float .murmure-call-hang-up')?.click(); \
+                 return true;",
+                json!([]),
+            )
+            .await;
+        click_header(&ada_page, ".murmure-call-hang-up").await;
+    }
+
+    /// The pixels of the channel canvas of `page`, as [`canvas_shot`] reads them, with the call
+    /// bubble transparent during the shot. Its clock then moves no pixel of the shot, and its
+    /// layout, so the box it published, stays.
+    async fn canvas_alone(page: &Page) -> image::RgbImage {
+        let fade = "const b = document.querySelector('.murmure-call-float'); \
+                    if (b) b.style.opacity = arguments[0]; return true;";
+        page.browser.script(fade, json!(["0"])).await;
+        let shot = canvas_shot(page).await;
+        page.browser.script(fade, json!([""])).await;
+        shot
+    }
+
     /// The pixels of the canvas `selector`, cut out of a screenshot of the whole page. The shot
     /// hides nothing, so no element loses the focus to it.
     async fn shot_of(page: &Page, selector: &str) -> image::RgbImage {

@@ -353,6 +353,8 @@ struct Wiring {
     toile_restyle: RwSignal<Option<ambre_toile::message::ElementStyle>>,
     /// A write of the Toile position section.
     toile_place: RwSignal<Option<ambre_toile::ui::panel::PlaceEdit>>,
+    /// The snap of the board and the grid of this user, published by the view.
+    toile_board: RwSignal<ambre_toile::ui::grid::BoardLook>,
     /// Floating selection toolbar placement + flags (`toile-styles`),
     /// republished every frame by the canvas view so the bar tracks pan/zoom;
     /// `None` hides it.
@@ -731,6 +733,7 @@ pub fn main() {
     let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let toile_restyle = RwSignal::new(None::<ambre_toile::message::ElementStyle>);
     let toile_place = RwSignal::new(None::<ambre_toile::ui::panel::PlaceEdit>);
+    let toile_board = RwSignal::new(ambre_toile::ui::grid::BoardLook::default());
     // Floating selection toolbar (`toile-styles`): the view republishes its placement
     // into `toile_float_bar` each frame. It drains single-field style edits from
     // `toile_quick_style`, mirroring the inspector's model / restyle pair.
@@ -789,6 +792,7 @@ pub fn main() {
         active_tool: toile_active_tool,
         cursor: toile_cursor,
         zoom: board_zoom,
+        board: toile_board,
         sel_stats: sel_stats_toile,
         style_model: toile_style_model,
         restyle: toile_restyle,
@@ -1545,6 +1549,7 @@ pub fn main() {
                         active_tool: ch_toile_active_tool,
                         cursor: ch_toile_cursor,
                         zoom: ch_toile_zoom,
+                        board: RwSignal::new(ambre_toile::ui::grid::BoardLook::default()),
                         sel_stats: ch_toile_sel_stats,
                         style_model: ch_toile_style_model,
                         restyle: ch_toile_restyle,

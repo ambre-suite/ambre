@@ -642,7 +642,11 @@ pub(crate) fn paint_page<S: DrawSurface>(
         &StoredPictures,
     ),
 ) {
-    grid::paint_background(s, &pdf_page.camera, palette);
+    grid::paint_background(
+        s,
+        &pdf_page.camera,
+        grid::GroundColours::of(palette, pdf_page.viewport.ground),
+    );
     // The region is the frame, so the page carries only slide content. The
     // fallback page of an empty deck has no frame and shows what its camera
     // sees.
@@ -737,6 +741,8 @@ mod tests {
                 nodes: vec![rect_node("a", Rect::new(10.0, 10.0, 90.0, 90.0))],
                 version: ambre_core::Seq::ZERO,
                 grid_unit: Px::<Board>::new(20.0),
+                snap: crate::message::GridSnap::Free,
+                ground: crate::message::BoardGround::Theme,
             },
             camera,
             clip: Some(frame),
@@ -976,6 +982,7 @@ mod tests {
             &mut screen,
             &page.camera,
             crate::ui::render::Scene {
+                grid: crate::ui::grid::GridShown::Shown,
                 viewport: &page.viewport,
                 palette,
                 images: &images,
@@ -1047,7 +1054,7 @@ mod tests {
             };
 
             let mut screen = RecordingSurface::new();
-            crate::ui::render::paint_content(&mut screen, &camera, crate::ui::render::Scene { viewport: &page.viewport, palette, images: &images, anim: &anim }, BoardWalk { font_cx: &mut font_cx, text_cache: &mut tc }, None, if present {
+            crate::ui::render::paint_content(&mut screen, &camera, crate::ui::render::Scene { grid: crate::ui::grid::GridShown::Shown, viewport: &page.viewport, palette, images: &images, anim: &anim }, BoardWalk { font_cx: &mut font_cx, text_cache: &mut tc }, None, if present {
                     crate::message::PresentMode::Presenting
                 } else {
                     crate::message::PresentMode::Editing

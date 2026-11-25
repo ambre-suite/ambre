@@ -3567,7 +3567,9 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
     use crate::view::panel::TextWrite;
     let mut rig = Rig::new(&["hello world", "second"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
-    let default_font = TextWrite::DefaultFont(ambre_core::FontFamily::from_label("Lora"));
+    let default_font = TextWrite::DefaultFont(crate::message::DefaultFont::Body(
+        ambre_core::FontFamily::from_label("Lora"),
+    ));
     assert!(matches!(
         rig.ui.text_write(default_font.clone()),
         Some(ProseCommand::SetDefaultFont { .. })

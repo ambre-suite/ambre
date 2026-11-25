@@ -45,6 +45,6 @@
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 |  |
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 44 |  |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 14 |  |
-| `toile-viewport` | A user pans and zooms an endless plane. | partial | 37 |  |
+| `toile-viewport` | A user pans and zooms an endless plane. | partial | 43 |  |
 
-**31 features: 19 implemented, 12 partial, 0 design-only. 1006 contract rows, 0 loose.**
+**31 features: 19 implemented, 12 partial, 0 design-only. 1012 contract rows, 0 loose.**
