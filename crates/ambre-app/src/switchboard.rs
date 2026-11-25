@@ -841,7 +841,7 @@ fn list_members(document_id: Id<Document>) -> LogicCommand {
 }
 
 /// The words of a refused settings document, in each interface language
-/// (`SETTINGS-045`). They name what happened and what the user does.
+/// (`SETTINGS-046`). They name what happened and what the user does.
 const SETTINGS_REFUSED: ambre_chrome::commands::TitleWords = ambre_chrome::commands::TitleWords {
     en: "Security warning: the server offered settings that are not yours, and Ambre \
          kept yours. If this happens again, tell your administrator.",
@@ -856,7 +856,7 @@ const SETTINGS_REFUSED: ambre_chrome::commands::TitleWords = ambre_chrome::comma
 /// design: a new variant is a compile error here until it gets a message.
 ///
 /// A refused settings document is the exception: a sign of attack, so an
-/// error toast in the language of the page (`SETTINGS-045`).
+/// error toast in the language of the page (`SETTINGS-046`).
 fn sync_warning_notice(code: SyncWarningCode) -> Notice {
     let text = match code {
         SyncWarningCode::SettingsRefused => {
@@ -2455,7 +2455,7 @@ mod tests {
         ));
     }
 
-    /// `SETTINGS-045`: a refused settings document raises one error toast,
+    /// `SETTINGS-046`: a refused settings document raises one error toast,
     /// announced, that names the refusal and what to do, in the language of
     /// the page.
     #[test]

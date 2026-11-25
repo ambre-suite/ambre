@@ -153,6 +153,112 @@ class ObjectsTest(unittest.TestCase):
         self.assertEqual(self.faults(objects, True), [])
 
 
+def labelled(comp: str) -> dict:
+    obj = workload(comp, STORE)
+    obj["spec"]["template"]["metadata"]["labels"] = {
+        "app.kubernetes.io/name": "ambre",
+        "app.kubernetes.io/instance": "ambre",
+        "app.kubernetes.io/component": comp,
+    }
+    return obj
+
+
+def peer(comp: str) -> dict:
+    return {"podSelector": {"matchLabels": labelled(comp)["spec"]["template"]["metadata"]["labels"]}}
+
+
+def policy(selector: dict, types: list[str], **rules: object) -> dict:
+    return {"kind": "NetworkPolicy", "spec": {"podSelector": selector, "policyTypes": types, **rules}}
+
+
+def network() -> list[dict]:
+    """A relay and its database: everything denied, then the one flow between them."""
+    release = {"matchLabels": {"app.kubernetes.io/name": "ambre", "app.kubernetes.io/instance": "ambre"}}
+    return [
+        labelled("relay"),
+        labelled("postgres"),
+        sfu(),
+        policy(release, ["Ingress", "Egress"]),
+        policy(peer("relay")["podSelector"], ["Egress"], egress=[{"to": [peer("postgres")], "ports": [{"port": 5432}]}]),
+        policy(
+            peer("postgres")["podSelector"],
+            ["Ingress"],
+            ingress=[{"from": [peer("relay")], "ports": [{"protocol": "TCP", "port": 5432}]}],
+        ),
+    ]
+
+
+TABLE = {("relay", "egress", "postgres", "TCP/5432"), ("postgres", "ingress", "relay", "TCP/5432")}
+
+
+class NetworkTest(unittest.TestCase):
+    def test_a_stack_that_admits_its_table_alone_holds(self) -> None:
+        self.assertEqual(chart.check_network(network(), TABLE), [])
+
+    def test_a_pod_no_policy_isolates_fails(self) -> None:
+        objects = [o for o in network() if o["kind"] != "NetworkPolicy" or "Egress" not in o["spec"]["policyTypes"]]
+        self.assertIn("postgres: no NetworkPolicy isolates its egress", chart.check_network(objects, TABLE))
+
+    def test_a_database_open_to_every_pod_fails(self) -> None:
+        objects = network()
+        objects[5]["spec"]["ingress"][0]["from"] = [{"podSelector": {}}]
+        faults = chart.check_network(objects, TABLE)
+        self.assertIn("which the flow table does not name", " ".join(faults))
+        self.assertIn("postgres: its ingress refuses relay on TCP/5432, which the flow table names", faults)
+
+    def test_a_rule_with_no_peer_admits_anywhere(self) -> None:
+        objects = network()
+        del objects[5]["spec"]["ingress"][0]["from"]
+        self.assertIn(
+            "postgres: its ingress admits anywhere on TCP/5432, which the flow table does not name",
+            chart.check_network(objects, TABLE),
+        )
+
+    def test_an_address_block_with_the_cluster_in_it_is_no_public_peer(self) -> None:
+        objects = network()
+        objects[4]["spec"]["egress"].append(
+            {"to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.0.0/16"]}}], "ports": [{"port": 443}]}
+        )
+        self.assertIn(
+            "relay: its egress admits ipBlock 0.0.0.0/0 on TCP/443, which the flow table does not name",
+            chart.check_network(objects, TABLE),
+        )
+
+    def test_the_sfu_on_the_network_of_its_node_is_out_of_the_table(self) -> None:
+        self.assertNotIn("sfu", " ".join(chart.check_network(network(), TABLE)))
+
+    def test_the_table_of_a_render_follows_its_stores(self) -> None:
+        inside = chart.flows_table({"web", "relay", "postgres", "redis", "garage"}, acme=True, external=False)
+        outside = chart.flows_table({"web", "relay"}, acme=False, external=True)
+        self.assertIn(("postgres", "ingress", "relay", "TCP/5432"), inside)
+        self.assertIn(("web", "egress", "public", "TCP/443"), inside)
+        self.assertNotIn(("web", "egress", "public", "TCP/443"), outside)
+        self.assertIn(("relay", "egress", "ipBlock 192.0.2.10/32", "TCP/5432"), outside)
+        self.assertFalse({f for f in outside if "postgres" in f})
+
+
+class ProbeTest(unittest.TestCase):
+    TARGETS = {"ambre-postgres:5432": False, "ambre-web:443": True}
+
+    def test_a_refusal_beside_an_open_entry_holds(self) -> None:
+        out = "ambre-postgres 5432 0\nambre-web 443 1\n"
+        self.assertEqual(chart.probe_faults("p", out, self.TARGETS), [])
+
+    def test_a_database_the_probe_reaches_fails(self) -> None:
+        out = "ambre-postgres 5432 1\nambre-web 443 1\n"
+        self.assertEqual(
+            chart.probe_faults("p", out, self.TARGETS),
+            ["p: reached ambre-postgres:5432, which the flow table does not name"],
+        )
+
+    def test_a_refusal_with_a_closed_entry_proves_nothing(self) -> None:
+        out = "ambre-postgres 5432 0\nambre-web 443 0\n"
+        self.assertIn("so a refusal proves nothing", " ".join(chart.probe_faults("p", out, self.TARGETS)))
+
+    def test_a_target_with_no_answer_fails(self) -> None:
+        self.assertIn("no answer for ambre-postgres:5432", " ".join(chart.probe_faults("p", "", self.TARGETS)))
+
+
 RELEASE = {
     "jobs": {
         "images": {

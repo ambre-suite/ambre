@@ -74,6 +74,6 @@ pub enum SyncWarningCode {
     /// Raised by Logic. The relay named a settings document other than the
     /// one this device opened. The device refused it and keeps its own: a
     /// relay that swaps the settings of a user is a sign of attack
-    /// (`SETTINGS-040`, `SETTINGS-045`).
+    /// (`SETTINGS-040`, `SETTINGS-046`).
     SettingsRefused = 12,
 }

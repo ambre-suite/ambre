@@ -154,8 +154,8 @@ APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose", "5-Murmure")
 # shared row that carries the rule today, so the trail from an old citation is
 # one lookup. Nothing else may be entered: a row whose rule is still this
 # application's is narrowed or split, never withdrawn -- unless another row of
-# the same document already states it, which is the only other entry this
-# register takes.
+# the same document already states it, or states its reverse, which are the
+# only other entries this register takes.
 RETIRED = {
     # Withdrawn into the shared row that states the same rule word for word,
     # found by `twin_defects`: each application held a copy of it.
@@ -249,6 +249,10 @@ RETIRED = {
     "PROSE-UI-268": "PROSE-UI-188",
     "PROSE-UI-269": "PROSE-UI-258",
     "PROSE-UI-270": "PROSE-UI-258, PROSE-UI-265",
+    # Withdrawn as the reverse of a row of the same document: it let an
+    # owner's invite replace a present member's exchange key, which the key
+    # hierarchy rules out. The named row refuses that entry.
+    "SYNC-285": "SYNC-217",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to

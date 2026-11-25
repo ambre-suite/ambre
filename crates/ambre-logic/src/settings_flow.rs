@@ -58,7 +58,7 @@ impl LogicState {
             if session.document_id() != document_id {
                 tracing::warn!("Logic: a second settings document named, refused");
                 // The user sees the refusal, not only a log line
-                // (`SETTINGS-045`).
+                // (`SETTINGS-046`).
                 self.send_to_ui(UiEvent::SyncWarning {
                     document_id,
                     code: ambre_bus::sync_warning::SyncWarningCode::SettingsRefused,
@@ -556,7 +556,7 @@ mod tests {
         assert!(rig.state.is_settings(rig.document_id));
     }
 
-    /// `SETTINGS-045`: the refusal of a second settings document reaches the
+    /// `SETTINGS-046`: the refusal of a second settings document reaches the
     /// view as a warning, and the same document named again warns nothing.
     #[test]
     fn a_refused_settings_document_warns_the_user() {

@@ -909,6 +909,11 @@ mod tests {
             })
             .expect("the log is kept");
         assert_eq!(kept.links.len(), 2, "the chain rides beside the head");
+        assert_eq!(
+            state.kept_chains().get(&DOC).map(crate::chain::Chain::len),
+            Some(2),
+            "a listed name of this session walks the same chain"
+        );
 
         // The next session reads the row back and rebuilds the chain.
         let row = ambre_bus::KeptLog::from_row(&kept.to_row().unwrap()).expect("a row");
@@ -1070,6 +1075,7 @@ mod tests {
 
     /// `SYNC-292`: a user search with no relay logs that it ran, and never
     /// the address it searched.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_user_search_logs_no_searched_address() {
         let (state, rx) = bare_state();

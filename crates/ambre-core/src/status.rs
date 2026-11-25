@@ -414,6 +414,11 @@ pub enum LocalFailure {
     /// sealed `meta` names, so a removal would leave that document uncapped
     /// (`SYNC-320`).
     ChannelDocumentHidden,
+    /// The relay served keys for a member other than the ones the membership
+    /// log last bound to them, present or revoked since. Both keys derive
+    /// from the Master Seed and never change, so the relay answered keys of
+    /// its own (`SYNC-324`, `SYNC-326`).
+    KeyReplaced(crate::id::Id<crate::id::User>),
 }
 
 impl fmt::Display for LocalFailure {
@@ -458,6 +463,12 @@ impl fmt::Display for LocalFailure {
                 f.write_str("the channel holds more documents than one removal can cap")
             }
             Self::ChannelDocumentHidden => f.write_str("the relay hid a document of the channel"),
+            Self::KeyReplaced(user) => {
+                write!(
+                    f,
+                    "the relay served another key for {user} than the members signed"
+                )
+            }
         }
     }
 }

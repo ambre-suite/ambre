@@ -162,11 +162,8 @@ impl<R: FixedRole> FixedBytes<R> {
     ///
     /// [`FixedBytesError::InvalidLength`], carrying the length it received.
     pub fn from_slice(bytes: &[u8]) -> Result<Self, FixedBytesError> {
-        if bytes.len() != R::Array::LEN {
-            return Err(FixedBytesError::InvalidLength(bytes.len()));
-        }
         let mut array = R::Array::zeroed();
-        array.as_mut().copy_from_slice(bytes);
+        copy_exact(bytes, array.as_mut())?;
         Ok(Self::from_array(array))
     }
 
@@ -256,51 +253,127 @@ impl<R: FixedRole> fmt::Debug for FixedBytes<R> {
 
 impl<R: FixedRole> Serialize for FixedBytes<R> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if serializer.is_human_readable() {
-            return serializer.serialize_str(&self.to_hex());
-        }
-        let mut tuple = serializer.serialize_tuple(R::Array::LEN)?;
-        for byte in self.as_slice() {
-            tuple.serialize_element(byte)?;
-        }
-        tuple.end()
+        write_bytes(self.as_slice(), serializer)
     }
 }
 
-/// Reads a [`FixedBytes`] from either form: the hexadecimal text of a
-/// readable format, or the tuple of bytes of a binary one.
-struct FixedBytesVisitor<R>(PhantomData<fn() -> R>);
+/// Writes `bytes` in either form: the hexadecimal text of a readable format,
+/// or a tuple of bytes in a binary one. No role is named, so every role
+/// shares one copy of the write.
+fn write_bytes<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+    if serializer.is_human_readable() {
+        return serializer.serialize_str(&hex::encode(bytes));
+    }
+    let mut tuple = serializer.serialize_tuple(bytes.len())?;
+    for byte in bytes {
+        tuple.serialize_element(byte)?;
+    }
+    tuple.end()
+}
 
-impl<'de, R: FixedRole> Visitor<'de> for FixedBytesVisitor<R> {
-    type Value = FixedBytes<R>;
+/// Copies `bytes` into `slots`, which must be as long.
+///
+/// # Errors
+///
+/// [`FixedBytesError::InvalidLength`], carrying the length of `bytes`.
+fn copy_exact(bytes: &[u8], slots: &mut [u8]) -> Result<(), FixedBytesError> {
+    if bytes.len() != slots.len() {
+        return Err(FixedBytesError::InvalidLength(bytes.len()));
+    }
+    slots.copy_from_slice(bytes);
+    Ok(())
+}
+
+/// Reads a [`FixedBytes`] into the bytes of its array. A readable format
+/// holds its hexadecimal text, and a binary one its tuple of bytes.
+///
+/// No role is named in the type, so every role shares one copy of each read.
+/// A visitor per role cost about 3 KB of the Sync worker
+/// (`ambre-spec-budgets.md` section 5).
+struct Slots<'a> {
+    bytes: &'a mut [u8],
+    name: crate::StaticKey<crate::DebugNames>,
+}
+
+/// The value a read expects, as the errors of serde name it.
+struct Width {
+    name: crate::StaticKey<crate::DebugNames>,
+    len: usize,
+}
+
+impl de::Expected for Width {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "a {} of {} bytes", self.name.as_str(), self.len)
+    }
+}
+
+impl<'de> Visitor<'de> for Slots<'_> {
+    type Value = ();
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "a {} of {} bytes", R::NAME.as_str(), R::Array::LEN)
+        de::Expected::fmt(&self.width(), f)
     }
 
-    fn visit_str<E: de::Error>(self, text: &str) -> Result<Self::Value, E> {
-        FixedBytes::from_hex(text).map_err(|e| E::custom(format_args!("{}: {e}", R::NAME.as_str())))
+    fn visit_str<E: de::Error>(self, text: &str) -> Result<(), E> {
+        read_hex(text, self.bytes, self.name)
     }
 
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let mut array = R::Array::zeroed();
-        for (read, slot) in array.as_mut().iter_mut().enumerate() {
-            *slot = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(read, &self))?;
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<(), A::Error> {
+        let width = self.width();
+        read_tuple(&mut seq, self.bytes, &width)
+    }
+}
+
+impl Slots<'_> {
+    fn width(&self) -> Width {
+        Width {
+            name: self.name,
+            len: self.bytes.len(),
         }
-        Ok(FixedBytes::from_array(array))
     }
+}
+
+/// Fills `slots` from the hexadecimal `text` of a value of the role `name`.
+fn read_hex<E: de::Error>(
+    text: &str,
+    slots: &mut [u8],
+    name: crate::StaticKey<crate::DebugNames>,
+) -> Result<(), E> {
+    hex::decode(text)
+        .map_err(FixedBytesError::from)
+        .and_then(|bytes| copy_exact(&bytes, slots))
+        .map_err(|e| E::custom(format_args!("{}: {e}", name.as_str())))
+}
+
+/// Fills `slots` from the tuple of bytes of a binary format, one element per
+/// slot. `expected` names the value in the error of a short tuple. Every
+/// width shares one copy of the loop, [`crate::Uuid`] included.
+pub(crate) fn read_tuple<'de, A: SeqAccess<'de>>(
+    seq: &mut A,
+    slots: &mut [u8],
+    expected: &dyn de::Expected,
+) -> Result<(), A::Error> {
+    for (read, slot) in slots.iter_mut().enumerate() {
+        *slot = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(read, expected))?;
+    }
+    Ok(())
 }
 
 impl<'de, R: FixedRole> Deserialize<'de> for FixedBytes<R> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let visitor = FixedBytesVisitor(PhantomData);
+        let mut array = R::Array::zeroed();
+        let slots = Slots {
+            bytes: array.as_mut(),
+            name: R::NAME,
+        };
         if deserializer.is_human_readable() {
-            deserializer.deserialize_str(visitor)
+            deserializer.deserialize_str(slots)?;
         } else {
-            deserializer.deserialize_tuple(R::Array::LEN, visitor)
+            deserializer.deserialize_tuple(R::Array::LEN, slots)?;
         }
+        Ok(Self::from_array(array))
     }
 }
 

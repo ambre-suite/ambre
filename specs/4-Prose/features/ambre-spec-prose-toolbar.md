@@ -86,8 +86,8 @@ status values are normative in `ambre-spec-template.md`.
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
 * **Verification.** 37 `verified`. Every row runs on the host against the view state and the Logic
   thread, with no browser. The wasm tier adds the bar and the panel elements: their controls, their
-  order and the value each hands to the view. The colours and sizes the panel writes do not reach
-  the glyphs yet, which `PROSE-UI-210` records.
+  order and the value each hands to the view. The glyphs take the size, the font, the colour and the
+  highlight the panel writes (`PROSE-UI-210`, `PROSE-UI-280`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -241,9 +241,6 @@ respecified here (`ambre-spec-chrome.md`).
 * **No control opens a suggestion.** The comment control opens a thread
   (`PROSE-UI-262`); a suggestion is still started by the mode alone
   (`features/ambre-spec-prose-track-changes.md section 6`).
-* **A size, font or colour mark does not reach the glyphs yet** (`PROSE-UI-210`,
-  `features/ambre-spec-prose-page-rendering.md`). The panel writes and reads each one; the
-  shaper draws bold, italic, underline and strike-through alone.
 * **A remote edit does not move a waiting write.** The view moves its caret through a remote
   edit, but a write that waits on the outbox keeps the offsets of its pick. No rule says
   whether such a write follows the text it was picked on.

@@ -786,3 +786,40 @@ fn a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker() {
         );
     }
 }
+
+/// `CALL-164`: the speaker stops its top layer, as a browser short of CPU does. Each receiver
+/// then gets its middle layer within the layer expiry budget, on each path of [`SEEDS`].
+#[test]
+fn a_top_layer_that_stops_hands_its_receivers_the_layer_below() {
+    for seed in SEEDS {
+        let mut net = seeded_call(3, proof_link(), seed);
+        net.run(Duration::from_secs(15));
+        let before = net.now - Duration::from_secs(1);
+        assert!(
+            since(track(&net, 1, 0), before).all(|a| a.layer == 2),
+            "seed {seed}: before the stop, the receiver gets the top layer of the speaker"
+        );
+        let stopped = net.now;
+        net.member(0).synth.layers_sent = 2;
+        net.run(Duration::from_secs(4));
+        for receiver in [1, 2] {
+            let arrivals: Vec<&Arrival> = since(track(&net, receiver, 0), stopped).collect();
+            let below = arrivals
+                .iter()
+                .find(|a| a.layer == 1)
+                .map(|a| a.at - stopped);
+            // The budget row of the layer expiry reads these figures.
+            eprintln!("seed {seed}: receiver {receiver} got the middle layer after {below:?}");
+            assert!(
+                below.is_some_and(|b| b <= Duration::from_secs(2)),
+                "seed {seed}: receiver {receiver} got the middle layer after {below:?}"
+            );
+            assert!(
+                arrivals
+                    .iter()
+                    .any(|a| a.at >= stopped + Duration::from_secs(3) && a.layer == 1),
+                "seed {seed}: receiver {receiver} holds no middle layer at the end"
+            );
+        }
+    }
+}

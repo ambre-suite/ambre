@@ -714,21 +714,20 @@ impl Outgoing {
     /// and the rest is [`Outgoing::with_json`] once (`ambre-spec-budgets.md`
     /// section 5).
     fn json<T: Serialize>(method: Method, url: Target, body: &T) -> Result<Self, HttpError> {
-        Self::with_json(
-            method,
-            url,
-            serde_json::to_vec(body).map(Payload::<HttpBody>::new),
-        )
+        let mut bytes = Vec::new();
+        let encoded = body.serialize(&mut serde_json::Serializer::new(&mut bytes));
+        Self::with_json(method, url, Payload::new(bytes), encoded)
     }
 
-    /// A request carrying `encoded` as JSON, or the refusal of a body that
-    /// did not encode.
+    /// A request carrying `body` as JSON, or the refusal of a body whose
+    /// encode failed.
     fn with_json(
         method: Method,
         url: Target,
-        encoded: Result<Payload<HttpBody>, serde_json::Error>,
+        body: Payload<HttpBody>,
+        encoded: Result<(), serde_json::Error>,
     ) -> Result<Self, HttpError> {
-        let body = encoded.map_err(|e| {
+        encoded.map_err(|e| {
             crate::log::warning!("Sync: {} {url}: serialize error: {e}", method.as_str());
             HttpError::Local(LocalFailure::Encode)
         })?;
@@ -932,9 +931,7 @@ impl Transport for Fetch {
         if let Some(checksum) = &request.checksum {
             // The link signs this header, so the store checks the body
             // against it and refuses any other (`SRV-313`).
-            use base64::Engine as _;
-            let value = base64::engine::general_purpose::STANDARD.encode(checksum.as_array());
-            builder = builder.header("x-amz-checksum-sha256", &value);
+            builder = builder.header("x-amz-checksum-sha256", &checksum.to_base64());
         }
         let sent = match &request.body {
             Some((content_type, bytes)) => {
@@ -1553,11 +1550,20 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
 pub(crate) async fn fetch_bytes(
     url: &ambre_core::Credential<ambre_core::PresignedUrl>,
 ) -> Result<Payload<crate::pipeline::FetchedBlob>, HttpError> {
+    fetch_bytes_via(&Fetch, url).await
+}
+
+/// The download of [`fetch_bytes`] over `transport`, so a host test holds
+/// the ceiling of an object.
+async fn fetch_bytes_via(
+    transport: &impl Transport,
+    url: &ambre_core::Credential<ambre_core::PresignedUrl>,
+) -> Result<Payload<crate::pipeline::FetchedBlob>, HttpError> {
     let request = Outgoing {
         ceiling: OBJECT_CEILING,
         ..Outgoing::new(Method::Get, url.into())
     };
-    let resp = exchange(&Fetch, &request).await?;
+    let resp = exchange(transport, &request).await?;
     expect_ok(&request, &resp)?;
     Ok(resp.body.into_role())
 }
@@ -2742,6 +2748,27 @@ mod tests {
             ..answer
         };
         assert!(exchange(&transport, &object).await.is_ok());
+    }
+
+    /// `SYNC-277`: a download from the store reads under the ceiling of an
+    /// object. A snapshot past the ceiling of a relay answer still opens.
+    #[tokio::test]
+    async fn a_download_from_the_store_holds_the_ceiling_of_an_object() {
+        let large = "a".repeat(17 * 1024 * 1024);
+        let transport = Scripted::new([Ok((200, serde_json::json!(large)))]);
+        let link = ambre_core::Credential::<ambre_core::PresignedUrl>::new(
+            "https://store.test/bucket/object".to_owned(),
+        );
+        let body = fetch_bytes_via(&transport, &link).await.expect("an object");
+        assert_eq!(
+            body.as_bytes().len(),
+            17 * 1024 * 1024 + 2,
+            "the JSON quotes"
+        );
+        assert_eq!(
+            transport.sent.borrow().first().map(|sent| sent.ceiling),
+            Some(OBJECT_CEILING)
+        );
     }
 
     /// The refusal of a `GET` or a `POST`, as the relay's answer builds it.
