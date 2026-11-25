@@ -75,6 +75,19 @@ exclude_re = [
     # Equivalent: at a counter equal to the highest the shift is 0, so the
     # mutant leaves the map and the highest as they were.
     "replace > with >= in ReplayWindow::mark",
+    # Equivalent: at an equal time both arms keep the same instant, so a
+    # second close keeps the earlier time either way.
+    "replace < with <= in ReceiveKeys::close",
+    # Equivalent: `V1` is the one variant, and it spells the byte 1.
+    'replace (WrapVersion|SeedVersion)::byte -> u8 with 1',
+    # Equivalent: `Writers::of_in` keeps the heads of the walk only when a
+    # key was readmitted, and `capped` keeps neither. With no readmission
+    # the heads are empty, so the last head is `None` either way.
+    'replace match guard readmitted\.by_key\.is_empty\(\) with false in Writers::proof_head',
+    # Host-unreachable: the metered read takes a browser stream, which no
+    # host build holds. The wasm tier kills each mutant: `metered_fetch`
+    # reads 8 bytes whole and stops a body past its ceiling (`SYNC-278`).
+    'http\.rs:.*replace (read_metered|read_body|metered_body_len) -> ',
     # Host-unreachable: the socket handle exists in the browser alone, so no
     # host build reaches the send, and the wasm entry is compiled for wasm32
     # alone. The browser tier holds both.

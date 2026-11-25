@@ -89,17 +89,22 @@ impl<D> Runtime<D> {
         match channel.sweep_step() {
             SweepStep::Open(document_id) => self.ask(open_in_channel(meta, document_id)),
             SweepStep::Wait => {}
-            SweepStep::Done(named) => {
+            SweepStep::Done(swept) => {
                 let document_id = meta.document_id();
                 for removal in self.removals.remove(&channel_id).unwrap_or_default() {
-                    let named = named.clone();
+                    let (named, threads) = (swept.documents.clone(), swept.threads.clone());
                     self.ask(match removal {
-                        Removal::Leave => SyncCommand::LeaveChannel { channel_id, named },
+                        Removal::Leave => SyncCommand::LeaveChannel {
+                            channel_id,
+                            named,
+                            threads,
+                        },
                         Removal::Revoke { id, user_id, .. } => SyncCommand::RevokeFromChannel {
                             id,
                             document_id,
                             user_id,
                             named,
+                            threads,
                         },
                     });
                 }

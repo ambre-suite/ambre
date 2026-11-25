@@ -249,6 +249,7 @@
 | SFU load, one call of 50 participants | < 2 vCPU | packet forwarding and the layer choice per receiver | measured on 2026-11-08 by `LOAD_SFU_CPUS=0,1 LOAD_SECONDS=600 taskset -c 2,3 cargo test -p ambre-sfu --release -- --ignored load_of_one_call`, on a cloud container of 4 vCPU, Intel Xeon 2.10 GHz, the SFU pinned to 2 of them and the 50 synthetic participants and their impairment relay to the other 2, at 150 ms of round trip and 2 % loss: 1.51 vCPU over 600 s. Earlier the same day, before the SFU spread its connections over threads, one thread saturated at 0.99 vCPU and the transit reached 7.5 s at p99. The pacer of str0m costs the most: it reads every send stream of a connection at each packet it sends. Later on 2026-11-08, with the congestion control of Ambre's own and 12 slots per receiver, on a cloud container of 4 vCPU, Intel Xeon 2.30 GHz, by the same command: 0.87 vCPU over 600 s, and a speech transit of 161 ms at p95. Later the same day, with the layer choice run at once on a lower target: 0.89 vCPU, and 161 ms at p95. Later on 2026-11-08, with the probe of the next layer step, by the same command on a cloud container of 4 vCPU, Intel Xeon 2.10 GHz: 1.04 vCPU over 600 s, and 162 ms at p95 |
 | SFU layer drop, from a cap on the downlink of a receiver to a lower layer at that receiver | < 3 s | the estimate of the downlink, from the transport-wide feedback of the receiver | `ambre_sfu::sim::tests::a_capped_receiver_drops_a_layer_within_the_budget` measures it in simulated time, at 150 ms of round trip and 2 % loss, and no CI job runs it (`CALL-038`). On 2026-11-08, alone on the machine: 20 runs from 0.87 s to 2.33 s. Beside three other runs: 4 of 21 above 3 s, the slowest 4.0 s. **It fails the target under load.** In the load run of 50, no receiver held a layer above the lowest under 2 % loss, so the cap found no layer to drop there. Later on 2026-11-08, with the congestion control of Ambre's own and a congested drop that stops the current layer, the run is seeded and runs in the CI native tier over eight seeds. By `cargo test -p ambre-sfu --release a_capped_receiver -- --nocapture`, on a cloud container of 4 vCPU, Intel Xeon 2.30 GHz: from 0.82 s to 1.13 s. The same seeds on the estimate of str0m: from 0.83 s to 3.19 s. In the load run of 50 above, the capped receiver dropped after 1.58 s. Later on 2026-11-08, the layer choice runs at once on a lower target, and the SFU pads nothing under overuse. On the same machine, by the same two commands: from 0.68 s to 0.85 s over the eight seeds, and 0.87 s in the load run of 50. Later on 2026-11-08, with the probe of the next layer step and a simulated clock of 1 ms, on a cloud container of 4 vCPU, Intel Xeon 2.10 GHz, by the same two commands: from 0.72 s to 0.78 s over the eight seeds, and 0.88 s in the load run of 50 |
 | SFU layer recovery, from a delay step with no lasting congestion to the top layer at that receiver | < 2 s | the end of the overuse, one probe of the next layer step, then the keyframe of the top layer | `ambre_sfu::sim::tests::a_receiver_climbs_back_to_the_top_layer_after_a_delay_step` measures it in simulated time, at 150 ms of round trip and 2 % loss, with a step of 40 ms on the one-way delay of the downlink, over eight seeds in the CI native tier (`CALL-050`). On 2026-11-08, by `cargo test -p ambre-sfu --release a_receiver_climbs_back -- --nocapture`, on a cloud container of 4 vCPU, Intel Xeon 2.10 GHz: from 1.12 s to 1.29 s. Of that time, the overuse of the step lasts 0.45 s to 0.53 s, the probe takes 0.35 s to 0.40 s, and the keyframe of the top layer arrives 0.25 s to 0.49 s later. Before the probe, the same seeds held the middle layer for over 7 s |
+| SFU layer expiry, from the last packet of a camera layer to the first packet of a layer that still sends at its receiver | < 2 s at 150 ms of round trip | a silence of 1 s, then the next layer choice and the keyframe of the lower layer, one round trip | `ambre_sfu::sim::tests::a_top_layer_that_stops_hands_its_receivers_the_layer_below` measures it in simulated time, at 150 ms of round trip and 2 % loss, over eight seeds in the CI native tier (`CALL-164`). The speaker stops its top layer, and each of two receivers gets its middle layer. On 2026-11-25, by `cargo test -p ambre-sfu --release a_top_layer_that_stops -- --nocapture`, on a cloud container: from 1.32 s to 1.54 s. The silence of 1 s is two windows of the meter: a camera sends a picture well inside it |
 | SFU switch to a chosen sender, from the choice the SFU reads to the first packet of that sender at the receiver | < 500 ms at 150 ms of round trip | one keyframe request to the sender and its keyframe back, one round trip | `ambre_sfu::sim::tests::a_chosen_sender_is_asked_a_keyframe_and_shows_within_the_budget` measures it in simulated time, with no loss, for two senders outside the nine a receiver of a call of twelve gets (`CALL-129`). On 2026-11-16, by `cargo test -p ambre-sfu --release a_chosen_sender_is -- --nocapture`, on a cloud container: 245 ms and 246 ms. The page and the Sync worker add the trip of the choice over the socket of the SFU, which no run measures |
 
 ---
@@ -1094,6 +1095,50 @@
   the figure of the W10 raise, with 21 523 bytes of room, 1.6 % of the measure. The first download
   reads 3 249 391 bytes of brotli. A cut under the former ceiling of 1 310 000 needs a cut that is
   refused: `wasm-opt`, or the size level of `curve25519-dalek`.
+
+* **Six cuts took Sync to 1 325 809 raw bytes on 2026-11-25, so the next stories have room.**
+  Merged over `ccr-cd7c4606-wmq4hy` at `52013a7`, the phantom thread put Sync at 1 356 102 raw
+  bytes by `just size`. That is 6 102 over its ceiling of 1 350 000. `twiggy` found no crate
+  that a small call pulled in whole beyond the two the roadmap named. So each other cut removes a
+  copy that the code made per type, and every byte on the wire stays:
+  1. A codec of `ambre-core` replaces the `base64` crate. It writes the padded base64 of RFC 4648
+     for the sealed values and the checksum header (`SRV-348`).
+  2. A socket frame is the postcard of the tuple of the version byte and the message, so the
+     `to_extend` writer leaves the worker (`SRV-350`).
+  3. The JSON read hands a field name to the field visitor of its struct as a string. The key read
+     of `serde_json` then links once, out of line. The fields of one struct share one buffer.
+  4. A request body keeps `T::serialize` alone generic.
+  5. `FixedBytes` reads and writes its bytes through one visitor and one copy for every role.
+  6. `Uuid` reads its 16 bytes through that loop. The derive of `[u8; 16]` unrolled 16 reads.
+* **No budget of section 1 moves.** The cuts touch the REST answers, the base64 of sealed values
+  and the decode of fixed-width values, which no hot path reads. A field name costs one copy into
+  a buffer per field. No security check moves, and the level of `curve25519-dalek` stays 3.
+* **The method.** The rows marked `just size` are `trunk build --release`, then
+  `scripts/wasm_size.py`, on the session container. The tries are
+  `cargo build --profile wasm-release -p ambre-sync`, then `wasm-bindgen` 0.2.122 with
+  `--target no-modules`. That build reads 1 342 117 bytes at `52013a7`. It reads 1 355 410 with
+  the phantom thread merged.
+
+| Build | Sync raw | Change | Verdict |
+|---|---|---|---|
+| `52013a7` | 1 342 117 | -- | before the story |
+| cut 1: the base64 codec of `ambre-core` | 1 335 652 | -6 465 | kept |
+| cut 2: one postcard writer for the frames | 1 333 486 | -2 166 | kept |
+| `-Zmerge-functions=aliases` on the profile | 1 333 178 | -308 | dropped: a flag of every instance for 308 bytes; `trampolines` grew by 909 |
+| cut 3: a field name read once, as a string | 1 331 326 | -2 160 | kept |
+| cut 5: the hex and tuple reads of `FixedBytes` shared | 1 329 959 | -1 367 | kept |
+| cut 4, and the key read out of line | 1 328 794 | -1 165 | kept |
+| the reader of an answer opened out of line | 1 332 664 | +3 870 | dropped, it grew |
+| one buffer per struct for its field names | 1 328 858 | +64 | kept: one copy per field in place of one allocation |
+| cut 6: the tuple loop of `Uuid` | 1 327 488 | -1 370 | kept |
+| cut 5: one visitor of `FixedBytes` for every role | 1 326 340 | -1 148 | kept |
+| the decode of `Encoded` by the values of its role | 1 326 430 | +90 | dropped, it grew |
+| cut 5: one write and one copy of `FixedBytes` | 1 325 934 | -406 | kept |
+| the kept cuts, by `just size` | 1 325 809 | -- | 400 894 brotli; no `just size` of `52013a7` alone was taken |
+| the kept cuts with the phantom thread merged, by `just size` | 1 339 608 | -16 494 | 404 025 brotli; read against 1 356 102 |
+
+  With the phantom thread merged, the ceiling of 1 350 000 holds 10 392 bytes of room. The
+  ceiling does not move.
 
 * **The PNG raster raised the PDF module ceiling on 2026-11-15.** The PNG export rasterizes a
   recorded page in the PDF module, on the converter thread

@@ -957,8 +957,8 @@ mod tests {
         assert!(
             after.iter().any(|c| matches!(
                 c,
-                SyncCommand::RevokeFromChannel { id: i, document_id, named, .. }
-                    if *i == id && *document_id == meta && named.contains(&thread)
+                SyncCommand::RevokeFromChannel { id: i, document_id, named, threads, .. }
+                    if *i == id && *document_id == meta && *threads == [thread]
                         && named.contains(&old.document_id())
             )),
             "{after:?}"

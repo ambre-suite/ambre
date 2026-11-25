@@ -1,0 +1,161 @@
+{{- /*
+The network of the pods (`SRV-351`). The first policy selects every pod of the
+release and admits nothing, in or out. Each policy after it admits one flow
+of the table of `ambre-spec-server.md` section 3, and no other. The SFU runs
+on the network of its node, which no NetworkPolicy governs (`CALL-141`).
+*/ -}}
+{{- $web := dict "root" . "component" "web" -}}
+{{- $relay := dict "root" . "component" "relay" -}}
+{{- $postgres := dict "root" . "component" "postgres" -}}
+{{- $redis := dict "root" . "component" "redis" -}}
+{{- $garage := dict "root" . "component" "garage" -}}
+{{- $external := not (and .Values.postgres.enabled .Values.redis.enabled .Values.garage.enabled) -}}
+{{- if and $external (not .Values.networkPolicy.externalStores) -}}
+{{- fail "networkPolicy.externalStores: a store outside the cluster needs the rule that lets the relay reach it" -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-deny" .Release.Name | trunc 63 | trimSuffix "-" }}
+  labels: {{- include "ambre.labels" (dict "root" . "component" "network") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ambre
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+---
+# The web server: the one public entry. It reaches the relay, the object
+# store, the signalling of the SFU and, for an ACME certificate, the authority.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ambre.name" $web }}
+  labels: {{- include "ambre.labels" $web | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "ambre.selector" $web | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - {protocol: TCP, port: 8080}
+        - {protocol: TCP, port: 8443}
+  egress:
+    {{- include "ambre.dnsEgress" . | nindent 4 }}
+    - to: {{- include "ambre.peer" $relay | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 3000}
+    {{- if .Values.garage.enabled }}
+    - to: {{- include "ambre.peer" $garage | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 3900}
+    {{- end }}
+    # The SFU listens on the address of its node, which no pod selector
+    # names, so the port alone bounds the rule.
+    - ports:
+        - {protocol: TCP, port: {{ .Values.sfu.signalPort }}}
+    {{- if ne .Values.tls "internal" }}
+    - to: {{- include "ambre.publicAddresses" . | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 443}
+    {{- end }}
+---
+# The relay: the web server alone reaches its API, and the scrapers that
+# `networkPolicy.metricsFrom` names its metrics. It reaches the stores, and
+# HTTPS on a public address for the identity provider.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ambre.name" $relay }}
+  labels: {{- include "ambre.labels" $relay | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "ambre.selector" $relay | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: {{- include "ambre.peer" $web | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 3000}
+    {{- with .Values.networkPolicy.metricsFrom }}
+    - from: {{- toYaml . | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 9100}
+    {{- end }}
+  egress:
+    {{- include "ambre.dnsEgress" . | nindent 4 }}
+    {{- if .Values.postgres.enabled }}
+    - to: {{- include "ambre.peer" $postgres | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 5432}
+    {{- end }}
+    {{- if .Values.redis.enabled }}
+    - to: {{- include "ambre.peer" $redis | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 6379}
+    {{- end }}
+    {{- if .Values.garage.enabled }}
+    # The S3 API, and the admin API for the preparation of the store.
+    - to: {{- include "ambre.peer" $garage | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 3900}
+        - {protocol: TCP, port: 3903}
+    {{- end }}
+    - to: {{- include "ambre.publicAddresses" . | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 443}
+    {{- with .Values.networkPolicy.externalStores }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- if .Values.postgres.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ambre.name" $postgres }}
+  labels: {{- include "ambre.labels" $postgres | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "ambre.selector" $postgres | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from: {{- include "ambre.peer" $relay | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 5432}
+{{- end }}
+{{- if .Values.redis.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ambre.name" $redis }}
+  labels: {{- include "ambre.labels" $redis | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "ambre.selector" $redis | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from: {{- include "ambre.peer" $relay | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 6379}
+{{- end }}
+{{- if .Values.garage.enabled }}
+---
+# The web server proxies the S3 API. The admin API serves the relay alone.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ambre.name" $garage }}
+  labels: {{- include "ambre.labels" $garage | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "ambre.selector" $garage | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from: {{- include "ambre.peer" $relay | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 3900}
+        - {protocol: TCP, port: 3903}
+    - from: {{- include "ambre.peer" $web | nindent 8 }}
+      ports:
+        - {protocol: TCP, port: 3900}
+{{- end }}

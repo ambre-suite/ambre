@@ -41,6 +41,7 @@ import chart  # noqa: E402
 import crate_table  # noqa: E402
 import feature_inventory  # noqa: E402
 import fixture_provenance  # noqa: E402
+import image_provenance  # noqa: E402
 import freeze_provenance  # noqa: E402
 import instructions  # noqa: E402
 import locale_table  # noqa: E402
@@ -85,6 +86,7 @@ SCRIPTS = {
     "freeze_provenance": GATE,
     "garage_init": TOOL,
     "glossary": TOOL,
+    "image_provenance": GATE,
     "instructions": GATE,
     "locale_table": GENERATOR,
     "merge_generated": TOOL,
@@ -311,6 +313,12 @@ class GatesFailWithNoFlag(unittest.TestCase):
             mock.patch.object(chart, "render", lambda *args: []),
             mock.patch.object(chart, "compose_images", lambda: {}),
         ], run=lambda: chart.main(["check"]))
+
+    def test_image_provenance(self) -> None:
+        # A tree with no release workflow attests nothing and verifies nothing.
+        self.fails("image_provenance", [
+            mock.patch.object(image_provenance, "WORKFLOWS", self.dir),
+        ], run=lambda: image_provenance.main(["check"]))
 
     def test_checkout_credentials(self) -> None:
         self.fails("checkout_credentials", [

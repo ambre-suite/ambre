@@ -19,10 +19,9 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::base64::{self, Alphabet};
 use crate::fixed_bytes::{DebugForm, FixedBytes, FixedRole};
 use crate::{CommitmentTag, KeyId, Nonce, PublicKey, Signature};
 
@@ -132,7 +131,7 @@ impl<K: EncodedKind> Encoded<K> {
     /// The text the wire carries.
     #[must_use]
     pub fn to_base64(&self) -> String {
-        URL_SAFE.encode(&self.bytes)
+        base64::encode(Alphabet::UrlSafe, &self.bytes)
     }
 
     /// Why `bytes` cannot be a value of this role, or `None` when it can.
@@ -197,8 +196,7 @@ impl<K: EncodedKind> Serialize for Encoded<K> {
 impl<'de, K: EncodedKind> Deserialize<'de> for Encoded<K> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let text = String::deserialize(deserializer)?;
-        let bytes = URL_SAFE
-            .decode(text.as_bytes())
+        let bytes = base64::decode(Alphabet::UrlSafe, &text)
             .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))?;
         match Self::refusal(&bytes) {
             Some(refusal) => Err(serde::de::Error::custom(refusal)),

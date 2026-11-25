@@ -30,6 +30,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-009` | `CONC` | Two devices signing in for the first time at once MUST converge on one settings document. | this spec section 3, the store; `SETTINGS-002` | `ambre_server::routes::tests::handler_tests::two_first_claims_at_once_converge_on_one_document` | none | verified |
 | `SETTINGS-016` | `CONC` | Two devices that change one setting, one of them offline, MUST converge on one value once both reach the relay. | this spec section 3, the merge; `ambre-spec-delta-order.md` | `ambre_logic::settings::tests::two_devices_converge_after_writing_apart` | none | verified |
 | `SETTINGS-017` | `INV` | The key of the settings document MUST be wrapped for the exchange key of its user, as the key of any document. | this spec section 3, the key; `ambre-spec-membership.md section 3` | `ambre_sync::settings::tests::an_account_with_none_claims_one_and_opens_the_relay_answer` -- the self-wrap of the creation rides the claim | none | verified |
+| `SETTINGS-045` | `INV` | Every device of the user MUST open the settings key from its first self-wrap, after a recovery too. | this spec section 3, the key; `SETTINGS-017`; `ambre-spec-zero-knowledge.md`, `ZK-009`, `ZK-043`; `ambre-spec-session.md`, `SRV-030`; `ambre-spec-sync.md`, `SYNC-249` | `ambre_sync::settings::tests::the_settings_self_wrap_opens_under_the_key_a_recovery_derives` -- the words of the account derive the registered exchange key and open the copy, and another seed opens nothing; `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only` -- the relay writes the exchange key of an account once, database tier | none | verified |
 | `SETTINGS-018` | `INV` | The settings document MUST declare its kind inside its sealed content. | this spec section 3, the store | `ambre_logic::settings::tests::a_created_document_names_its_kind_in_its_first_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` -- the first delta names the kind | none | verified |
 | `SETTINGS-019` | `INV` | Every setting MUST declare a default value. | this spec section 3, the catalogue | type-level -- `SettingValue` requires `Default`, and `Setting::read` falls back on it | none | verified |
 | `SETTINGS-020` | `INV` | A setting whose meaning or type changes MUST take a new key, and never reuse the old one. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
@@ -91,7 +92,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 44 `verified`.
+* **Verification.** 45 `verified`.
 
 ---
 
@@ -107,6 +108,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | signs in on a new phone | the phone | nothing yet, on the phone | the default theme, then her settings once they load (`SETTINGS-010`) | none |
 | signs in on two new devices at the same moment | both | one document | the same settings on both (`SETTINGS-009`) | none |
 | signs out | her phone | her settings, on the relay | nothing left on the phone, and everything back at the next sign-in (`SETTINGS-014`, `SETTINGS-039`) | none |
+| forgets her passphrase, and recovers with her 24 words on a new laptop | the laptop | her settings, under the same copy of the key | her settings, with no re-wrap and no prompt (`SETTINGS-045`) | none |
 | -- | -- | the relay points her new phone at a document of her own that is no settings document | the defaults, and that document unchanged (`SETTINGS-030`) | none |
 
 ---
@@ -159,7 +161,12 @@ derives the wrap and no new derivation domain exists (`ZK-009`).
 | a passphrase change | nothing: the same seed is sealed again, and the exchange key does not move (`SYNC-251`) |
 | a recovery | nothing: the words spell the same seed (`ZK-043`) |
 | a new device | nothing: the device unlocks the same seed, then unwraps the same copy |
-| a new exchange key of the user | the copy must be wrapped again, as for every document of the user |
+| a new exchange key of the user | none exists: the relay writes the exchange key once (`SRV-030`), and a recovery refuses another seed (`SYNC-249`) |
+
+**One exchange key for the life of the account.** Every event above unlocks the same seed, and the
+seed derives the same exchange key (`ZK-009`). So each device opens the copy of the creation, and
+no re-wrap exists (`SETTINGS-045`). A new seed needs a new account, since the relay keeps the keys
+of an account once. That account claims a settings document of its own (`SETTINGS-008`).
 
 **The merge.** Each section is a map, and each entry is one last-writer-wins value
 (`SETTINGS-004`). Two devices changing two settings never race. Two devices changing one setting
@@ -295,6 +302,7 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
 | An ordinary document with one member | a sealed blob per account, replaced by compare-and-swap | it needs a route, a table and a seal of its own, and a merge of two offline writes the client codes again by hand. No other device learns of a change until it asks. The document pipeline already holds the seal, the order, the offline queue and the push, for one member row and one log entry |
 | An ordinary document with one member | the settings in the clear on the account record | the relay would read every setting, which `ZK-054` refuses |
 | An ordinary document with one member | a key derived from the Master Seed for the settings alone | a third derivation domain beside the two `ZK-009` freezes, for a document the existing wrap already opens |
+| One self-wrap for the life of the account | a new wrap of the settings key at each new device or recovery | the exchange key does not move, so the new wrap equals the old one. A route that replaces the copy would let a hostile relay offer a key of its own |
 | A pointer the relay keeps | a document identifier derived from the Master Seed | a third derivation domain again, and an identifier derived from a secret where every other is a UUID v7. It hides nothing: a document with one member, opened first at every unlock, names itself |
 | One document per user | one document per application | each application would find, create and pin its own, and a new device would open several to show one screen |
 | Settings in a document | the browser's local storage | a new device starts empty, and a new device is where the user needs the settings most |
@@ -322,9 +330,6 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
   reads it (`ambre-spec-locale.md section 6`).
 * **The context panel is not specified here.** Its side, its width and its fold are named in the
   catalogue. The rows that read them are written with the panel itself.
-* **No rule says what a new exchange key does to the settings.** A user's new exchange key needs a
-  path for every document: `A user's new exchange key keeps the settings` Story (`ambre-roadmap.md`
-  MVP).
 
 ---
 

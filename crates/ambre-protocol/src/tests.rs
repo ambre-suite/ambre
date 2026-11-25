@@ -625,6 +625,58 @@ fn the_wire_layout_is_frozen_under_its_version() {
     );
 }
 
+/// The writer the frame encoders used before the size cut of 2026-11-25:
+/// the version byte, then postcard appended through its `Vec` flavor.
+fn extended_frame<T: serde::Serialize>(msg: &T) -> Vec<u8> {
+    postcard::to_extend(msg, vec![CURRENT_VERSION.get()]).unwrap()
+}
+
+/// One frame of each variant keeps the bytes of the writer it replaced.
+#[test]
+fn every_sample_frame_keeps_the_bytes_of_the_extend_writer() {
+    use crate::ws::{encode_client_msg, encode_server_msg};
+    for msg in client_samples() {
+        assert_eq!(encode_client_msg(&msg).into_bytes(), extended_frame(&msg));
+    }
+    for msg in server_samples() {
+        assert_eq!(encode_server_msg(&msg).into_bytes(), extended_frame(&msg));
+    }
+}
+
+proptest::proptest! {
+    /// A frame of any length keeps the bytes of the writer it replaced, past
+    /// each width of the postcard length prefix.
+    #[test]
+    fn a_frame_keeps_the_bytes_of_the_extend_writer(
+        ciphertext in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..20_000),
+        clock in proptest::prelude::any::<u64>(),
+    ) {
+        use crate::ws::{WsClientMsg, WsServerMsg, encode_client_msg, encode_server_msg};
+        let update = || Update {
+            ciphertext: Payload::<Ciphertext>::new(ciphertext.clone()),
+            nonce: FixedBytes::from_array([3u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: Id::<Document>::from_bytes([1; 16]),
+                pub_key: FixedBytes::from_array([5u8; 32]),
+                key_id: FixedBytes::from_array([8u8; 16]),
+                snapshot_id: Id::<id::Snapshot>::from_bytes([2; 16]),
+                clock: Seq::<DeltaAuthor>::new(clock),
+                log_head: crate::LogHead::EMPTY,
+                log_entry: None,
+            },
+            commitment_tag: FixedBytes::from_array([6u8; 32]),
+            signature: FixedBytes::from_array([7u8; 64]),
+        };
+        let client = WsClientMsg::Update(update());
+        proptest::prop_assert_eq!(encode_client_msg(&client).into_bytes(), extended_frame(&client));
+        let server = WsServerMsg::Update {
+            seq: Seq::<Relay>::new(clock),
+            update: update(),
+        };
+        proptest::prop_assert_eq!(encode_server_msg(&server).into_bytes(), extended_frame(&server));
+    }
+}
+
 /// `ZK-007`, `ZK-013`: the fields a sealed envelope shows the relay. Each
 /// destructuring names every field and uses no `..`. A field added to an
 /// envelope fails to compile here until a writer weighs it against `ZK-007`.

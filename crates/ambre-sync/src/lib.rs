@@ -192,6 +192,7 @@ mod converter;
 mod cursors;
 mod docfile;
 mod documents;
+mod erasure;
 mod error;
 mod finalize;
 mod fold;
@@ -2431,21 +2432,29 @@ impl SyncState {
                 documents,
             } => self.handle_watch_channel(channel_id, (meta, meta_last), &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
-            SyncCommand::LeaveChannel { channel_id, named } => {
-                self.handle_leave_channel(channel_id, named);
+            SyncCommand::LeaveChannel {
+                channel_id,
+                named,
+                threads,
+            } => {
+                self.handle_leave_channel(channel_id, named, threads);
             }
             SyncCommand::RevokeFromChannel {
                 id,
                 document_id,
                 user_id,
                 named,
+                threads,
             } => self.begin_removal(
                 crate::census::Removal::Revoke {
                     id,
                     document_id,
                     user_id,
                 },
-                Some(named),
+                Some(crate::census::Named {
+                    documents: named,
+                    threads,
+                }),
             ),
             SyncCommand::CreateDirectMessage {
                 channel_id,
@@ -3276,5 +3285,66 @@ mod seal_tests {
         let body = pipeline::split_presence_body(&opened).expect("splits");
         assert_eq!(body.session, FixedBytes::from_array([1; 16]));
         assert_eq!(body.sample, typed);
+    }
+}
+
+#[cfg(test)]
+mod applied_tests {
+    use super::*;
+    use crate::membership_log::tests::{Person, append, created, revoke_capped, walk};
+
+    /// Holds `SYNC-301` at the bound of the heads kept per author. Bob is
+    /// capped at 4 and invited back. His first delta signs the head after
+    /// the invite, past the cap, and 63 more sign forged heads under it. A
+    /// forged head past the bound and past the cap merges into the empty
+    /// head and leaves the delta past the cap. It never lands on the head
+    /// of the invite, and the bound holds at 64 heads.
+    #[test]
+    fn a_head_past_the_bound_merges_into_the_empty_head() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let at = Seq::<DeltaAuthor>::new;
+        let mut log = created(&alice, &bob);
+        revoke_capped(&mut log, &alice, &bob, 4);
+        append(
+            &mut log,
+            &alice,
+            &bob,
+            ambre_protocol::MembershipAct::Invite,
+            Role::Editor,
+        );
+        let walked = walk(&log);
+        let readmitted = walked.walked_head();
+        let writers = membership_log::Writers::of(&walked);
+        let forged = |n: u8| ambre_protocol::LogHead {
+            position: Seq::new(u64::from(n)),
+            previous: Some(FixedBytes::from_array([n; 32])),
+        };
+        let author = bob.public();
+        let mut applied = Applied::default();
+        applied.note_signed(&author, readmitted, at(10));
+        for n in 1..64u8 {
+            applied.note_signed(&author, forged(n), at(3));
+        }
+        assert!(
+            !applied.past_cap(&writers),
+            "the bound is full, nothing past"
+        );
+        applied.note_signed(&author, forged(64), at(9));
+        applied.note_signed(&author, forged(65), at(8));
+        let heads = &applied.heads[&author];
+        assert_eq!(
+            Count::<AppliedHeads>::of(heads.len()),
+            APPLIED_HEADS_PER_AUTHOR
+        );
+        assert_eq!(heads.first(), Some(&(readmitted, at(10))));
+        assert_eq!(
+            heads.last(),
+            Some(&(ambre_protocol::LogHead::EMPTY, at(9))),
+            "the last slot merges into the empty head"
+        );
+        assert!(
+            applied.past_cap(&writers),
+            "the empty head passes no readmission"
+        );
     }
 }
