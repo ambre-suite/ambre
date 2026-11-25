@@ -202,21 +202,24 @@ pub struct PageView<'v> {
     pub(crate) pages: &'v [PagePaint],
     /// What each picture address shows now.
     pub(crate) pictures: &'v PictureStore,
-    /// Who draws the highlight marks under the glyphs.
-    pub(crate) marks: MarkFills,
+    /// Who draws the fills under the glyphs: the highlight marks and the
+    /// table cells.
+    pub(crate) underlays: Underlays,
 }
 
-/// Who draws the box a highlight mark fills under its glyphs (`PROSE-UI-280`).
+/// Who draws the opaque fills under the glyphs: the box of each highlight
+/// mark (`PROSE-UI-280`) and the fill of each table cell (`PROSE-UI-283`).
 ///
 /// The screen draws its selections before the walk, so an opaque fill the
-/// walk drew would hide them. The screen therefore fills the marks itself,
+/// walk drew would hide them. The screen therefore draws the fills itself,
 /// under its selections, and the walk leaves them out. A print has no
-/// selection, and its walk fills them.
+/// selection, and its walk draws them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum MarkFills {
-    /// The walk fills them, under the glyphs of each block.
+pub(crate) enum Underlays {
+    /// The walk draws them, each under the glyphs it sits behind.
     Walked,
-    /// The caller filled them before the walk, through [`fill_marks`].
+    /// The caller drew them before the walk, through [`fill_marks`] and
+    /// [`fill_cells`].
     Underlaid,
 }
 
@@ -234,6 +237,23 @@ pub(crate) fn fill_marks<S: DrawSurface>(surface: &mut S, run: &ShapedRun, place
         for rect in data.range_boxes(chars) {
             surface.fill_rect(to_rect(placed, &rect), color_of(highlight));
         }
+    }
+}
+
+/// Fill each table cell of `page` that carries a fill, in page coordinates,
+/// clipped to the part of its table the page shows.
+pub(crate) fn fill_cells<S: DrawSurface>(surface: &mut S, page: &PagePaint) {
+    for item in &page.items {
+        let PageItem::Table { clip, cells } = item else {
+            continue;
+        };
+        surface.push_clip(*clip);
+        for cell in cells {
+            if let Some(fill) = cell.style.fill {
+                surface.fill_rect(cell.bounds, color_of(fill));
+            }
+        }
+        surface.pop_clip();
     }
 }
 
@@ -294,7 +314,7 @@ impl PageWalk<'_> {
             PageItem::Table { clip, cells } => {
                 surface.push_clip(*clip);
                 for cell in cells {
-                    paint_cell_box(surface, palette, &cell.style, cell.bounds);
+                    paint_cell_box(surface, view, &cell.style, cell.bounds);
                     for block in &cell.blocks {
                         self.block(surface, view, block);
                     }
@@ -323,7 +343,7 @@ impl PageWalk<'_> {
         let data = block.run.data();
         let placed = &block.placed;
         surface.push_clip(placed.clip);
-        if view.marks == MarkFills::Walked {
+        if view.underlays == Underlays::Walked {
             fill_marks(surface, &block.run, placed);
         }
         draw_run(
@@ -658,16 +678,17 @@ pub(crate) fn draw_shape<S: DrawSurface>(
     }
 }
 
-/// A cell's fill, then its border. A stored border draws each edge at its own
-/// width, inside the cell; none draws the theme's hairline (`PROSE-UI-179`,
-/// `PROSE-UI-181`).
+/// A cell's fill, unless the caller drew it under its selections, then its
+/// border. A stored border draws each edge at its own width, inside the
+/// cell; none draws the theme's hairline (`PROSE-UI-179`, `PROSE-UI-181`).
 fn paint_cell_box<S: DrawSurface>(
     surface: &mut S,
-    palette: &PagePalette,
+    view: &PageView<'_>,
     style: &CellStyle,
     bounds: Rect,
 ) {
-    if let Some(fill) = style.fill {
+    let palette = view.palette;
+    if let (Some(fill), Underlays::Walked) = (style.fill, view.underlays) {
         surface.fill_rect(bounds, color_of(fill));
     }
     let Some(border) = style.border else {

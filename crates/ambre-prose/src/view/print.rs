@@ -24,7 +24,7 @@ use crate::view::cache::{RunCache, RunKey};
 use crate::view::column::PageColumn;
 use crate::view::paint::Frame;
 use crate::view::walk::{
-    Highlights, MarkFills, PageItem, PagePaint, PagePalette, PageView, PageWalk, Placed, ThemeInks,
+    Highlights, PageItem, PagePaint, PagePalette, PageView, PageWalk, Placed, ThemeInks, Underlays,
     to_rect,
 };
 
@@ -111,7 +111,7 @@ impl ProseUiState {
             height,
             pages: &frame.pages,
             pictures: &self.pictures,
-            marks: MarkFills::Walked,
+            underlays: Underlays::Walked,
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
