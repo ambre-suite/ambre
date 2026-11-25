@@ -11,10 +11,9 @@ use ambre_core::index::Span;
 use ambre_core::{Commands, Count, StaticKey};
 use ambre_core::{Doc, Point, Px, View};
 
-use crate::events::{ActiveMarks, BlockFormat, MarkAction, ProseCommand, TriState, Words};
+use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState, Words};
 use crate::layout::run::RunChar;
 use crate::mark::MarkRoot;
-use crate::mark::{canonical_color, canonical_number};
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 
@@ -36,19 +35,27 @@ impl ToolbarState {
     }
 }
 
-/// One write of a control of the text section, typed as the control produced
-/// it (`PROSE-UI-263` to `PROSE-UI-268`).
-///
-/// A value control that names no value takes its key off the selection: the
-/// document's face, no colour, no highlight, no link.
-#[derive(Clone, Debug, PartialEq)]
-pub enum TextWrite {
-    Family(Option<ambre_core::FontFamily>),
-    Size(Option<ambre_core::FontSize>),
-    Color(Option<ambre_core::Rgba>),
-    Highlight(Option<ambre_core::Rgba>),
-    Link(Option<ambre_core::LinkUrl>),
-    Block(BlockFormat),
+/// The field of the format bar a press opened: the address of a link, or
+/// the first reply of a comment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BarPrompt {
+    Link,
+    Comment,
+}
+
+impl BarPrompt {
+    /// The field a command id opens, or `None` for a command that writes at
+    /// once.
+    #[must_use]
+    pub fn of(id: StaticKey<Commands>) -> Option<Self> {
+        if id == crate::commands::LINK {
+            Some(Self::Link)
+        } else if id == crate::commands::COMMENT {
+            Some(Self::Comment)
+        } else {
+            None
+        }
+    }
 }
 
 /// The state one key of the bar holds in a set of marks.
@@ -178,48 +185,65 @@ impl ProseUiState {
         })
     }
 
-    /// The one command a write of the text section sends over the whole
-    /// selection, so one undo takes the gesture back (`CHROME-173`). `None`
-    /// with no selection, or for a value the registry refuses, which never
-    /// leaves the view (`PROSE-UI-264`).
+    /// The one command a control of the context panel asks for, over the
+    /// selection the view holds (`PROSE-UI-098`). Every write over a
+    /// selection is one command, so one undo takes it back
+    /// (`CHROME-173`). A default font needs no selection.
+    ///
+    /// `None` when no selection waits for a write that needs one, or when
+    /// the registry has no spelling for the value.
     #[must_use]
-    pub fn text_write(&self, write: &TextWrite) -> Option<ProseCommand> {
+    pub fn text_write(&self, write: crate::view::panel::TextWrite) -> Option<ProseCommand> {
+        use crate::view::panel::TextWrite;
+        if let TextWrite::DefaultFont(family) = write {
+            return Some(ProseCommand::SetDefaultFont { family });
+        }
         let (anchor, focus) = self.selection()?;
-        // The key a value write names, and its value in its canonical
-        // spelling. A blank address is no link.
-        let (root, raw) = match write {
-            TextWrite::Family(family) => (
-                MarkRoot::FontFamily,
-                family.as_ref().map(|family| family.label().to_owned()),
-            ),
-            TextWrite::Size(size) => (MarkRoot::FontSize, size.map(canonical_number)),
-            TextWrite::Color(color) => (MarkRoot::Ink, color.map(canonical_color)),
-            TextWrite::Highlight(color) => (MarkRoot::Highlight, color.map(canonical_color)),
-            TextWrite::Link(link) => (
-                MarkRoot::Link,
-                link.as_ref()
-                    .map(|link| link.as_str().trim().to_owned())
-                    .filter(|link| !link.is_empty()),
-            ),
-            TextWrite::Block(format) => {
-                return Some(ProseCommand::FormatBlocks {
-                    anchor,
-                    focus,
-                    format: *format,
-                });
+        let mark = |root: MarkRoot, raw: Option<String>| {
+            let value = match raw {
+                Some(raw) => Some(crate::mark::validate_value(&root.key(), Some(&raw)).ok()?),
+                None => None,
+            };
+            Some(ProseCommand::MarkSelection {
+                anchor,
+                focus,
+                key: root.key(),
+                value,
+            })
+        };
+        let colour = crate::mark::canonical_color;
+        match write {
+            TextWrite::Font(family) => {
+                mark(MarkRoot::FontFamily, family.map(|f| f.label().to_owned()))
             }
-        };
-        let key = root.key();
-        let value = match raw {
-            Some(raw) => Some(crate::mark::validate_value(&key, Some(&raw)).ok()?),
-            None => None,
-        };
-        Some(ProseCommand::MarkSelection {
-            anchor,
-            focus,
-            key,
-            value,
-        })
+            TextWrite::Size(size) => {
+                mark(MarkRoot::FontSize, size.map(crate::mark::canonical_number))
+            }
+            TextWrite::Colour(rgb) => mark(MarkRoot::Ink, rgb.map(colour)),
+            TextWrite::Highlight(rgb) => mark(MarkRoot::Highlight, rgb.map(colour)),
+            // An empty address takes the link off.
+            TextWrite::Link(url) => mark(
+                MarkRoot::Link,
+                url.map(|u| u.as_str().trim().to_owned())
+                    .filter(|u| !u.is_empty()),
+            ),
+            TextWrite::Paragraph(style) => Some(ProseCommand::SetSelectionParagraph {
+                anchor,
+                focus,
+                style,
+            }),
+            TextWrite::Kind(kind) => Some(ProseCommand::SetSelectionKind {
+                anchor,
+                focus,
+                kind,
+            }),
+            TextWrite::Indent(step) => Some(ProseCommand::IndentSelection {
+                anchor,
+                focus,
+                step,
+            }),
+            TextWrite::DefaultFont(..) => None,
+        }
     }
 
     /// The top-centre of the selection's first line, on the canvas.

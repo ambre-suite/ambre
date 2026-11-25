@@ -117,8 +117,12 @@ pub enum AnnotationIntent {
         range: Span<DocChar>,
     },
     /// Turn suggestion mode on when it is off, and off when it is on
-    /// (`PROSE-UI-260`). The view knows the mode, so the chrome names none.
+    /// (`PROSE-UI-274`). The view knows the mode, so the chrome names none.
     ToggleSuggesting,
+    /// Open a thread over the selection, its first reply `text`.
+    Comment {
+        text: String,
+    },
 }
 
 impl std::fmt::Debug for AnnotationIntent {
@@ -161,6 +165,10 @@ impl std::fmt::Debug for AnnotationIntent {
                 .field("range", range)
                 .finish(),
             Self::ToggleSuggesting => f.write_str("ToggleSuggesting"),
+            Self::Comment { text } => f
+                .debug_struct("Comment")
+                .field("text", &ambre_core::RedactedChars::of(text))
+                .finish(),
         }
     }
 }
@@ -210,7 +218,7 @@ pub fn stack(heights: &[Px<View>], room: Px<View>) -> Vec<Px<View>> {
 }
 
 /// The intent a review command hands the view. The suggestion-mode command
-/// hands its toggle wherever the caret is (`PROSE-UI-260`). An accept or a
+/// hands its toggle wherever the caret is (`PROSE-UI-274`). An accept or a
 /// reject names the suggestion at the caret, and hands none with no
 /// suggestion there. Another command hands none.
 #[must_use]
@@ -323,7 +331,7 @@ impl ProseUiState {
     }
 
     /// The suggestion that holds the character after the caret, and the box
-    /// of that character on the canvas (`PROSE-UI-258`). A caret at the end of
+    /// of that character on the canvas (`PROSE-UI-272`). A caret at the end of
     /// a suggestion names none, so typing a suggestion raises no popover.
     #[must_use]
     pub fn suggestion_at_caret(&self) -> Option<HoveredSuggestion> {
@@ -356,7 +364,7 @@ impl ProseUiState {
 
     /// The suggestion the accept and reject popover sits on. The one under
     /// the pointer comes first, else the one at the caret. So a key or a tap
-    /// reaches it with no hover (`PROSE-UI-148`, `PROSE-UI-258`).
+    /// reaches it with no hover (`PROSE-UI-148`, `PROSE-UI-272`).
     #[must_use]
     pub fn popover_suggestion(&self) -> Option<HoveredSuggestion> {
         self.hovered.or_else(|| self.suggestion_at_caret())
@@ -515,6 +523,25 @@ impl ProseUiState {
                 }
             }
             AnnotationIntent::Resolve { comment_id } => ProseCommand::ResolveComment { comment_id },
+            // A thread anchors in one block: over a selection of several,
+            // it takes the part in the first (`PROSE-UI-262`).
+            AnnotationIntent::Comment { text } => {
+                if text.trim().is_empty() {
+                    return None;
+                }
+                let ((block_id, start), (last, end)) = self.selection()?;
+                let end = if last == block_id {
+                    end
+                } else {
+                    self.block_len(block_id).as_end()
+                };
+                ProseCommand::AddComment {
+                    block_id,
+                    range: Span::<DocChar>::new(start, end),
+                    text,
+                    now,
+                }
+            }
             AnnotationIntent::Accept { suggestion_id } => {
                 self.hovered = None;
                 ProseCommand::AcceptSuggestion { suggestion_id }
@@ -960,7 +987,7 @@ mod tests {
         });
     }
 
-    /// `PROSE-UI-258`: with no pointer over any suggestion, the popover sits
+    /// `PROSE-UI-272`: with no pointer over any suggestion, the popover sits
     /// on the suggestion that holds the character after the caret, over that
     /// character. A caret at the end of a suggestion, where typing goes on,
     /// names none. A hover still wins over the caret.
@@ -999,7 +1026,7 @@ mod tests {
         );
     }
 
-    /// `PROSE-UI-259`: the accept and reject commands each hand the view the
+    /// `PROSE-UI-273`: the accept and reject commands each hand the view the
     /// popover's own intent for the suggestion at the caret. With no
     /// suggestion there, or for another command, they hand nothing.
     #[test]

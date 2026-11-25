@@ -40,7 +40,6 @@ pub use roots::Roots;
 mod derived;
 mod docfile;
 mod find;
-mod formatting;
 #[cfg(any(test, feature = "fuzz"))]
 pub mod fuzz;
 mod history;
@@ -53,6 +52,7 @@ mod pictures;
 mod presence;
 mod print;
 mod roots;
+mod selection;
 mod sliced;
 mod spelling;
 mod suggestions;
@@ -987,17 +987,6 @@ impl ProseState {
                 key,
                 action,
             } => self.format_selection(anchor, focus, &key, action),
-            ProseCommand::MarkSelection {
-                anchor,
-                focus,
-                key,
-                value,
-            } => self.mark_selection(anchor, focus, &key, value.as_ref()),
-            ProseCommand::FormatBlocks {
-                anchor,
-                focus,
-                format,
-            } => self.format_blocks(anchor, focus, format),
             ProseCommand::SetHeaderEnabled { shown } => {
                 self.set_side_enabled(bands::Side::Header, shown)
             }
@@ -1022,6 +1011,28 @@ impl ProseState {
             ProseCommand::ClearSelectionMarks { anchor, focus } => {
                 self.clear_selection_marks(anchor, focus)
             }
+            ProseCommand::MarkSelection {
+                anchor,
+                focus,
+                key,
+                value,
+            } => self.mark_selection(anchor, focus, &key, value.as_ref()),
+            ProseCommand::SetSelectionParagraph {
+                anchor,
+                focus,
+                style,
+            } => self.set_selection_paragraph(anchor, focus, &style),
+            ProseCommand::SetSelectionKind {
+                anchor,
+                focus,
+                kind,
+            } => self.set_selection_kind(anchor, focus, kind),
+            ProseCommand::IndentSelection {
+                anchor,
+                focus,
+                step,
+            } => self.indent_selection(anchor, focus, step),
+            ProseCommand::SetDefaultFont { family } => self.set_default_font(&family),
             ProseCommand::FindStart { query } => self.find_start(query),
             ProseCommand::FindNext => self.find_step(StepDirection::Forward),
             ProseCommand::FindPrev => self.find_step(StepDirection::Backward),

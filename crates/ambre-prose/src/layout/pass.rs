@@ -49,6 +49,8 @@ pub struct PageLayout {
     pub margin_top: Px<Doc>,
     /// The page format the layout was measured on, in millimetres.
     pub format: doc::PageFormat,
+    /// The two default fonts the layout was measured with (`PROSE-UI-261`).
+    pub fonts: doc::DocFonts,
     pub page_count: Len<Page>,
     pub blocks: Vec<BlockLayout>,
     pub header_height: Px<Doc>,
@@ -104,7 +106,11 @@ impl PageLayout {
     /// The same geometry, holding `blocks` in place of its own.
     #[must_use]
     pub fn with_blocks(&self, blocks: Vec<BlockLayout>) -> Self {
-        Self { blocks, ..*self }
+        Self {
+            blocks,
+            fonts: self.fonts.clone(),
+            ..*self
+        }
     }
 
     /// Where the body starts on a sheet, below the taller header. Every page
@@ -143,6 +149,7 @@ pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc, roots: &Roots) -> Pa
     );
     let placement = place::place(&blocks, bands.body_height(&page_box));
     let mut layout = layout_of(page_box, &placement);
+    layout.fonts = doc::DocFonts::of(&doc::read_defaults(document, roots));
     bands.stamp(&mut layout);
     layout
 }
@@ -420,6 +427,7 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         margin_left: page_box.margin_left,
         margin_top: page_box.margin_top,
         format: page_box.format,
+        fonts: doc::DocFonts::default(),
         page_count: placement.page_count,
         blocks: placement.blocks.clone(),
         header_height: Px::<Doc>::ZERO,

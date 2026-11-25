@@ -1662,66 +1662,6 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
     assert!(rig.all_marked(first, "b") && rig.all_marked(second, "b"));
 }
 
-/// `PROSE-UI-263`, `PROSE-UI-265`, `PROSE-UI-269`: each write of the text
-/// section leaves as one command over the whole selection. The panel then
-/// reads the value it wrote.
-#[test]
-fn a_text_section_write_is_one_command_over_the_selection() {
-    use crate::events::{Align, BlockFormat, ParagraphStyle, Reading};
-    use crate::view::toolbar::TextWrite;
-    let mut rig = Rig::new(&["hello world", "second"]);
-    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
-    rig.ui.cursor = Some(CursorPosition {
-        block_id: second,
-        offset: Pos::<DocChar>::new(6),
-        anchor: Some((first, Pos::<DocChar>::ZERO)),
-    });
-    let size = ambre_core::FontSize::new(18.0).expect("a size");
-    let centred = TextWrite::Block(BlockFormat::Paragraph(ParagraphStyle {
-        align: Some(Align::Center),
-        ..ParagraphStyle::default()
-    }));
-    for write in [TextWrite::Size(Some(size)), centred] {
-        let command = rig.ui.text_write(&write).expect("one command");
-        assert!(
-            matches!(
-                command,
-                ProseCommand::MarkSelection { .. } | ProseCommand::FormatBlocks { .. }
-            ),
-            "{command:?}"
-        );
-        rig.take_sent(vec![command]);
-        rig.deliver();
-        rig.lay();
-    }
-    rig.read_marks();
-    let read = rig.ui.toolbar().active.expect("the marks are read");
-    assert_eq!(read.font_size, Reading::Uniform(Some(size)));
-    assert_eq!(read.align, Reading::Uniform(Some(Align::Center)));
-}
-
-/// `PROSE-UI-268`: a blank address takes the link off, and with no
-/// selection a write of the text section sends nothing.
-#[test]
-fn a_blank_link_takes_the_link_off_and_no_selection_sends_nothing() {
-    use crate::view::toolbar::TextWrite;
-    let mut rig = Rig::new(&["hello world"]);
-    let block = rig.blocks()[0];
-    let huge = ambre_core::FontSize::new(1638.0).expect("the cap is a size");
-    rig.select(block, 0, 5);
-    assert!(rig.ui.text_write(&TextWrite::Size(Some(huge))).is_some());
-    let past = TextWrite::Link(Some(ambre_core::LinkUrl::new("  ".to_owned())));
-    assert!(
-        matches!(
-            rig.ui.text_write(&past),
-            Some(ProseCommand::MarkSelection { value: None, .. })
-        ),
-        "a blank address takes the link off"
-    );
-    rig.ui.cursor = None;
-    assert_eq!(rig.ui.text_write(&TextWrite::Size(Some(huge))), None);
-}
-
 /// `PROSE-UI-104`: a control changes neither the text, nor the selection,
 /// nor a mark it does not name.
 #[test]
@@ -3561,7 +3501,7 @@ fn an_import_keeps_the_zoom() {
     assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
 }
 
-/// `PROSE-UI-260`: the suggestion-mode command turns the mode on, then off.
+/// `PROSE-UI-274`: the suggestion-mode command turns the mode on, then off.
 /// A control, the chord and the palette each hand the intent of
 /// `review_intent`. The view asks for the mode the Logic thread did not
 /// last report.
@@ -3593,4 +3533,127 @@ fn the_suggestion_mode_command_turns_the_mode_on_then_off() {
         );
         assert_eq!(rig.logic.is_suggesting(), expected == EditMode::Suggesting);
     }
+}
+
+/// `PROSE-UI-265`, `PROSE-UI-267`: each write of the context panel leaves
+/// as one command over the selection the view holds. One undo takes it back, whatever the
+/// number of blocks. A default font needs no selection.
+#[test]
+fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
+    use crate::view::panel::TextWrite;
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    let default_font = TextWrite::DefaultFont(ambre_core::FontFamily::from_label("Lora"));
+    assert!(matches!(
+        rig.ui.text_write(default_font.clone()),
+        Some(ProseCommand::SetDefaultFont { .. })
+    ));
+    assert_eq!(
+        rig.ui.text_write(TextWrite::Font(None)),
+        None,
+        "a write over a selection waits for one"
+    );
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: Pos::<DocChar>::new(6),
+        anchor: Some((first, Pos::<DocChar>::new(2))),
+    });
+    let writes = [
+        TextWrite::Font(Some(ambre_core::FontFamily::from_label("Lora"))),
+        TextWrite::Size(ambre_core::FontSize::new(18.0)),
+        TextWrite::Colour(Some(ambre_core::Rgba::from_bits(0x2f6f_d6ff))),
+        TextWrite::Highlight(Some(ambre_core::Rgba::from_bits(0xffff_00ff))),
+        TextWrite::Link(Some(ambre_core::LinkUrl::new(
+            " https://example.org ".to_owned(),
+        ))),
+        TextWrite::Paragraph(crate::events::ParagraphStyle {
+            align: Some(crate::events::Align::Right),
+            ..crate::events::ParagraphStyle::default()
+        }),
+        TextWrite::Kind(crate::message::ParagraphKind::Heading(
+            crate::message::HeadingLevel::H2,
+        )),
+        TextWrite::Indent(crate::message::IndentStep::In),
+        default_font,
+    ];
+    // What a write may change, block by block, and the document defaults.
+    let held = |logic: &ProseState| {
+        format!(
+            "{:?}",
+            [first, second].map(|b| (
+                logic.resolved_runs(&b),
+                logic.paragraph_style_of(&b),
+                logic.block_type_of(&b),
+                logic.defaults(),
+            ))
+        )
+    };
+    for write in writes {
+        let before = held(&rig.logic);
+        let command = rig.ui.text_write(write.clone()).expect("one command");
+        if let ProseCommand::MarkSelection { anchor, focus, .. }
+        | ProseCommand::SetSelectionParagraph { anchor, focus, .. }
+        | ProseCommand::SetSelectionKind { anchor, focus, .. }
+        | ProseCommand::IndentSelection { anchor, focus, .. } = &command
+        {
+            assert_eq!(*anchor, (first, Pos::<DocChar>::new(2)), "{write:?}");
+            assert_eq!(*focus, (second, Pos::<DocChar>::new(6)), "{write:?}");
+        }
+        let out = rig.logic.handle_command(command);
+        assert!(out.update.is_some(), "{write:?} writes");
+        assert_ne!(held(&rig.logic), before, "{write:?} changes the document");
+        rig.logic.handle_command(ProseCommand::Undo);
+        assert_eq!(
+            held(&rig.logic),
+            before,
+            "{write:?}: one undo takes it back"
+        );
+    }
+    // A link of blanks takes the link off.
+    assert!(matches!(
+        rig.ui
+            .text_write(TextWrite::Link(Some(ambre_core::LinkUrl::new(
+                "  ".to_owned()
+            )))),
+        Some(ProseCommand::MarkSelection { value: None, .. })
+    ));
+}
+
+/// `PROSE-UI-262`: a comment from the bar opens a thread over the part of
+/// the selection in its first block; an empty one sends nothing.
+#[test]
+fn a_comment_from_the_bar_anchors_in_the_first_block_of_the_selection() {
+    use crate::view::annotate::AnnotationIntent;
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: Pos::<DocChar>::new(3),
+        anchor: Some((first, Pos::<DocChar>::new(6))),
+    });
+    let now = Instant::<ambre_core::Authored>::new(1);
+    assert_eq!(
+        rig.ui.take_intent(
+            AnnotationIntent::Comment {
+                text: "  ".to_owned()
+            },
+            now
+        ),
+        None
+    );
+    let sent = rig.ui.take_intent(
+        AnnotationIntent::Comment {
+            text: "Why?".to_owned(),
+        },
+        now,
+    );
+    assert_eq!(
+        sent,
+        Some(ProseCommand::AddComment {
+            block_id: first,
+            range: Span::<DocChar>::new(Pos::<DocChar>::new(6), Pos::<DocChar>::new(11)),
+            text: "Why?".to_owned(),
+            now,
+        })
+    );
 }

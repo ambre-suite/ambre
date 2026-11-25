@@ -64,10 +64,10 @@ pub struct ProseSignals {
     /// the card, so a thread that moves keeps it (`PROSE-UI-231`).
     pub drafts: RwSignal<HashMap<Id<Comment>, String>>,
     /// The suggestion the popover sits on: the one under the pointer, else
-    /// the one at the caret (`PROSE-UI-148`, `PROSE-UI-258`).
+    /// the one at the caret (`PROSE-UI-148`, `PROSE-UI-272`).
     pub hovered: RwSignal<Option<HoveredSuggestion>>,
     /// The suggestion at the caret, which the context panel and the palette
-    /// accept or reject (`PROSE-UI-259`).
+    /// accept or reject (`PROSE-UI-273`).
     pub at_caret: RwSignal<Option<HoveredSuggestion>>,
     /// The spelling popover a press on a misspelled word opened
     /// (`PROSE-UI-248`).
@@ -88,9 +88,6 @@ pub struct ProseSignals {
     /// A formatting command a control or a chord invoked, until the view
     /// drains it. Both write the same id here (`PROSE-UI-056`).
     pub format: RwSignal<Option<StaticKey<Commands>>>,
-    /// A write a value or block control of the text section asked for,
-    /// until the view drains it into one command (`PROSE-UI-270`).
-    pub text_write: RwSignal<Option<crate::view::toolbar::TextWrite>>,
     /// The slash menu, its anchor in CSS pixels (`PROSE-UI-090`).
     pub slash: RwSignal<SlashMenuState>,
     /// The menu item picked with the pointer, until the view drains it.
@@ -111,8 +108,17 @@ pub struct ProseSignals {
     pub page_write: RwSignal<Option<crate::doc::PageFormat>>,
     /// Whether this session suggests, as the Logic thread last reported it.
     /// The control of the panel and the status chip read it
-    /// (`PROSE-UI-261`).
+    /// (`PROSE-UI-275`).
     pub mode: RwSignal<crate::events::EditMode>,
+    /// A text, paragraph or default font write a control of the context
+    /// panel asked for, until the view drains it into one command
+    /// (`PROSE-UI-098`).
+    pub text_write: RwSignal<Option<crate::view::panel::TextWrite>>,
+    /// The two default fonts the layout was measured with, which the
+    /// default styles section shows (`PROSE-UI-261`).
+    pub fonts: RwSignal<Option<crate::doc::DocFonts>>,
+    /// The field of the format bar a link or a comment press opened.
+    pub prompt: RwSignal<Option<crate::view::toolbar::BarPrompt>>,
     /// The words of the selected text, which the subtitle of the context
     /// panel shows (`CHROME-241`). `None` with no selection.
     pub selection_words: RwSignal<Option<ambre_core::Count<crate::events::Words>>>,
@@ -148,7 +154,6 @@ impl ProseSignals {
             menu: RwSignal::new(None),
             toolbar: RwSignal::new(ToolbarState::default()),
             format: RwSignal::new(None),
-            text_write: RwSignal::new(None),
             slash: RwSignal::new(SlashMenuState::default()),
             slash_pick: RwSignal::new(None),
             ruler: RwSignal::new(RulerState::default()),
@@ -157,8 +162,29 @@ impl ProseSignals {
             page: RwSignal::new(None),
             page_write: RwSignal::new(None),
             mode: RwSignal::new(crate::events::EditMode::Editing),
+            text_write: RwSignal::new(None),
+            fonts: RwSignal::new(None),
+            prompt: RwSignal::new(None),
             selection_words: RwSignal::new(None),
         }
+    }
+
+    /// The command of the text write the context panel asked for, taken
+    /// out of its signal, over the selection `view` holds. `None` when no
+    /// write waits, or when it needs a selection the view no longer holds.
+    pub fn take_text_write(&self, view: &ProseUiState) -> Option<crate::message::ProseCommand> {
+        let write = self.text_write.get_untracked()?;
+        self.text_write.set(None);
+        view.text_write(write)
+    }
+
+    /// Open the field of the format bar a command id names: the link or
+    /// the comment. Answers the field opened, or `None` for any other id,
+    /// which the view formats.
+    pub fn open_prompt(&self, id: StaticKey<Commands>) -> Option<crate::view::toolbar::BarPrompt> {
+        let prompt = crate::view::toolbar::BarPrompt::of(id)?;
+        self.prompt.set(Some(prompt));
+        Some(prompt)
     }
 
     /// The command of the page format the context panel asked for, taken
@@ -334,7 +360,7 @@ fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView 
 }
 
 /// The accept and reject buttons over the suggestion under the pointer, or
-/// at the caret, and over no other (`PROSE-UI-148`, `PROSE-UI-258`).
+/// at the caret, and over no other (`PROSE-UI-148`, `PROSE-UI-272`).
 #[component]
 pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
     move || {
@@ -464,10 +490,19 @@ pub fn ProseFormatBar(
     signals: ProseSignals,
     cover: RwSignal<ambre_client_core::cover::Cover>,
 ) -> impl IntoView {
+    // The text typed in the field of the bar. It outlives a rebuild of the
+    // bar, which each new reading of the selection causes. `None` shows the
+    // text the field opens on.
+    let draft = RwSignal::new(None::<String>);
     move || {
         let bar = signals.toolbar.get();
-        let anchor = bar.anchor?.on_page(signals.canvas_origin.get());
-        let controls = crate::commands::FORMAT_BAR
+        let Some(anchor) = bar.anchor else {
+            // The selection went: a field it opened goes with it.
+            signals.prompt.set(None);
+            return None;
+        };
+        let anchor = anchor.on_page(signals.canvas_origin.get());
+        let mut controls: Vec<FormatControl> = crate::commands::BAR_MARKS
             .map(|(id, key)| {
                 let pressed = match bar.active.as_ref().map(|m| state_of(m, key)) {
                     Some(TriState::On) => Pressed::On,
@@ -477,7 +512,153 @@ pub fn ProseFormatBar(
                 control(signals, id, pressed)
             })
             .to_vec();
-        Some(view! { <FormatBar anchor=anchor controls=controls cover=cover /> })
+        let linked = bar.active.as_ref().is_some_and(|m| m.link.is_some());
+        controls.push(control(
+            signals,
+            crate::commands::LINK,
+            Pressed::from_bool(linked),
+        ));
+        let kind = bar
+            .active
+            .as_ref()
+            .map_or(ambre_commands::Reading::Uniform(None), |m| m.values.kind);
+        Some(view! {
+            <FormatBar anchor=anchor controls=controls cover=cover>
+                <span class="ambre-format-sep" aria-hidden="true"></span>
+                {bar_kind_list(signals, kind)}
+                {bar_comment(signals)}
+                {bar_prompt(signals, draft, bar.active.as_ref().and_then(|m| m.link.clone()))}
+            </FormatBar>
+        })
+    }
+}
+
+/// The paragraph style list of the bar: body, three headings, quote
+/// (`PROSE-UI-262`). A pick reaches the view as one write.
+fn bar_kind_list(
+    signals: ProseSignals,
+    kind: ambre_commands::Reading<Option<crate::message::ParagraphKind>>,
+) -> impl IntoView {
+    use crate::view::panel::{BAR_KINDS, KIND, TextWrite};
+    let choices = BAR_KINDS
+        .iter()
+        .map(|(_, label)| ambre_chrome::ChoiceView::text(*label))
+        .collect::<Vec<_>>();
+    let selected = match kind {
+        ambre_commands::Reading::Uniform(Some(kind)) => BAR_KINDS
+            .iter()
+            .position(|(k, _)| *k == kind)
+            .map(Pos::<ambre_chrome::ChoiceRow>::from_usize),
+        _ => None,
+    };
+    let pick = Callback::new(move |p: Pos<ambre_chrome::ChoiceRow>| {
+        if let Some((kind, _)) = p.to_index().and_then(|i| BAR_KINDS.get(i)) {
+            signals.text_write.set(Some(TextWrite::Kind(*kind)));
+        }
+    });
+    view! {
+        <ambre_chrome::Select
+            label="Paragraph style"
+            choices=choices
+            selected=Signal::stored(selected)
+            on_pick=pick
+            placeholder="Heading"
+            reach=ambre_commands::Reach::Property(KIND)
+        />
+    }
+}
+
+/// The comment button of the bar, which opens the comment field.
+fn bar_comment(signals: ProseSignals) -> impl IntoView {
+    let command = ambre_commands::find(crate::commands::COMMANDS, crate::commands::COMMENT);
+    let label = command
+        .map(|command| (command.title)(&ambre_commands::Locale::En).into_string())
+        .unwrap_or_default();
+    command.and_then(icon_of).map(|icon| {
+        view! {
+            <ambre_chrome::IconButton
+                icon=icon
+                label=label
+                size=ambre_chrome::ControlSize::Large
+                look=ambre_chrome::IconLook::Ghost
+                reach=Some(ambre_commands::Reach::Command(crate::commands::COMMENT))
+                on_press=Callback::new(move |()| {
+                    signals.open_prompt(crate::commands::COMMENT);
+                })
+            />
+        }
+    })
+}
+
+/// The field a link or a comment press opened, under the bar. Enter hands
+/// its text to the view; Escape closes it. An empty address takes the link
+/// off (`PROSE-UI-188`).
+fn bar_prompt(
+    signals: ProseSignals,
+    draft: RwSignal<Option<String>>,
+    link: Option<ambre_core::LinkUrl>,
+) -> impl IntoView {
+    use crate::view::toolbar::BarPrompt;
+    move || {
+        let Some(prompt) = signals.prompt.get() else {
+            draft.set(None);
+            return None;
+        };
+        let (placeholder, start) = match prompt {
+            BarPrompt::Link => (
+                "Paste or type an address",
+                link.as_ref()
+                    .map(|l| l.as_str().to_owned())
+                    .unwrap_or_default(),
+            ),
+            BarPrompt::Comment => ("Write a comment", String::new()),
+        };
+        let field = NodeRef::<leptos::html::Input>::new();
+        Effect::new(move |_| {
+            if let Some(input) = field.get() {
+                let _ = input.focus();
+            }
+        });
+        let shown = draft.get_untracked().unwrap_or(start);
+        let submit = move |text: String| {
+            draft.set(None);
+            signals.prompt.set(None);
+            match prompt {
+                BarPrompt::Link => {
+                    signals
+                        .text_write
+                        .set(Some(crate::view::panel::TextWrite::Link(
+                            Some(text)
+                                .filter(|t| !t.trim().is_empty())
+                                .map(ambre_core::LinkUrl::new),
+                        )))
+                }
+                BarPrompt::Comment => signals.intent.set(Some(AnnotationIntent::Comment { text })),
+            }
+        };
+        Some(view! {
+            <input
+                node_ref=field
+                type="text"
+                class="ambre-format-prompt"
+                aria-label=placeholder
+                placeholder=placeholder
+                prop:value=shown
+                on:input=move |ev| draft.set(Some(event_target_value(&ev)))
+                on:keydown=move |ev: web_sys::KeyboardEvent| match ev.key().as_str() {
+                    "Enter" => {
+                        ev.prevent_default();
+                        submit(event_target_value(&ev));
+                    }
+                    "Escape" => {
+                        ev.prevent_default();
+                        draft.set(None);
+                        signals.prompt.set(None);
+                    }
+                    _ => {}
+                }
+            />
+        })
     }
 }
 
@@ -493,12 +674,14 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
         "format-subscript" => icondata::MdiFormatSubscript,
         "format-clear" => icondata::MdiFormatClear,
         "file-document-edit-outline" => icondata::MdiFileDocumentEditOutline,
+        "link" => icondata::MdiLink,
+        "comment-outline" => icondata::MdiCommentOutline,
         _ => return None,
     })
 }
 
 /// The suggestion-mode chip of the status bar, shown while this session
-/// suggests (`PROSE-UI-261`). The context panel folds, and the status bar
+/// suggests (`PROSE-UI-275`). The context panel folds, and the status bar
 /// never does, so the mode stays in view. The chip is a reach of the
 /// command, never a second home: a press turns the mode off.
 #[component]

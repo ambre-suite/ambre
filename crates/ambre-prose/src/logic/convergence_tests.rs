@@ -937,3 +937,197 @@ fn two_peers_setting_the_page_at_once_converge_on_one_agreeing_page() {
         );
     }
 }
+
+/// One end of a selection: a block and an offset in it.
+type Spot = (crate::events::BlockId, Pos<DocChar>);
+
+/// Two peers, the two blocks they share, and the selection over both.
+type TwoParagraphs = (
+    ProseState,
+    ProseState,
+    (crate::events::BlockId, crate::events::BlockId),
+    (Spot, Spot),
+);
+
+/// Two peers over one seeded document of two paragraphs, "hello" and
+/// "world", and the selection over both.
+fn two_peers_two_paragraphs() -> TwoParagraphs {
+    let mut alice = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+    let (first, second, anchor, focus) = crate::logic::selection::tests::two_paragraphs(&mut alice);
+    let seed = alice.export_snapshot();
+    let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
+    bob.import_snapshot(&seed).expect("the seed imports");
+    (alice, bob, (first, second), (anchor, focus))
+}
+
+/// One value mark over a selection, and the delta it exported.
+fn mark_selection(
+    state: &mut ProseState,
+    (anchor, focus): (Spot, Spot),
+    key: crate::mark::MarkRoot,
+    raw: &str,
+) -> ambre_core::Payload<ambre_core::DeltaBytes> {
+    state
+        .handle_command(ProseCommand::MarkSelection {
+            anchor,
+            focus,
+            key: key.key(),
+            value: crate::mark::validate_value(&key.key(), Some(raw)).ok(),
+        })
+        .update
+        .expect("a delta")
+}
+
+/// Two peers setting two fonts over overlapping selections of two blocks
+/// read one font on each character, the same on both peers
+/// (`PROSE-FEAT-337`).
+#[test]
+fn two_peers_setting_two_fonts_over_overlapping_selections_converge() {
+    let (mut alice, mut bob, (first, second), whole) = two_peers_two_paragraphs();
+    let from_alice = mark_selection(&mut alice, whole, crate::mark::MarkRoot::FontFamily, "Lora");
+    let tail = ((first, Pos::<DocChar>::new(3)), whole.1);
+    let from_bob = mark_selection(&mut bob, tail, crate::mark::MarkRoot::FontFamily, "Inter");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    for block in [first, second] {
+        assert_eq!(alice.resolved_runs(&block), bob.resolved_runs(&block));
+    }
+    let read =
+        |state: &mut ProseState| crate::logic::selection::tests::values(state, whole.0, whole.1);
+    assert_eq!(read(&mut alice), read(&mut bob));
+    assert_eq!(rendered(&alice), rendered(&bob));
+}
+
+/// A font over a selection while the other peer types inside it: both
+/// peers hold the same text and the same runs (`PROSE-FEAT-337`).
+#[test]
+fn a_font_over_a_selection_and_typing_inside_it_converge() {
+    let (mut alice, mut bob, (first, second), whole) = two_peers_two_paragraphs();
+    let from_alice = mark_selection(&mut alice, whole, crate::mark::MarkRoot::Ink, "#2f6fd6");
+    let from_bob = bob
+        .handle_command(ProseCommand::InsertText {
+            block_id: second,
+            pos: Pos::<DocChar>::new(2),
+            text: "XY".to_owned(),
+        })
+        .update
+        .expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    assert_eq!(rendered(&alice), rendered(&bob));
+    for block in [first, second] {
+        assert_eq!(alice.resolved_runs(&block), bob.resolved_runs(&block));
+    }
+    assert_eq!(alice.text_of(&second).as_deref(), Some("woXYrld"));
+}
+
+/// One peer makes a selection a heading while the other makes it a list.
+/// Both peers hold one kind per block, the same one, and a declared tree
+/// (`PROSE-FEAT-338`).
+#[test]
+fn two_peers_making_one_selection_a_heading_and_a_list_converge() {
+    let (mut alice, mut bob, (first, second), (anchor, focus)) = two_peers_two_paragraphs();
+    let from_alice = alice
+        .handle_command(ProseCommand::SetSelectionKind {
+            anchor,
+            focus,
+            kind: crate::message::ParagraphKind::Heading(HeadingLevel::H2),
+        })
+        .update
+        .expect("a delta");
+    let from_bob = bob
+        .handle_command(ProseCommand::SetSelectionKind {
+            anchor,
+            focus,
+            kind: crate::message::ParagraphKind::List(ListStyle::Bullet),
+        })
+        .update
+        .expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    for block in [first, second] {
+        assert_eq!(alice.block_type_of(&block), bob.block_type_of(&block));
+        assert_eq!(alice.heading_level_of(&block), bob.heading_level_of(&block));
+        assert_eq!(alice.list_style_of(&block), bob.list_style_of(&block));
+    }
+    let read =
+        |state: &mut ProseState| crate::logic::selection::tests::values(state, anchor, focus);
+    assert_eq!(read(&mut alice).kind, read(&mut bob).kind);
+    assert!(alice.parentages_are_declared() && bob.parentages_are_declared());
+    assert_eq!(rendered(&alice), rendered(&bob));
+}
+
+/// One peer aligns a selection while the other sets its line spacing:
+/// both properties land on every block, on both peers (`PROSE-FEAT-338`).
+#[test]
+fn two_peers_setting_two_paragraph_properties_of_one_selection_keep_both() {
+    let (mut alice, mut bob, (first, second), (anchor, focus)) = two_peers_two_paragraphs();
+    let from_alice = alice
+        .handle_command(ProseCommand::SetSelectionParagraph {
+            anchor,
+            focus,
+            style: ParagraphStyle {
+                align: Some(Align::Justify),
+                ..ParagraphStyle::default()
+            },
+        })
+        .update
+        .expect("a delta");
+    let double =
+        crate::events::LineSpacingMultiple::new(2.0).map(crate::events::LineHeight::Multiple);
+    let from_bob = bob
+        .handle_command(ProseCommand::SetSelectionParagraph {
+            anchor,
+            focus,
+            style: ParagraphStyle {
+                line_height: double,
+                ..ParagraphStyle::default()
+            },
+        })
+        .update
+        .expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    for block in [first, second] {
+        let style = alice.paragraph_style_of(&block);
+        assert_eq!(style, bob.paragraph_style_of(&block));
+        assert_eq!(style.align, Some(Align::Justify));
+        assert_eq!(style.line_height, double);
+    }
+}
+
+/// Two peers setting two body fonts at once converge on one, and a body
+/// font keeps a paragraph property set beside it (`PROSE-FEAT-338`).
+#[test]
+fn two_peers_setting_the_body_font_converge() {
+    let (mut alice, mut bob, (first, _), (anchor, focus)) = two_peers_two_paragraphs();
+    let set = |state: &mut ProseState, label: &str| {
+        state
+            .handle_command(ProseCommand::SetDefaultFont {
+                family: ambre_core::FontFamily::from_label(label),
+            })
+            .update
+            .expect("a delta")
+    };
+    let from_alice = set(&mut alice, "Lora");
+    let from_bob = set(&mut bob, "Noto Serif");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    assert_eq!(alice.defaults(), bob.defaults());
+    assert_eq!(alice.resolved_runs(&first), bob.resolved_runs(&first));
+
+    let from_alice = set(&mut alice, "Inter");
+    let from_bob = bob
+        .handle_command(ProseCommand::SetSelectionParagraph {
+            anchor,
+            focus,
+            style: ParagraphStyle {
+                align: Some(Align::Right),
+                ..ParagraphStyle::default()
+            },
+        })
+        .update
+        .expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    assert_eq!(
+        alice.defaults().font_family,
+        ambre_core::FontFamily::from_label("Inter")
+    );
+    assert_eq!(alice.defaults(), bob.defaults());
+    assert_eq!(alice.paragraph_style_of(&first).align, Some(Align::Right));
+}

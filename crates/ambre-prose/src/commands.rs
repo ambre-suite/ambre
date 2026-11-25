@@ -26,14 +26,14 @@ const INSERT: StaticKey<Categories> = StaticKey::<Categories>::new("insert");
 /// Ruling on the suggestions of a review.
 const REVIEW: StaticKey<Categories> = StaticKey::<Categories>::new("review");
 
-/// Accept the suggestion at the caret (`PROSE-UI-259`).
+/// Accept the suggestion at the caret (`PROSE-UI-273`).
 pub const ACCEPT_SUGGESTION: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.review.accept");
-/// Reject the suggestion at the caret (`PROSE-UI-259`).
+/// Reject the suggestion at the caret (`PROSE-UI-273`).
 pub const REJECT_SUGGESTION: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.review.reject");
 /// Turn suggestion mode on when it is off, and off when it is on
-/// (`PROSE-UI-260`).
+/// (`PROSE-UI-274`).
 pub const SUGGEST_CHANGES: StaticKey<Commands> = StaticKey::<Commands>::new("prose.review.suggest");
 
 /// Undo this peer's last change (`UNDO-001`).
@@ -146,6 +146,20 @@ pub const SUBSCRIPT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.for
 /// Remove every formatting mark of the selection (`PROSE-UI-191`,
 /// `PROSE-UI-254`).
 pub const CLEAR_FORMATTING: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.clear");
+/// Link the selection to an address, or take its link off
+/// (`PROSE-UI-188`). The press opens the address field of the bar.
+pub const LINK: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.link");
+/// Open a discussion thread over the selection. The press opens the
+/// comment field of the bar.
+pub const COMMENT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.comment.add");
+
+/// The three marks the floating bar shows, in the mockup's order. The bar
+/// adds the link, the paragraph style list and the comment after them.
+pub const BAR_MARKS: [(StaticKey<Commands>, MarkRoot); 3] = [
+    (BOLD, MarkRoot::Bold),
+    (ITALIC, MarkRoot::Italic),
+    (UNDERLINE, MarkRoot::Underline),
+];
 
 /// Each control of the format bar, in the order the bar shows them, with the
 /// mark key it applies or removes.
@@ -191,6 +205,14 @@ fn subscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandT
 
 fn clear_formatting_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Clear formatting")
+}
+
+fn link_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Link")
+}
+
+fn comment_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Comment")
 }
 
 fn bold_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
@@ -387,6 +409,24 @@ pub const COMMANDS: &[Command] = &[
         description: None,
     },
     Command {
+        id: LINK,
+        title: link_title,
+        icon: Some(StaticKey::<Icons>::new("link")),
+        keybindings: &[],
+        category: FORMAT,
+        home: Home::ContextPanel,
+        description: None,
+    },
+    Command {
+        id: COMMENT,
+        title: comment_title,
+        icon: Some(StaticKey::<Icons>::new("comment-outline")),
+        keybindings: &[],
+        category: FORMAT,
+        home: Home::ContextPanel,
+        description: None,
+    },
+    Command {
         id: SAVE_FILE,
         title: save_file_title,
         icon: Some(StaticKey::<Icons>::new("content-save")),
@@ -574,7 +614,6 @@ pub const COMMANDS: &[Command] = &[
         keybindings: &[KeyBinding::primary_shift(KeyChar::E)],
         category: REVIEW,
         home: Home::ContextPanel,
-
         description: None,
     },
     Command {
@@ -711,7 +750,7 @@ mod tests {
         assert!(!formats_selection(CUT));
     }
 
-    /// `PROSE-UI-262`: the suggestion-mode command is declared once, and its
+    /// `PROSE-UI-276`: the suggestion-mode command is declared once, and its
     /// chord resolves to it, so a control, the chord and the palette run one
     /// id.
     #[test]

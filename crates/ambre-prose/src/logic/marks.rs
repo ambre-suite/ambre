@@ -18,11 +18,13 @@ use loro::LoroValue;
 
 use crate::doc;
 use crate::events::{
-    ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, Reading, TriState,
-    tree_id,
+    ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, TriState, tree_id,
 };
 use crate::mark::{self, MarkRoot};
+use crate::message::SelectionValues;
 use crate::style::{BlockContext, ResolvedStyle, StoredMarkValues, resolve};
+use ambre_commands::Reading;
+use ambre_core::{PrintLength, Pt};
 
 use super::ProseState;
 use ambre_core::crdt::CrdtName as _;
@@ -67,7 +69,7 @@ impl ProseState {
 
     /// The link list, when the command touched links: a mark under the link
     /// key, or a clear, which takes links along. Nothing otherwise.
-    pub(super) fn links_touched(&self, key: Option<&MarkKey>) -> Vec<ProseEvent> {
+    fn links_touched(&self, key: Option<&MarkKey>) -> Vec<ProseEvent> {
         if key.is_some_and(|key| key.as_str() != MarkRoot::Link.as_str()) {
             return Vec::new();
         }
@@ -181,29 +183,11 @@ impl ProseState {
         focus: (BlockId, Pos<DocChar>),
     ) -> ProseOutcome {
         let mut fold = MarkFold::default();
-        let tree = doc::blocks(&self.doc);
-        let defaults = doc::read_defaults(&self.doc, &self.roots);
-        let spans = self.selected_spans(anchor, focus);
-        // A block property reads the blocks a block control writes: a
-        // selection that ends at the start of a block leaves that block out.
-        let any_text = spans.iter().any(|(_, span)| !span.is_empty());
-        for (block, span) in spans {
-            if any_text && span.is_empty() {
-                continue;
-            }
-            let id = tree_id(block);
-            let heading = doc::heading_level_of(&tree, &id).map(doc::StoredLevel::clamped);
-            let context = BlockContext {
-                block_type: doc::block_type_of(&tree, &id).unwrap_or(BlockType::Paragraph),
-                heading_level: heading,
-            };
-            fold.values.heading.take(heading);
-            fold.values.align.take(Some(
-                doc::read_paragraph_style(&tree, &id)
-                    .align
-                    .unwrap_or(crate::events::Align::Left),
-            ));
-            fold.values.list.take(doc::list_style_of(&tree, &id));
+        for (block, span) in self.block_spans(anchor, focus) {
+            fold.take_block(
+                &self.paragraph_style_of(&block),
+                self.paragraph_kind_of(&block),
+            );
             let Some(LoroValue::List(runs)) = self.marks_of(&block) else {
                 continue;
             };
@@ -218,9 +202,7 @@ impl ProseState {
                 let len = ambre_core::char_len(text).as_axis::<DocChar>();
                 let covered = span.end.min(at + len).len_from(span.start.max(at));
                 if !covered.is_zero() {
-                    let marks = marks_of_run(run);
-                    fold.take(&marks);
-                    fold.values.take(&resolve(&marks, context, &defaults));
+                    fold.take(&marks_of_run(run));
                 }
                 at += len;
             }
@@ -234,8 +216,29 @@ impl ProseState {
         outcome
     }
 
-    /// The text a selection covers, one span per block, in document order.
-    /// A block with no body, a table among them, contributes nothing.
+    /// What the paragraph style control names a block, or `None` for a
+    /// block it does not name: a code block, a table.
+    fn paragraph_kind_of(&self, block: &BlockId) -> Option<crate::message::ParagraphKind> {
+        use crate::message::ParagraphKind;
+        Some(match self.block_type_of(block)? {
+            BlockType::Heading => ParagraphKind::Heading(
+                self.heading_level_of(block)
+                    .map_or(crate::message::HeadingLevel::H1, doc::StoredLevel::clamped),
+            ),
+            BlockType::ListItem => ParagraphKind::List(self.list_style_of(block)?),
+            BlockType::Paragraph => {
+                if self.style_of(block).and_then(|s| doc::BuiltInStyle::of(&s))
+                    == Some(doc::BuiltInStyle::Quote)
+                {
+                    ParagraphKind::Quote
+                } else {
+                    ParagraphKind::Body
+                }
+            }
+            _ => return None,
+        })
+    }
+
     /// Apply or remove one mark over every block a selection covers, in one
     /// commit: one gesture is one undo item. A key the bar does not name is
     /// refused, since only a presence mark needs no value.
@@ -311,6 +314,24 @@ impl ProseState {
         self.commit_with(self.links_touched(None))
     }
 
+    /// The spans of the blocks a block property reaches, in document order.
+    ///
+    /// A selection that ends at the start of a block selects no character of
+    /// it, so that block is left out. A selection with no character at all
+    /// keeps the block of its caret.
+    pub(super) fn block_spans(
+        &self,
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+    ) -> Vec<(BlockId, Span<DocChar>)> {
+        let spans = self.selected_spans(anchor, focus);
+        let any_text = spans.iter().any(|(_, span)| !span.is_empty());
+        spans
+            .into_iter()
+            .filter(|(_, span)| !any_text || !span.is_empty())
+            .collect()
+    }
+
     pub(super) fn selected_spans(
         &self,
         anchor: (BlockId, Pos<DocChar>),
@@ -361,6 +382,70 @@ const BAR_KEYS: [MarkRoot; 7] = [
     MarkRoot::Subscript,
 ];
 
+/// What the values folded so far say of one property: none yet, one, or
+/// two that disagree.
+#[derive(Clone, Debug, Default, PartialEq)]
+enum Fold<T> {
+    #[default]
+    Unseen,
+    One(T),
+    Mixed,
+}
+
+impl<T: PartialEq> Fold<T> {
+    /// The fold once one more value is taken in.
+    fn with(self, value: T) -> Self {
+        match self {
+            Self::Unseen => Self::One(value),
+            Self::One(held) if held == value => Self::One(held),
+            _ => Self::Mixed,
+        }
+    }
+
+    /// The reading the panel shows. A fold that saw nothing reads `empty`.
+    fn reading(self, empty: T) -> Reading<T> {
+        match self {
+            Self::Unseen => Reading::Uniform(empty),
+            Self::One(value) => Reading::Uniform(value),
+            Self::Mixed => Reading::Mixed,
+        }
+    }
+}
+
+/// The value of each property over the selected runs and blocks.
+#[derive(Default)]
+struct ValueFold {
+    font_family: Fold<Option<ambre_core::FontFamily>>,
+    font_size: Fold<Option<ambre_core::FontSize>>,
+    color: Fold<Option<ambre_core::Rgba>>,
+    highlight: Fold<Option<ambre_core::Rgba>>,
+    align: Fold<crate::events::Align>,
+    line_height: Fold<Option<crate::events::LineHeight>>,
+    indent_left: Fold<PrintLength<Pt>>,
+    indent_first: Fold<PrintLength<Pt>>,
+    kind: Fold<Option<crate::message::ParagraphKind>>,
+}
+
+impl ValueFold {
+    fn finish(self) -> SelectionValues {
+        let empty = SelectionValues::default();
+        SelectionValues {
+            font_family: self.font_family.reading(None),
+            font_size: self.font_size.reading(None),
+            color: self.color.reading(None),
+            highlight: self.highlight.reading(None),
+            align: self.align.reading(crate::events::Align::Left),
+            line_height: self.line_height.reading(None),
+            indent_left: self.indent_left.reading(PrintLength::<Pt>::ZERO),
+            indent_first: self.indent_first.reading(PrintLength::<Pt>::ZERO),
+            kind: match self.kind {
+                Fold::Unseen => empty.kind,
+                other => other.reading(None),
+            },
+        }
+    }
+}
+
 /// What the runs folded so far say of one bar key. The bar reads whether
 /// some run carries the key and whether some run lacks it, never how many.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -397,70 +482,51 @@ impl KeySeen {
     }
 }
 
-/// What the selected runs and blocks say of one value so far: one value, or
-/// two that disagree (`PROSE-UI-269`).
-struct ValueFold<T>(Option<Reading<Option<T>>>);
-
-impl<T> Default for ValueFold<T> {
-    fn default() -> Self {
-        Self(None)
-    }
-}
-
-impl<T: PartialEq> ValueFold<T> {
-    /// Fold one more run or block in.
-    fn take(&mut self, value: Option<T>) {
-        self.0 = Some(match self.0.take() {
-            None => Reading::Uniform(value),
-            Some(Reading::Uniform(held)) if held == value => Reading::Uniform(held),
-            Some(_) => Reading::Mixed,
-        });
-    }
-
-    /// The reading the panel shows. A selection that folded nothing reads as
-    /// no value.
-    fn finish(self) -> Reading<Option<T>> {
-        self.0.unwrap_or(Reading::Uniform(None))
-    }
-}
-
-/// The value readings of a selection, one per value control of the text
-/// section.
-#[derive(Default)]
-struct ValueFolds {
-    font_family: ValueFold<ambre_core::FontFamily>,
-    font_size: ValueFold<ambre_core::FontSize>,
-    color: ValueFold<ambre_core::Rgba>,
-    background: ValueFold<ambre_core::Rgba>,
-    heading: ValueFold<crate::events::HeadingLevel>,
-    align: ValueFold<crate::events::Align>,
-    list: ValueFold<crate::events::ListStyle>,
-}
-
-impl ValueFolds {
-    /// Fold the style the cascade resolves for one selected run.
-    fn take(&mut self, style: &ResolvedStyle) {
-        self.font_family.take(style.font_family.clone());
-        self.font_size.take(Some(style.font_size));
-        self.color.take(style.color);
-        self.background.take(style.background);
-    }
-}
-
 /// What the selected runs carry, run by run.
 #[derive(Default)]
 struct MarkFold {
-    /// The value readings, run by run and block by block.
-    values: ValueFolds,
     /// Per bar key: whether the runs carry it.
     seen: [KeySeen; 7],
     /// The link every run carries so far: `None` before the first run, and
     /// `Some(None)` once two runs disagree or one carries none.
     link: Option<Option<ambre_core::LinkUrl>>,
+    /// The value of each property the context panel edits.
+    values: ValueFold,
 }
 
 impl MarkFold {
+    /// Take in one block of the selection: its paragraph properties and
+    /// its kind.
+    fn take_block(
+        &mut self,
+        paragraph: &crate::events::ParagraphStyle,
+        kind: Option<crate::message::ParagraphKind>,
+    ) {
+        let v = &mut self.values;
+        v.align = std::mem::take(&mut v.align)
+            .with(paragraph.align.unwrap_or(crate::events::Align::Left));
+        v.line_height = std::mem::take(&mut v.line_height).with(paragraph.line_height);
+        v.indent_left = std::mem::take(&mut v.indent_left)
+            .with(paragraph.indent_left.unwrap_or(PrintLength::<Pt>::ZERO));
+        v.indent_first = std::mem::take(&mut v.indent_first)
+            .with(paragraph.indent_first.unwrap_or(PrintLength::<Pt>::ZERO));
+        v.kind = std::mem::take(&mut v.kind).with(kind);
+    }
+
     fn take(&mut self, marks: &BTreeMap<MarkKey, Opaque<StoredMarkValues>>) {
+        let get = |root: MarkRoot| marks.get(root.as_str()).map(Opaque::as_str);
+        let v = &mut self.values;
+        v.font_family = std::mem::take(&mut v.font_family).with(
+            get(MarkRoot::FontFamily)
+                .filter(|family| !family.is_empty())
+                .map(ambre_core::FontFamily::from_label),
+        );
+        v.font_size = std::mem::take(&mut v.font_size)
+            .with(get(MarkRoot::FontSize).and_then(mark::read_font_size));
+        v.color = std::mem::take(&mut v.color)
+            .with(get(MarkRoot::Ink).and_then(|raw| mark::parse_color(raw).ok()));
+        v.highlight = std::mem::take(&mut v.highlight)
+            .with(get(MarkRoot::Highlight).and_then(|raw| mark::parse_color(raw).ok()));
         for (key, seen) in BAR_KEYS.iter().zip(self.seen.iter_mut()) {
             *seen = seen.with(marks.contains_key(key.as_str()));
         }
@@ -493,13 +559,7 @@ impl MarkFold {
             superscript,
             subscript,
             link: self.link.flatten(),
-            font_family: self.values.font_family.finish(),
-            font_size: self.values.font_size.finish(),
-            color: self.values.color.finish(),
-            background: self.values.background.finish(),
-            heading: self.values.heading.finish(),
-            align: self.values.align.finish(),
-            list: self.values.list.finish(),
+            values: self.values.finish(),
         }
     }
 }
@@ -514,11 +574,7 @@ const RUN_TEXT: &str = "insert";
 ///
 /// The engine's refusal set is what the view reads, and the value error is the
 /// reason behind one of its variants.
-pub(super) fn refused_as(
-    key: &MarkKey,
-    value: Option<&str>,
-    error: &mark::MarkValueError,
-) -> ProseRefusal {
+fn refused_as(key: &MarkKey, value: Option<&str>, error: &mark::MarkValueError) -> ProseRefusal {
     match error {
         mark::MarkValueError::UnknownKey(key) => ProseRefusal::UnknownMark(key.clone()),
         _ => ProseRefusal::BadMarkValue {

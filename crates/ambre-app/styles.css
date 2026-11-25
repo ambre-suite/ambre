@@ -452,6 +452,14 @@ body {
     box-shadow: var(--shadow-mid);
 }
 
+/* The rule between the marks and the paragraph style list of the bar. */
+.ambre-format-sep {
+    align-self: stretch;
+    width: 1px;
+    margin: var(--space-1) var(--space-1);
+    background: var(--border);
+}
+
 .ambre-format-control {
     appearance: none;
     border: 1px solid transparent;
@@ -2348,7 +2356,7 @@ body {
     gap: var(--space-7);
 }
 
-/* The suggestion-mode chip of Prose (PROSE-UI-261): the kit command at the
+/* The suggestion-mode chip of Prose (PROSE-UI-275): the kit command at the
    height of the band's small controls, 24 px, so a finger still reaches it. */
 .ambre-statusbar .statusbar-mode {
     display: flex;

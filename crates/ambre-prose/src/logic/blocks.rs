@@ -13,8 +13,7 @@ use crate::message::CodeLang;
 use crate::doc;
 use crate::doc::StoredLevel;
 use crate::events::{
-    BlockId, BlockInit, BlockType, HeadingLevel, ParagraphStyle, ProseOutcome, ProseRefusal,
-    StyleId, tree_id,
+    BlockId, BlockInit, BlockType, HeadingLevel, ParagraphStyle, ProseOutcome, StyleId, tree_id,
 };
 
 use super::ProseState;
@@ -336,64 +335,53 @@ impl ProseState {
         id: &TreeID,
         level: Option<HeadingLevel>,
     ) -> ProseOutcome {
-        match self.write_heading_level(id, level) {
-            Ok(()) => self.commit_with(Vec::new()),
-            Err(refusal) => ProseOutcome::refused(refusal),
-        }
-    }
-
-    /// The write of [`set_heading_level`](Self::set_heading_level), with no
-    /// commit, so a selection writes every block it covers as one undo item.
-    ///
-    /// # Errors
-    /// [`ProseRefusal::NoSuchBlock`] for a block that is no paragraph and no
-    /// heading. [`ProseRefusal::NestingRefused`] where the nesting table
-    /// forbids a heading. The refusal of a store write.
-    pub(super) fn write_heading_level(
-        &self,
-        id: &TreeID,
-        level: Option<HeadingLevel>,
-    ) -> Result<(), ProseRefusal> {
         let tree = doc::blocks(&self.doc);
         let was = doc::block_type_of(&tree, id);
         if !matches!(was, Some(BlockType::Heading | BlockType::Paragraph)) {
-            return Err(ProseRefusal::NoSuchBlock(crate::events::block_id(*id)));
+            return Self::err_no_block(id);
         }
-        let Some(node) = doc::node_of(&tree, id) else {
-            return Err(ProseRefusal::NoSuchBlock(crate::events::block_id(*id)));
-        };
         let Some(level) = level else {
-            // A paragraph carries no `a` map at all, and absence is the value
-            // (`PROSE-096`). A block that is already a paragraph is left alone.
-            if was == Some(BlockType::Paragraph) {
-                return Ok(());
-            }
-            node.insert(doc::NodeKey::Type, i64::from(BlockType::Paragraph.code()))
-                .map_err(|e| ProseRefusal::from(doc::WriteError::from(e)))?;
-            return node
-                .delete(doc::NodeKey::Attrs)
-                .map_err(|e| ProseRefusal::from(doc::WriteError::from(e)));
+            return self.unmake_heading(id);
         };
         if was == Some(BlockType::Paragraph) {
             let parent = match tree.parent(*id) {
                 Some(TreeParentId::Node(parent)) => Some(parent),
                 Some(TreeParentId::Root) => None,
-                _ => return Err(ProseRefusal::NoSuchBlock(crate::events::block_id(*id))),
+                _ => return Self::err_no_block(id),
             };
             if !doc::nesting_allows(&tree, parent, BlockType::Heading) {
-                return Err(ProseRefusal::NestingRefused);
+                return Self::err_nesting();
             }
-            node.insert(doc::NodeKey::Type, i64::from(BlockType::Heading.code()))
-                .map_err(|e| ProseRefusal::from(doc::WriteError::from(e)))?;
+            if let Some(node) = doc::node_of(&tree, id)
+                && let Err(e) =
+                    node.insert(doc::NodeKey::Type, i64::from(BlockType::Heading.code()))
+            {
+                return Self::err_write(e);
+            }
         }
-        let Some(attrs) = doc::attrs_at(&node) else {
-            return Err(ProseRefusal::from(doc::WriteError::Refused(
-                doc::RefusalCause::AttrMapRefused,
-            )));
+        self.write_attr(id, doc::AttrKey::Level, i64::from(level.get()).into())
+    }
+
+    /// Turn a heading back into a paragraph, keeping its text and its place.
+    ///
+    /// The level attribute goes with the type. A paragraph carries no `a` map
+    /// at all, and absence is the value (`PROSE-096`). A block that is already
+    /// a paragraph is left as it is.
+    fn unmake_heading(&mut self, id: &TreeID) -> ProseOutcome {
+        let tree = doc::blocks(&self.doc);
+        let Some(node) = doc::node_of(&tree, id) else {
+            return Self::err_no_block(id);
         };
-        attrs
-            .insert(doc::AttrKey::Level, i64::from(level.get()))
-            .map_err(|e| ProseRefusal::from(doc::WriteError::from(e)))
+        if doc::block_type_of(&tree, id) == Some(BlockType::Paragraph) {
+            return self.commit_with(Vec::new());
+        }
+        if let Err(e) = node.insert(doc::NodeKey::Type, i64::from(BlockType::Paragraph.code())) {
+            return Self::err_write(e);
+        }
+        if let Err(e) = node.delete(doc::NodeKey::Attrs) {
+            return Self::err_write(e);
+        }
+        self.commit_with(Vec::new())
     }
 
     /// Set a code block's language. An empty value reads as plain.

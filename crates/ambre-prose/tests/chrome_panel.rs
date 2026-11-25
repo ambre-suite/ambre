@@ -332,7 +332,11 @@ async fn the_format_bar_announces_the_registry_labels() {
     );
     leptos::task::tick().await;
 
-    for (id, _) in ambre_prose::commands::FORMAT_BAR {
+    let ids = ambre_prose::commands::BAR_MARKS
+        .map(|(id, _)| id)
+        .into_iter()
+        .chain([ambre_prose::commands::LINK, ambre_prose::commands::COMMENT]);
+    for id in ids {
         let command = ambre_commands::find(ambre_prose::commands::COMMANDS, id)
             .expect("the control is described");
         let expected = (command.title)(&ambre_commands::Locale::En);
@@ -585,114 +589,6 @@ async fn a_page_control_hands_the_whole_format_to_the_view() {
     root.remove();
 }
 
-/// With a selection the text section shows each value and block control,
-/// with the reading of the selection. Each control hands one write to the
-/// view (`PROSE-UI-270`).
-#[wasm_bindgen_test]
-async fn the_text_section_shows_each_control_and_hands_its_write() {
-    use ambre_prose::events::{
-        ActiveMarks, Align, BlockFormat, HeadingLevel, IndentStep, ListStyle, OrderedStyle, Reading,
-    };
-    use ambre_prose::view::panel::{
-        INDENT_IN, INDENT_OUT, PARAGRAPH_ALIGN, PARAGRAPH_LIST, PARAGRAPH_STYLE, TEXT_COLOR,
-        TEXT_FONT, TEXT_HIGHLIGHT, TEXT_LINK, TEXT_SIZE,
-    };
-    use ambre_prose::view::toolbar::{TextWrite, ToolbarState};
-    let signals = ProseSignals::new();
-    signals.toolbar.set(ToolbarState {
-        anchor: Some(ambre_core::Point::default()),
-        active: Some(ActiveMarks {
-            heading: Reading::Uniform(Some(HeadingLevel::H2)),
-            align: Reading::Uniform(Some(Align::Center)),
-            list: Reading::Mixed,
-            ..ActiveMarks::default()
-        }),
-    });
-    let root = mount_prose_panel(signals);
-    leptos::task::tick().await;
-    assert_eq!(ambre_chrome::native_controls(&root), Vec::<String>::new());
-    assert_eq!(
-        ambre_chrome::unreached_controls(&root),
-        Vec::<String>::new()
-    );
-    let markers = ambre_chrome::reach_markers(&root);
-    for id in [
-        TEXT_FONT,
-        TEXT_SIZE,
-        TEXT_COLOR,
-        TEXT_HIGHLIGHT,
-        TEXT_LINK,
-        PARAGRAPH_STYLE,
-        PARAGRAPH_ALIGN,
-        PARAGRAPH_LIST,
-        INDENT_OUT,
-        INDENT_IN,
-    ] {
-        let reach = ambre_chrome::commands::Reach::Property(id);
-        assert!(
-            markers.iter().any(|m| reach.matches_marker(m)),
-            "{id:?} shows"
-        );
-    }
-    let text = root.text_content().unwrap_or_default();
-    assert!(text.contains("Heading 2"), "the style read is shown");
-    let centred: web_sys::Element = root
-        .query_selector("[aria-label=\"Centre\"]")
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        centred.get_attribute("aria-checked").as_deref(),
-        Some("true"),
-        "the alignment read is checked"
-    );
-
-    let click = |selector: &str| {
-        let button: web_sys::HtmlElement = root
-            .query_selector(selector)
-            .unwrap()
-            .unwrap()
-            .dyn_into()
-            .unwrap();
-        button.click();
-    };
-    click("[aria-label=\"Numbers\"]");
-    assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Block(BlockFormat::List(Some(
-            ListStyle::Ordered(OrderedStyle::Decimal)
-        ))))
-    );
-    click("[aria-label=\"Justify\"]");
-    assert!(matches!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Block(BlockFormat::Paragraph(style))) if style.align == Some(Align::Justify)
-    ));
-    let marker = ambre_chrome::commands::Reach::Property(INDENT_IN).marker();
-    click(&format!("[data-reach=\"{marker}\"]"));
-    assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Block(BlockFormat::Indent(IndentStep::In)))
-    );
-    let marker = ambre_chrome::commands::Reach::Property(TEXT_LINK).marker();
-    let field: web_sys::HtmlInputElement = root
-        .query_selector(&format!("[data-reach=\"{marker}\"]"))
-        .unwrap()
-        .unwrap()
-        .dyn_into()
-        .unwrap();
-    field.set_value("https://example.org");
-    field
-        .dispatch_event(&web_sys::Event::new("change").unwrap())
-        .unwrap();
-    assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Link(Some(ambre_core::LinkUrl::new(
-            "https://example.org".to_owned()
-        ))))
-    );
-    root.remove();
-}
-
 /// With a selection the panel shows the text: the marks, superscript,
 /// subscript and clearing the formatting, each handing its id to the view
 /// (`PROSE-UI-191`).
@@ -750,7 +646,7 @@ async fn superscript_subscript_and_clearing_reach_a_control_of_the_panel() {
     root.remove();
 }
 
-/// `PROSE-UI-259`, `CHROME-183`: with the caret in a suggestion and no
+/// `PROSE-UI-273`, `CHROME-183`: with the caret in a suggestion and no
 /// pointer over it, the panel shows a section that accepts and rejects that
 /// suggestion. Each button is a declared command the panel names, and a press
 /// hands the view the popover's own intent. The section leaves with the caret.
@@ -817,7 +713,7 @@ async fn the_caret_in_a_suggestion_shows_its_accept_and_reject_in_the_panel() {
     root.remove();
 }
 
-/// `PROSE-UI-261`, `PROSE-UI-262`: the review section shows the
+/// `PROSE-UI-275`, `PROSE-UI-276`: the review section shows the
 /// suggestion-mode control over the page, in the tab order. It is pressed
 /// exactly while the reported mode is suggesting. A press, the chord and the
 /// palette each hand the view the toggle.
@@ -879,7 +775,7 @@ async fn the_suggestion_mode_control_shows_the_mode_and_hands_its_toggle() {
     root.remove();
 }
 
-/// `PROSE-UI-261`: the status chip shows while the session suggests and
+/// `PROSE-UI-275`: the status chip shows while the session suggests and
 /// leaves when it stops, so a folded panel never hides the mode. The chip
 /// is a pressed reach of the command, and a press hands the toggle.
 #[wasm_bindgen_test]
@@ -913,5 +809,222 @@ async fn the_status_chip_shows_while_suggesting_alone() {
     signals.mode.set(EditMode::Editing);
     leptos::task::tick().await;
     assert!(chip().is_none(), "the chip leaves with the mode");
+    root.remove();
+}
+
+/// The selection the panel tests raise: an anchor, and the values `values`
+/// the Logic thread read for it.
+fn selection_with(signals: ProseSignals, values: ambre_prose::message::SelectionValues) {
+    signals
+        .toolbar
+        .set(ambre_prose::view::toolbar::ToolbarState {
+            anchor: Some(ambre_core::Point::default()),
+            active: Some(ambre_prose::message::ActiveMarks {
+                values,
+                ..ambre_prose::message::ActiveMarks::default()
+            }),
+        });
+}
+
+/// The radio of a segmented control labelled `label`.
+fn radio(root: &web_sys::Element, label: &str) -> web_sys::HtmlElement {
+    root.query_selector(&format!("[role=\"radio\"][aria-label=\"{label}\"]"))
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap()
+}
+
+/// With a selection the panel shows four sections: text, paragraph,
+/// paragraph style and actions. Each control reads the value the Logic
+/// thread read, and hands each write to the view as one value
+/// (`PROSE-UI-258`, `PROSE-UI-259`, `PROSE-UI-189`, `PROSE-UI-260`).
+#[wasm_bindgen_test]
+async fn with_a_selection_the_panel_shows_each_text_and_paragraph_control() {
+    use ambre_chrome::commands::Reading;
+    use ambre_prose::events::{Align, ListStyle, ParagraphStyle};
+    use ambre_prose::message::{HeadingLevel, ParagraphKind, SelectionValues};
+    use ambre_prose::view::panel::{self, TextWrite};
+    let signals = ProseSignals::new();
+    selection_with(
+        signals,
+        SelectionValues {
+            align: Reading::Uniform(Align::Center),
+            kind: Reading::Uniform(Some(ParagraphKind::Heading(HeadingLevel::H2))),
+            ..SelectionValues::default()
+        },
+    );
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    assert_eq!(ambre_chrome::repeated_title(&root), None);
+    assert_eq!(ambre_chrome::native_controls(&root), Vec::<String>::new());
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
+    );
+    let markers = ambre_chrome::reach_markers(&root);
+    for id in [
+        panel::FONT,
+        panel::SIZE,
+        panel::COLOUR,
+        panel::HIGHLIGHT,
+        panel::ALIGN,
+        panel::LINE_SPACING,
+        panel::INDENT_LEFT,
+        panel::INDENT_FIRST,
+        panel::INDENT_OUT,
+        panel::INDENT_IN,
+        panel::KIND,
+    ] {
+        let reach = ambre_chrome::commands::Reach::Property(id);
+        assert!(
+            markers.iter().any(|m| reach.matches_marker(m)),
+            "{id:?} shows"
+        );
+    }
+    for id in panel::ACTION_COMMANDS {
+        let reach = ambre_chrome::commands::Reach::Command(id);
+        assert!(
+            markers.iter().any(|m| reach.matches_marker(m)),
+            "{id:?} shows"
+        );
+    }
+    assert_eq!(
+        radio(&root, "Centre")
+            .get_attribute("aria-checked")
+            .as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        radio(&root, "Heading 2")
+            .get_attribute("aria-checked")
+            .as_deref(),
+        Some("true")
+    );
+
+    radio(&root, "Justified").click();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Paragraph(ParagraphStyle {
+            align: Some(Align::Justify),
+            ..ParagraphStyle::default()
+        }))
+    );
+    radio(&root, "Quote").click();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Kind(ParagraphKind::Quote))
+    );
+    radio(&root, "Numbered list").click();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Kind(ParagraphKind::List(ListStyle::Ordered(
+            ambre_prose::message::OrderedStyle::Decimal
+        ))))
+    );
+    let more: web_sys::HtmlElement = root
+        .query_selector("[aria-label=\"Left indent: more\"]")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    more.click();
+    let left = match signals.text_write.get_untracked() {
+        Some(TextWrite::Paragraph(style)) => style.indent_left,
+        _ => None,
+    }
+    .expect("an indent is one paragraph write")
+    .in_unit::<ambre_core::Mm>();
+    assert!((left.get() - 1.0).abs() < 0.01, "one millimetre: {left:?}");
+    // One step in hands the step, which the view sends over the selection
+    // (`PROSE-UI-267`).
+    let step = ambre_chrome::commands::Reach::Property(panel::INDENT_IN).marker();
+    let button: web_sys::HtmlElement = root
+        .query_selector(&format!("[data-reach=\"{step}\"]"))
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    button.click();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Indent(ambre_prose::message::IndentStep::In))
+    );
+    // The link opens the field of the bar; nothing is written yet.
+    signals.text_write.set(None);
+    let link = ambre_chrome::commands::Reach::Command(ambre_prose::commands::LINK).marker();
+    let button: web_sys::HtmlElement = root
+        .query_selector(&format!("[data-reach=\"{link}\"]"))
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    button.click();
+    assert_eq!(
+        signals.prompt.get_untracked(),
+        Some(ambre_prose::view::toolbar::BarPrompt::Link)
+    );
+    assert_eq!(signals.text_write.get_untracked(), None);
+    root.remove();
+}
+
+/// A mixed reading shows no value as chosen, and says mixed
+/// (`PROSE-UI-258`).
+#[wasm_bindgen_test]
+async fn a_mixed_paragraph_reads_mixed_in_the_panel() {
+    use ambre_chrome::commands::Reading;
+    use ambre_prose::message::SelectionValues;
+    let signals = ProseSignals::new();
+    selection_with(
+        signals,
+        SelectionValues {
+            align: Reading::Mixed,
+            ..SelectionValues::default()
+        },
+    );
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    for label in ["Left", "Centre", "Right", "Justified"] {
+        assert_eq!(
+            radio(&root, label).get_attribute("aria-checked").as_deref(),
+            Some("false")
+        );
+    }
+    assert!(root.query_selector(".ambre-kit-mixed").unwrap().is_some());
+    root.remove();
+}
+
+/// With no text selected the panel shows the body font of the document
+/// (`PROSE-UI-261`).
+#[wasm_bindgen_test]
+async fn with_no_selection_the_panel_shows_the_default_fonts() {
+    use ambre_prose::view::panel;
+    let signals = ProseSignals::new();
+    signals.fonts.set(Some(ambre_prose::doc::DocFonts {
+        body: ambre_core::FontFamily::from_label("Lora"),
+    }));
+    let root = mount_prose_panel(signals);
+    leptos::task::tick().await;
+    let markers = ambre_chrome::reach_markers(&root);
+    let reach = ambre_chrome::commands::Reach::Property(panel::BODY_FONT);
+    assert!(
+        markers.iter().any(|m| reach.matches_marker(m)),
+        "the body font shows"
+    );
+    let titles: Vec<String> = {
+        let list = root.query_selector_all(".ambre-ctx-section-head").unwrap();
+        (0..list.length())
+            .filter_map(|i| list.item(i))
+            .filter_map(|n| n.text_content())
+            .collect()
+    };
+    assert!(
+        titles.iter().any(|t| t.contains("Default styles")),
+        "{titles:?}"
+    );
+    assert_eq!(
+        ambre_chrome::unreached_controls(&root),
+        Vec::<String>::new()
+    );
     root.remove();
 }
