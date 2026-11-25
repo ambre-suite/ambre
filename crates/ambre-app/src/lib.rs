@@ -221,8 +221,9 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 struct Wiring {
     to_logic: outbox::ShellOutbox,
     theme_ctl: ambre_canvas::ThemeControl,
-    /// The theme of the account, which the header glyph follows.
-    account_theme: RwSignal<ambre_client_core::ThemeChoice>,
+    /// The settings of the account once the settings document answers. The
+    /// header glyph and the context panel follow them.
+    account_settings: RwSignal<Option<ambre_client_core::UserSettings>>,
     /// Toile's Undo/Redo availability signals, resolved from its own store so the
     /// menu bar disables the two rows from the Logic thread's `UndoState` alone
     /// (`UNDO-006`).
@@ -821,13 +822,9 @@ pub fn main() {
         platform::boot_hint().as_ref(),
         &platform::browser_language(),
     ));
-    // The theme of the account, which the header follows to redraw the glyph
-    // of the theme switch when another device moves it.
-    let account_theme = RwSignal::new(
-        platform::boot_hint()
-            .map(|hint| hint.theme)
-            .unwrap_or_default(),
-    );
+    // The settings of the account, which the header and the panel follow
+    // when another device moves them. None before the settings answer.
+    let account_settings = RwSignal::new(None);
     // The handle the settings of the account move the theme through.
     let settings_theme = theme_ctl.clone();
 
@@ -993,7 +990,7 @@ pub fn main() {
         clipboard_paste: paste_tx,
         raf: raf.clone(),
         theme_ctl: theme_ctl.clone(),
-        account_theme,
+        account_settings,
         boot_doc,
         booted,
         slots: shell::ShellSlots {
@@ -1307,7 +1304,7 @@ pub fn main() {
                         if theme != settings_theme.get() {
                             platform::set_theme(&settings_theme, theme);
                         }
-                        account_theme.set(settings.theme);
+                        account_settings.set(Some(settings.clone()));
                         // Another device, or the picker, moved the language:
                         // every label redraws (`SETTINGS-037`).
                         ambre_chrome::set_language(ambre_chrome::interface_locale(

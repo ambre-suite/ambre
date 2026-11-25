@@ -160,7 +160,7 @@ pub enum NumberConvention { Document, TypeMine, AllMine }
 numbers, the currencies, the dates and the collation a reader sees inside the document. The
 interface language is a property of the reader, written in no document but the reader's sealed
 settings (`LOCALE-003`, `SETTINGS-024`). A command title reads the second one: the page holds
-the reader's interface language, and every label reads it (`SETTINGS-033`, `SETTINGS-042`).
+the reader's interface language, and every label reads it (`SETTINGS-033`, `SETTINGS-043`).
 
 **Resolving, in order.** Three steps, and the third is a value:
 

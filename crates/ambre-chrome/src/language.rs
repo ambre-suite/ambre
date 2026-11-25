@@ -128,7 +128,7 @@ mod tests {
         }
     }
 
-    /// `SETTINGS-042`: a label read in a reactive scope reads the new
+    /// `SETTINGS-043`: a label read in a reactive scope reads the new
     /// language once the page changes it, with no other signal.
     #[test]
     fn a_label_read_in_a_reactive_scope_follows_a_new_language() {

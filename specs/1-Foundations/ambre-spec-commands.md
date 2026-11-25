@@ -88,7 +88,7 @@ pub struct StaticKey<K: KeyKind> { text: &'static str, kind: PhantomData<fn() ->
 /// The description every view of a command derives from (`UI-THREAD-019`).
 pub struct Command {
     pub id: StaticKey<Commands>,
-    /// The words of the label in each interface language (`SETTINGS-043`).
+    /// The words of the label in each interface language (`SETTINGS-044`).
     pub title: TitleWords,
     pub icon: Option<StaticKey<Icons>>,
     /// Every chord it answers, the announced one first (`UI-THREAD-011`).

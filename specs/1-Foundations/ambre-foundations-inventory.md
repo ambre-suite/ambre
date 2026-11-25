@@ -41,6 +41,7 @@
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 54 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 25 |  |
+| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | implemented | 44 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
@@ -61,9 +62,8 @@
 | `sync` | The one part of the client that talks to the network. | partial | 91 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
-| `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | partial | 43 |  |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 55 | 1 |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 27 implemented, 21 partial, 2 design-only. 1944 contract rows, 14 loose.**
+**50 features: 28 implemented, 20 partial, 2 design-only. 1945 contract rows, 14 loose.**
