@@ -378,6 +378,7 @@ class Headers(unittest.TestCase):
     and gives the script of each worker the worker policy."""
 
     BUILT = ("ambre-sync-0123abcd_loader.js", "ambre-call-4567ef01_loader.js", "ambre-thread-89ab2345.js")
+    SYNC_WASM = "ambre-sync-0123abcd_bg.wasm"
 
     def built(self, tmp: str, names: tuple[str, ...] = BUILT) -> Path:
         root = Path(tmp)
@@ -417,9 +418,20 @@ class Headers(unittest.TestCase):
             text = hook.write_headers(root, "/app/")
             self.assertEqual((root / hook.HEADERS_FILE).read_text(encoding="utf-8"), text)
             rules = self.rules(text)
-            self.assertEqual(sorted(rules), sorted(["/app/*", *(f"/app/{n}" for n in self.BUILT)]))
+            self.assertEqual(
+                sorted(rules), sorted(["/app/*", *(f"/app/{n}" for n in self.BUILT), f"/app/{self.SYNC_WASM}"])
+            )
             for name in self.BUILT:
                 self.assertEqual(rules[f"/app/{name}"], [f"Content-Security-Policy: {hook.worker_policy()}"])
+
+    def test_the_sync_worker_wasm_alone_is_revalidated(self) -> None:
+        """`SRV-401`: the file an install patches keeps its name, so the browser asks
+        for it again before each use, and no other file loses its cache."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rules = self.rules(hook.write_headers(self.built(tmp), "/app/"))
+            self.assertEqual(rules[f"/app/{self.SYNC_WASM}"], ["Cache-Control: no-cache"])
+            cached = [path for path, lines in rules.items() if any(l.startswith("Cache-Control") for l in lines)]
+            self.assertEqual(cached, [f"/app/{self.SYNC_WASM}"])
 
     def test_the_worker_policy_runs_the_build_alone(self) -> None:
         policy = hook.worker_policy()

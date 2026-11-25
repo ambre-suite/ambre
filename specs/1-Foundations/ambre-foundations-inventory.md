@@ -36,7 +36,7 @@
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 32 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 31 |  |
-| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 91 |  |
+| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 92 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 54 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 25 |  |
@@ -57,7 +57,7 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | partial | 17 |  |
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
-| `server` | The one process every client talks to. | partial | 152 | 1 |
+| `server` | The one process every client talks to. | partial | 155 | 1 |
 | `shell` | Where each command of a document page lives. | partial | 101 |  |
 | `sync` | The one part of the client that talks to the network. | partial | 91 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 27 implemented, 21 partial, 2 design-only. 1990 contract rows, 14 loose.**
+**50 features: 27 implemented, 21 partial, 2 design-only. 1994 contract rows, 14 loose.**

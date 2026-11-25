@@ -359,12 +359,25 @@ def worker_policy() -> str:
     )
 
 
+# The cache rule of the one file an install patches: the browser asks the
+# server before each use, so a new link key reaches it at the next load
+# (`SRV-401`). The name stays the one of the release, and a reader checks the
+# file against the manifest by that name (`ZK-059`).
+REVALIDATE = "no-cache"
+
+
+def patched_wasm(sync_loader: str) -> str:
+    """The wasm of the Sync worker that `sync_loader` names, whose link key slot an install patches."""
+    return sync_loader.removesuffix("_loader.js") + "_bg.wasm"
+
+
 def write_headers(staging: Path, public_url: str = "/") -> str:
     """Write `_headers` for the build in `staging`, and return its text.
 
     Every answer carries the two isolation headers and refuses any frame. The
     loader of each worker of `WORKERS`, and the thread script, carry the worker
     policy. Each script is named exactly, so no pattern reaches another file.
+    The wasm of the Sync worker is served under `REVALIDATE` (`SRV-401`).
     """
     base = public_url.rstrip("/") + "/"
     scripts: list[str] = []
@@ -385,6 +398,7 @@ def write_headers(staging: Path, public_url: str = "/") -> str:
     ]
     for name in scripts:
         lines += [f"{base}{name}", f"  Content-Security-Policy: {worker_policy()}"]
+    lines += [f"{base}{patched_wasm(scripts[0])}", f"  Cache-Control: {REVALIDATE}"]
     text = "\n".join(lines) + "\n"
     (staging / HEADERS_FILE).write_text(text, encoding="utf-8")
     return text

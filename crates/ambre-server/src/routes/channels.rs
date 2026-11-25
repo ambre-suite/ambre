@@ -4295,6 +4295,59 @@ mod tests {
         );
     }
 
+    /// `SRV-400`: the relay stores no receipt. After a rotation of its link
+    /// seed, the registration of a root it linked before answers a receipt
+    /// under the new key alone. The retired key, which a leak may hold,
+    /// signs none of it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_registration_after_a_rotation_answers_under_the_new_link_key(pool: sqlx::PgPool) {
+        use ambre_protocol::thread_erasure::{DEV_LINK_KEY, link_transcript};
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let root = Id::<Message>::mint();
+        let mine = document(&state, alice).await;
+        let before = thread(&state, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+
+        let new_seed = crate::jwt::JwtSeed::from_array([0x5a; 32]);
+        let new_key = new_seed.verifying_key_bytes();
+        let rotated = Arc::new(AppState {
+            jwt: Arc::new(
+                crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
+                    crate::test_helpers::TEST_JWT_SEED,
+                ))
+                .with_link(&new_seed),
+            ),
+            ..(*state).clone()
+        });
+        let after = thread(&rotated, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+
+        let under = |key: [u8; 32], answer: &ThreadJson| {
+            let receipt = answer.receipt.expect("a receipt");
+            ed25519_dalek::VerifyingKey::from_bytes(&key)
+                .and_then(|key| {
+                    key.verify_strict(
+                        link_transcript(channel.id, mine).as_bytes(),
+                        &ed25519_dalek::Signature::from_bytes(receipt.as_array()),
+                    )
+                })
+                .is_ok()
+        };
+        assert_eq!(after.thread, mine, "the link it holds");
+        assert!(under(*DEV_LINK_KEY.as_array(), &before));
+        assert!(under(new_key, &after), "the link it holds, signed again");
+        assert!(
+            !under(*DEV_LINK_KEY.as_array(), &after),
+            "no receipt under the retired key"
+        );
+    }
+
     /// `who` posts the erasure of `thread` in `channel`, signed by `signer`
     /// over the erasure of `signed` in `channel`.
     async fn erase(

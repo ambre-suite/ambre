@@ -110,8 +110,23 @@ then never starts: `docker compose logs link-key` says why. A client with an emp
 thread, so keep the pair together.
 
 An `.env` written before the link key lacks both values, and `docker compose` then stops. Draw a
-pair as `setup.sh` does, add both lines, and run `docker compose up -d`. A new key needs no new
-build: the next start patches it. Every receipt signed under the older key then counts as none.
+pair as `setup.sh` does, add both lines, and run `docker compose up -d`.
+
+**Rotate the link key.** A leaked seed lets anyone sign a receipt, and a receipt over a thread that
+does not exist blocks each removal of the channel. A new seed is the only answer, and it needs no
+new build:
+
+1. draw a new pair as `setup.sh` does, and replace `THREAD_LINK_SEED` and `THREAD_LINK_KEY` in
+   `.env`;
+2. run `docker compose up -d --force-recreate relay web-files link-key web`. The relay checks the
+   new seed against the new key (`SRV-364`), and `link-key` patches a fresh copy (`SRV-369`);
+3. check the served client: `THREAD_LINK_KEY=<key> python3 scripts/link_key.py served https://<domain>`.
+
+The older key then counts nothing, in no client. The relay keeps no receipt: it signs each one when
+it answers a registration, so every link it holds gets a receipt under the new key at its next
+registration (`SRV-400`). A thread the relay never linked, which a leaked seed could vouch for, gets
+none. A browser asks for the Sync worker again before each use (`SRV-401`), so a reload takes the
+new key. A tab open across the rotation keeps the older key until it reloads.
 
 To check the served client against the release manifest, set its key bytes to zero first with
 `python3 scripts/link_key.py zero <file> <file>` (`ZK-059`).
