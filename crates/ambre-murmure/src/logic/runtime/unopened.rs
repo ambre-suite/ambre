@@ -140,6 +140,14 @@ impl<D> Runtime<D> {
     /// counts its mentions alone. A channel no answer names a segment of
     /// waits.
     fn watch_unheld(&mut self) {
+        // A call that started before the watch sent its cue already, so the listing names the
+        // live call of each channel (`MURMURE-691`).
+        let calls: Vec<(Id<Channel>, Id<Call>)> = self
+            .listed_channels
+            .metas
+            .values()
+            .filter_map(|m| Some((m.channel_id, m.call?)))
+            .collect();
         let Some(segments) = &self.listed_channels.segments else {
             return;
         };
@@ -154,12 +162,12 @@ impl<D> Runtime<D> {
             })
             .filter_map(|(c, m)| segments.get(c).map(|s| (*m, s.clone())))
             .collect();
-        let mut watching = false;
         for (listed, documents) in unheld {
             let ChannelMeta {
                 channel_id,
                 meta,
                 last,
+                ..
             } = listed;
             let held = documents
                 .iter()
@@ -175,12 +183,7 @@ impl<D> Runtime<D> {
                 meta_last: last,
                 documents,
             });
-            watching = true;
         }
-        // A call that started before the watch sent its cue already. So the relay names the
-        // live call of each channel once per listing that watches one (`MURMURE-691`).
-        if watching {
-            self.ask(SyncCommand::FetchChannelCalls);
-        }
+        self.channel_calls(&calls);
     }
 }

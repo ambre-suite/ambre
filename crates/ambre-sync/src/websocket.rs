@@ -1155,7 +1155,6 @@ impl SyncState {
             SyncEvent::ConverterFetched { family, result } => {
                 self.converter_fetched(family, result)
             }
-            SyncEvent::ChannelCallsFetched { result } => self.channel_calls_fetched(result),
             SyncEvent::SpaceChannelsListed { space_id, result } => {
                 self.space_channels_listed(space_id, result);
             }

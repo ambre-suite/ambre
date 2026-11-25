@@ -69,11 +69,6 @@ pub enum LogicEvent {
         channel: Id<ambre_core::id::Channel>,
         members: crate::CallMembers,
     },
-    /// The live call of each channel of the user that has one, the answer to
-    /// [`crate::SyncCommand::FetchChannelCalls`] (`CALL-162`).
-    ChannelCalls {
-        calls: Vec<(Id<ambre_core::id::Channel>, Id<ambre_core::id::Call>)>,
-    },
     /// A join of `call` waits for the `meta` document of `channel`. The Logic thread answers
     /// [`crate::SyncCommand::CallMeta`] from the channel state it opened. The relay never
     /// names that document, so it cannot seat the join under another channel's log

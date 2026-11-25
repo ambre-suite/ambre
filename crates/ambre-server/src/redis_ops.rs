@@ -1283,15 +1283,15 @@ return answer
     Ok(CallRoster::Live(seated))
 }
 
-/// The live call each key of `channels` names, as one read of the store (`CALL-162`). A
-/// channel whose key is absent, or holds no call identifier, names none. It writes nothing.
+/// The live call each key of `channels` names, in the order asked, as one read of the store
+/// (`CALL-162`). `None` where the key is absent or holds no call identifier. It writes nothing.
 ///
 /// # Errors
 /// A store error.
 pub async fn channel_calls(
     redis: &Client,
     channels: &[Id<Channel>],
-) -> Result<Vec<ambre_protocol::signaling::ChannelLiveCall>, AppError> {
+) -> Result<Vec<Option<Id<ambre_core::id::Call>>>, AppError> {
     if channels.is_empty() {
         return Ok(Vec::new());
     }
@@ -1307,16 +1307,9 @@ pub async fn channel_calls(
         .mget::<Vec<Option<String>>>(keys)
         .await
         .map_err(|e| AppError::Redis(crate::error::FaultText::of("channel calls", e)))?;
-    Ok(channels
-        .iter()
-        .zip(held)
-        .filter_map(|(channel, call)| {
-            let call = Id::<ambre_core::id::Call>::parse_str(&call?).ok()?;
-            Some(ambre_protocol::signaling::ChannelLiveCall {
-                channel: *channel,
-                call,
-            })
-        })
+    Ok(held
+        .into_iter()
+        .map(|call| Id::<ambre_core::id::Call>::parse_str(&call?).ok())
         .collect())
 }
 

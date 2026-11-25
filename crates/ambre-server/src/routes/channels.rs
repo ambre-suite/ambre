@@ -104,6 +104,10 @@ pub struct MemberChannelJson {
     /// The last number the relay gave in the channel's `meta`, zero for a
     /// `meta` that holds nothing (`SRV-223`).
     pub meta_last: ambre_core::Seq<ambre_core::Relay>,
+    /// The live call of the channel, `null` for none (`CALL-162`). The relay reads it from the
+    /// key of the channel, so a page learns of a call that started before it watched.
+    #[serde(with = "ambre_core::serde_id::text::option")]
+    pub call: Option<Id<id::Call>>,
 }
 
 /// The channels of the caller.
@@ -117,7 +121,9 @@ pub struct MemberChannelsJson {
 
 /// `GET /api/channels`: every channel the caller is a member of, by its
 /// `meta` row, with its space and whether it is public (`SRV-191`). Beside
-/// them, every space whose document holds a row of the caller (`SRV-216`).
+/// them, every space whose document holds a row of the caller (`SRV-216`). Each channel names
+/// its live call (`CALL-162`): the listing asks nothing more, so the relay learns nothing more
+/// (`ZK-056`).
 pub async fn list_member_channels(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -126,10 +132,13 @@ pub async fn list_member_channels(
     let rows = db::list_member_channels(&state.db, &auth.user_id).await?;
     let metas: Vec<Id<Document>> = rows.iter().map(|row| row.meta_id.document_id()).collect();
     let counters = crate::redis_ops::document_seqs(&state.redis, &metas).await?;
+    let ids: Vec<Id<id::Channel>> = rows.iter().map(|row| row.id).collect();
+    let calls = crate::redis_ops::channel_calls(&state.redis, &ids).await?;
     let channels = rows
         .into_iter()
         .zip(counters)
-        .map(|(row, counter)| {
+        .zip(calls)
+        .map(|((row, counter), call)| {
             // The live counter runs ahead of the register until a flush.
             let last = row.meta_durable_last.max(counter.unwrap_or_default());
             MemberChannelJson {
@@ -142,6 +151,7 @@ pub async fn list_member_channels(
                 wrapper_exchange_pub_key: row.wrapper_exchange_pubkey,
                 peers: row.peers,
                 meta_last: last,
+                call,
             }
         })
         .collect();

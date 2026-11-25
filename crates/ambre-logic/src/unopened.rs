@@ -35,6 +35,17 @@ mod tests {
     const META_LAST: Seq<Relay> = Seq::<Relay>::new(8);
 
     fn list(state: &mut LogicState, metas: &[(Id<Channel>, Id<Meta>)]) {
+        let metas: Vec<_> = metas.iter().map(|&(c, m)| (c, m, None)).collect();
+        list_calls(state, &metas);
+    }
+
+    /// A listed channel with its `meta` and its live call, if any.
+    ///
+    /// Written out at its uses, the type fails `clippy::type_complexity`.
+    type Listed = (Id<Channel>, Id<Meta>, Option<Id<ambre_core::id::Call>>);
+
+    /// A listing whose channels each name their live call, if any.
+    fn list_calls(state: &mut LogicState, metas: &[Listed]) {
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: Vec::new(),
             spaces: Vec::new(),
@@ -42,10 +53,11 @@ mod tests {
             peers: Vec::new(),
             metas: metas
                 .iter()
-                .map(|&(channel_id, meta)| ChannelMeta {
+                .map(|&(channel_id, meta, call)| ChannelMeta {
                     channel_id,
                     meta,
                     last: Some(META_LAST),
+                    call,
                 })
                 .collect(),
         });
@@ -353,12 +365,11 @@ mod tests {
             .collect()
     }
 
-    /// A channel never opened shows its live call (the Murmure calls spec). Its watch asks the
-    /// relay for the live calls once. A ring cue of its segment names the call, and so does the
-    /// answer of the relay. The tick of the shown channel asks who is in it under its `meta`. An
-    /// end cue, or an answer of no state, takes the call away.
+    /// A channel never opened shows its live call (the Murmure calls spec). A ring cue of its
+    /// segment names the call, and so does the listing. The tick of the shown channel asks who
+    /// is in it under its `meta`. An end cue, or an answer of no state, takes the call away.
     #[test]
-    fn a_channel_never_opened_shows_the_live_call_its_cue_or_the_relay_names() {
+    fn a_channel_never_opened_shows_the_live_call_its_cue_or_the_listing_names() {
         let (mut state, ui, sync) = harness();
         let (channel, meta, segment) = (
             Id::<Channel>::mint(),
@@ -370,23 +381,7 @@ mod tests {
             &mut state,
             &[(channel, segment, ChannelDocumentKind::Segment)],
         );
-        let fetched = drain(&sync)
-            .into_iter()
-            .filter(|c| matches!(c, SyncCommand::FetchChannelCalls))
-            .count();
-        assert_eq!(fetched, 1, "the watch asks for the live calls once");
-        // A listing after a reconnect starts no watch, so it asks for no live call.
-        list(&mut state, &[(channel, meta)]);
-        answer(
-            &mut state,
-            &[(channel, segment, ChannelDocumentKind::Segment)],
-        );
-        assert!(
-            !drain(&sync)
-                .iter()
-                .any(|c| matches!(c, SyncCommand::FetchChannelCalls)),
-            "a listing that watches nothing new asks nothing"
-        );
+        drain(&sync);
 
         let shown = Id::<Channel>::mint();
         let held = ChannelState::create(
@@ -439,15 +434,15 @@ mod tests {
             "an ended call is asked no more"
         );
 
+        // A call that started before the watch: the listing names it.
         let later = Id::<ambre_core::id::Call>::mint();
-        state.handle_logic_event(LogicEvent::ChannelCalls {
-            calls: vec![(channel, later), (Id::<Channel>::mint(), later)],
-        });
+        let stranger = (Id::<Channel>::mint(), Id::<Meta>::mint(), Some(later));
+        list_calls(&mut state, &[(channel, meta, Some(later)), stranger]);
         tick(&mut state, 30_000);
         assert_eq!(
             roster_asks(&sync),
             [(later, channel, meta.document_id())],
-            "the relay names the call of a channel it watches alone"
+            "the listing names the call of a channel it watches alone"
         );
         state.handle_logic_event(LogicEvent::CallRoster {
             call: later,

@@ -112,6 +112,8 @@ pub struct ChannelMeta {
     /// The last number the relay gave in `meta`, none from a relay that
     /// lists none. A watch resumes after it.
     pub last: Option<Seq<Relay>>,
+    /// The live call of the channel as the listing named it, none for none (`CALL-162`).
+    pub call: Option<Id<ambre_core::id::Call>>,
 }
 
 /// The name a channel not yet open shows, read from the name sealed beside

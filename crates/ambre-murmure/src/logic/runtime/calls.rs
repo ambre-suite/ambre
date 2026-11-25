@@ -100,10 +100,10 @@ impl<D> Runtime<D> {
         });
     }
 
-    /// The relay named the live call of each channel of the user (`CALL-162`). Each channel
+    /// The listing named the live call of each channel of the user (`CALL-162`). Each channel
     /// this thread watches and does not hold keeps its call, so the tick asks who is in it
     /// (`MURMURE-691`). A call the relay answered gone is kept out.
-    pub fn channel_calls(&mut self, calls: &[(Id<Channel>, Id<Call>)]) {
+    pub(super) fn channel_calls(&mut self, calls: &[(Id<Channel>, Id<Call>)]) {
         for (channel, call) in calls {
             let gone = self
                 .call_asks

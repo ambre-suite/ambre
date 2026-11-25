@@ -1400,13 +1400,10 @@ async fn a_heartbeat_renews_the_admission_of_a_member_in_the_channel_alone(pool:
     assert!(!held, "the seat of a removed member stays in the roster");
 }
 
-/// Asks the relay for the live call of each channel of `asker` (`CALL-162`).
-async fn ask_channel_calls(
-    state: &Arc<AppState>,
-    asker: &Member,
-) -> Vec<ambre_protocol::signaling::ChannelLiveCall> {
-    use axum::response::IntoResponse;
-    let answer = crate::routes::channel_calls(
+/// The live call of each channel of `asker`, as the listing of its channels names it
+/// (`CALL-162`).
+async fn ask_channel_calls(state: &Arc<AppState>, asker: &Member) -> Vec<(Id<Channel>, Id<Call>)> {
+    let listing = crate::routes::list_member_channels(
         State(state.clone()),
         crate::auth::AuthSession {
             user_id: asker.user,
@@ -1414,24 +1411,21 @@ async fn ask_channel_calls(
         },
     )
     .await
-    .expect("an answer")
-    .into_response();
-    assert_eq!(answer.status(), axum::http::StatusCode::OK);
-    let body = axum::body::to_bytes(answer.into_body(), 1 << 20)
-        .await
-        .expect("a body");
-    let calls: ambre_protocol::signaling::ChannelCalls =
-        serde_json::from_slice(&body).expect("the calls");
-    calls.calls
+    .expect("a listing");
+    listing
+        .0
+        .channels
+        .iter()
+        .filter_map(|c| Some((c.channel_id, c.call?)))
+        .collect()
 }
 
-/// `CALL-162`: an ask of the live calls names the call of each channel of the asker, and of
-/// no other channel. A channel with no call is absent, and a stranger to every channel reads
+/// `CALL-162`: the listing names the live call of each channel of the asker, and of no other
+/// channel. A channel with no call is absent, and a stranger to every channel reads
 /// none.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn a_member_reads_the_live_call_of_its_own_channels_alone(pool: sqlx::PgPool) {
-    use ambre_protocol::signaling::ChannelLiveCall;
     let state = test_app_state(pool.clone()).await;
     let alice = Member::new(&pool, "alice", 1).await;
     let bob = Member::new(&pool, "bob", 2).await;
@@ -1448,40 +1442,22 @@ async fn a_member_reads_the_live_call_of_its_own_channels_alone(pool: sqlx::PgPo
     }
     assert_eq!(
         ask_channel_calls(&state, &carol).await,
-        [ChannelLiveCall {
-            channel: with_carol,
-            call: first
-        }]
+        [(with_carol, first)]
     );
-    assert_eq!(
-        ask_channel_calls(&state, &bob).await,
-        [ChannelLiveCall {
-            channel: with_bob,
-            call: second
-        }]
-    );
+    assert_eq!(ask_channel_calls(&state, &bob).await, [(with_bob, second)]);
     let mut both = ask_channel_calls(&state, &alice).await;
-    ambre_core::order::sort_by_id(&mut both, |c| c.call);
-    let mut want = vec![
-        ChannelLiveCall {
-            channel: with_carol,
-            call: first,
-        },
-        ChannelLiveCall {
-            channel: with_bob,
-            call: second,
-        },
-    ];
-    ambre_core::order::sort_by_id(&mut want, |c| c.call);
+    ambre_core::order::sort_by_id(&mut both, |c| c.1);
+    let mut want = vec![(with_carol, first), (with_bob, second)];
+    ambre_core::order::sort_by_id(&mut want, |c| c.1);
     assert_eq!(both, want, "the quiet channel is absent");
-    assert!(both.iter().all(|c| c.channel != quiet));
+    assert!(both.iter().all(|c| c.0 != quiet));
     assert!(
         ask_channel_calls(&state, &dave).await.is_empty(),
         "a stranger reads none"
     );
 }
 
-/// `ZK-056`: an ask of the live calls writes nothing to the store. The key of the channel reads
+/// `ZK-056`: a listing that names the live calls writes nothing to the store. The key of the channel reads
 /// the same before and after the asks. Its time to live shrinks under the asks alone.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
