@@ -41,42 +41,43 @@ lint:
 # them the `-A warnings` there. `-D warnings` makes every warning fatal, so a
 # warning on wasm-only code fails here as one on the host fails `lint`. The
 # Prose and Murmure unit tests are host-only, so their wasm test files are
-# linted alone.
+# linted alone. `--cfg erase_components` repeats the flag of the shipped views,
+# so the lint and the primitive gate read the views that ship.
 lint-wasm:
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --exclude ambre-sfu --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --exclude ambre-sfu --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
     # Each converter module as `scripts/converter_build.py` builds it: one
     # family's engine and the exports, with no loader. No line above turns an
     # engine on for wasm, so these read the exports (`ARCH-079`), and each
     # family alone, as its module compiles it.
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features tables --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features pdf --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features markup --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features images --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features office --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features boards --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features spell_en --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features spell_fr --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features tables --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features pdf --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features markup --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features images --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features office --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features boards --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features spell_en --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features spell_fr --lib
     # The PowerPoint codec, which the converter module will link: no line above
     # turns its `codec` feature on for wasm.
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-pptx --features codec --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-pptx --features codec --lib
     # `test-wasm` builds the Logic, app and chrome test targets, and no other
     # wasm line compiles them, so these three lines lint them. A broken wasm
     # test build, or a warning in one, fails here.
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests
     # `test-wasm` runs the Logic tests on the threaded build, which compiles
     # the tests that spawn workers (`ARCH-108`). No line above reads them. The
     # threading flags of `.cargo/config.toml` hold, so `-D warnings` goes to
     # clippy after their `-A warnings`.
     cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests -- -D warnings
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
     # The test build of the belt: the development sign-in and the gallery page
     # of the visual system, which no release carries.
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login,ambre-app/chrome-gallery
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login,ambre-app/chrome-gallery
+    RUSTFLAGS="-D warnings -C debuginfo=0 --cfg erase_components" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over
@@ -417,7 +418,7 @@ phone-seed user count="5000":
 # writes a capabilities file under `target/` that names it, unless
 # `WASM_BINDGEN_TEST_WEBDRIVER_JSON` already names one. `WASM_BINDGEN_TEST_ONLY_WEB`
 # skips a test module not configured for the browser, so no test runs under Node.
-wasm_test_env := 'RUSTFLAGS="-Awarnings -C debuginfo=0" CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner WASM_BINDGEN_TEST_ONLY_WEB=1 python3 scripts/wasm_driver.py'
+wasm_test_env := 'RUSTFLAGS="-Awarnings -C debuginfo=0 --cfg erase_components" CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner WASM_BINDGEN_TEST_ONLY_WEB=1 python3 scripts/wasm_driver.py'
 
 # The same runner on the threaded build: no RUSTFLAGS, so the threading flags of
 # `.cargo/config.toml` hold, and the profile drops the debug info instead. The
@@ -443,6 +444,8 @@ wasm_threaded_test_env := 'CARGO_PROFILE_DEV_DEBUG=0 CARGO_TARGET_WASM32_UNKNOWN
 # production build keeps its threaded codegen untouched. `-Z build-std` still
 # comes from `.cargo/config.toml`, rebuilding std consistently without atomics.
 # `-Awarnings` preserves the wasm warning policy.
+# `--cfg erase_components` repeats the one flag of the shipped views, so the
+# tier tests the erased views that ship (`ambre-spec-budgets.md section 5`).
 #
 # `-C debuginfo=0` is critical: the dev profile's DWARF balloons the test module
 # to ~350 MB, which headless Chrome cannot compile within the runner's 20 s

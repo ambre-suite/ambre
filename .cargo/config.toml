@@ -47,6 +47,13 @@ rustflags = [
     # default, and nightly-2026-11-11 no longer does: without this line,
     # wasm-bindgen fails with `failed to find __heap_base`.
     "-C", "link-arg=--export=__heap_base",
+    # Leptos erases the type of each component and of each reactive closure of
+    # `view!`, so its render code builds once per output type, not once per
+    # call site. On 2026-11-25 the flag took about 490 KB off the raw Main wasm
+    # (`ambre-spec-budgets.md section 5`). The cost is one allocation per
+    # reactive closure and one dynamic call per render. The wasm tier of the
+    # justfile replaces these flags, so it repeats this one.
+    "--cfg", "erase_components",
 ]
 
 [unstable]
