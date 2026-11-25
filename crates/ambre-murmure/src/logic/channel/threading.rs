@@ -156,7 +156,7 @@ pub struct RootProof {
     pub thread: Id<Document>,
     /// Its first receipt, and each fresh one of the segment and of its
     /// amendments, in no order.
-    pub receipts: Vec<ambre_core::FixedBytes<ambre_core::Signature>>,
+    pub receipts: Vec<ambre_bus::LinkReceipt>,
 }
 
 impl ChannelState {
@@ -730,7 +730,7 @@ impl ChannelState {
     /// The receipts `root`, a message of `segment`, holds for `thread`, or
     /// `None` while neither the root nor the amendments name that thread
     /// (`MURMURE-762`).
-    fn root_proof(
+    pub(crate) fn root_proof(
         &self,
         segment: Id<Segment>,
         root: Id<Message>,
@@ -759,7 +759,6 @@ impl ChannelState {
                     .unwrap_or_default(),
             )
             .filter(|receipt| receipt.thread == thread)
-            .map(|receipt| receipt.signature)
             .collect();
         Some(RootProof {
             segment,
@@ -771,19 +770,27 @@ impl ChannelState {
 
     /// Write the relay's fresh `receipt` of `thread` under the key of `by`
     /// (`MURMURE-762`). It goes into the `thread_receipts` root of `segment`,
-    /// or of its amendments once it is locked. `None` when the entry holds it already,
-    /// or when a locked segment has no amendments yet.
+    /// or of its amendments once it is locked. `None` while `root` names no
+    /// such thread, when the root holds that receipt already, or when a
+    /// locked segment has no amendments yet.
     ///
     /// # Errors
     /// [`MurmureError::NoSession`] before the PeerID of the document landed,
     /// and [`MurmureError::Crdt`] when Loro refuses a write or the export.
     pub fn write_fresh_receipt(
         &mut self,
-        segment: Id<Segment>,
+        at: (Id<Segment>, Id<Message>),
         thread: Id<Document>,
         receipt: ambre_core::FixedBytes<ambre_core::Signature>,
         by: Id<User>,
     ) -> Result<Option<Sent>, MurmureError> {
+        let (segment, root) = at;
+        let held = self
+            .root_proof(segment, root, thread)
+            .is_some_and(|proof| proof.receipts.iter().all(|r| r.signature != receipt));
+        if !held {
+            return Ok(None);
+        }
         let key = schema::FreshKey { thread, by }.spell();
         let hex = receipt.to_hex();
         let write = |doc: &LoroDoc| -> Result<bool, MurmureError> {

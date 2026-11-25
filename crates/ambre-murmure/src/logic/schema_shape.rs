@@ -350,7 +350,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
         )
         .expect("reply");
     state
-        .write_fresh_receipt(segment, thread, SCENARIO_FRESH, AUTHOR)
+        .write_fresh_receipt((segment, root), thread, SCENARIO_FRESH, AUTHOR)
         .expect("a fresh receipt");
 }
 
@@ -451,7 +451,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
         .thread_linked(segment, root, thread, Some(SCENARIO_RECEIPT))
         .expect("record");
     state
-        .write_fresh_receipt(segment, thread, SCENARIO_FRESH, MEMBER)
+        .write_fresh_receipt((segment, root), thread, SCENARIO_FRESH, MEMBER)
         .expect("a fresh receipt by amendment");
     // A fold writes the segment's header and the `meta` entry
     // (`MURMURE-075`, `MURMURE-076`).

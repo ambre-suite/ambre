@@ -348,25 +348,15 @@ pub enum LogicEvent {
     /// answering [`SyncCommand::CreateThread`](crate::SyncCommand::CreateThread).
     /// A registration that lost its race names the winner's, and the Sync
     /// worker deleted its own (`SRV-214`). `receipt` is the relay's
-    /// signature over the link, which the root keeps (`SRV-363`).
+    /// signature over the link, which the root keeps (`SRV-363`). It also
+    /// answers [`SyncCommand::FreshenReceipt`](crate::SyncCommand::FreshenReceipt)
+    /// with a fresh receipt that counts (`SYNC-350`).
     ThreadLinked {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
         receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
-    },
-    /// The relay's fresh receipt of the link of `thread` to `root`, a message
-    /// of `segment`, answering
-    /// [`SyncCommand::FreshenReceipt`](crate::SyncCommand::FreshenReceipt).
-    /// It counts under the link key of this client (`SYNC-350`), and the
-    /// root's segment keeps it.
-    FreshReceipt {
-        channel_id: Id<Channel>,
-        segment: Id<Segment>,
-        root: Id<Message>,
-        thread: Id<Document>,
-        receipt: ambre_core::FixedBytes<ambre_core::Signature>,
     },
     /// The relay refused the creation or the registration of `thread` for
     /// `root`, or never answered it.

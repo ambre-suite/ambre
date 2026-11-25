@@ -5129,3 +5129,4 @@ ambre-murmure | src/logic/delta.rs | crate::logic::delta | names_thread() | ret 
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | FreshKey::parse(key) | param | &str	foreign-api	a thread_receipts map key as Loro hands it back, parsed into the thread and the member here
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | FreshKey::spell() | ret | String	foreign-api	the thread_receipts map key that LoroMap::insert and get take as &str, spelled from its two identifiers
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | fresh_receipts_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-sync | src/sharing.rs | crate::sharing | fresh_needed() | ret | bool	generic	predicate answer: whether no receipt a root holds counts under the pinned link key, selects no mode

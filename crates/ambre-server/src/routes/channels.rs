@@ -748,38 +748,34 @@ pub async fn register_thread(
     }))
 }
 
-/// The relay's receipt of a link it holds, signed at the answer. A relay
-/// with no link key answers none.
-#[derive(serde::Serialize)]
-pub struct LinkReceiptJson {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
-}
-
-/// `GET /api/channels/{id}/threads/{thread}/receipt`: the receipt of a link
-/// the relay holds, under its current link seed, to any member of the channel
-/// (`SRV-390`).
+/// `POST /api/channels/{id}/threads/receipt`: the receipt of the link the
+/// relay holds for a root, under its current link seed, to any member of the
+/// channel (`SRV-390`).
 ///
 /// A member writes it beside the `thread` field of the root once a rotation
-/// left no receipt there that counts (the Murmure threads spec). The route writes
-/// nothing, and signs the channel and the thread, which the relay already
-/// stores. It learns only that this member asked. A thread of another channel
-/// and a document of no channel answer the same 404, and a stranger gets 403.
+/// left no receipt there that counts (the Murmure threads spec). The body and
+/// the answer are those of a registration, and the answer reads `existing`.
+/// The route writes nothing (`SRV-391`). It signs the channel and the thread,
+/// which the relay already stores, so it learns only that this member asked.
+/// A root with no link answers 404, and a stranger gets 403.
 pub async fn thread_receipt(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    ids: OpaquePathId<(Id<id::Channel>, Id<Document>)>,
-) -> Result<axum::Json<LinkReceiptJson>, AppError> {
-    let (channel_id, thread) = ids.into_inner();
+    ids: OpaquePathId<Id<id::Channel>>,
+    body: Json<RegisterThreadRequest>,
+) -> Result<axum::Json<ThreadJson>, AppError> {
+    let channel_id = ids.into_inner();
+    let req = body.into_inner();
     meta_role(&state, &channel_id, &auth.user_id).await?;
-    let held = db::channel_place(&state.db, &thread).await?;
-    if held != Some((channel_id, ambre_core::ChannelDocumentKind::Thread)) {
-        return Err(AppError::NotFound {
+    let held = db::held_thread(&state.db, &channel_id, req.root)
+        .await?
+        .ok_or(AppError::NotFound {
             resource: crate::error::Resource::Document,
-        });
-    }
-    Ok(axum::Json(LinkReceiptJson {
-        receipt: state.jwt.sign_link(channel_id, thread),
+        })?;
+    Ok(axum::Json(ThreadJson {
+        thread: held,
+        created: ambre_core::Creation::Existing,
+        receipt: state.jwt.sign_link(channel_id, held),
     }))
 }
 
@@ -4383,17 +4379,22 @@ mod tests {
         );
     }
 
-    /// `who` asks the receipt of `thread` in `channel`.
+    /// `who` asks the receipt of the link the relay holds for `root` in
+    /// `channel`.
     async fn receipt_of(
         state: &Arc<AppState>,
         who: Id<User>,
         channel: &Channel,
-        thread: Id<Document>,
-    ) -> Result<LinkReceiptJson, StatusCode> {
+        root: Id<Message>,
+    ) -> Result<ThreadJson, StatusCode> {
         thread_receipt(
             State(state.clone()),
             session(who),
-            OpaquePathId::new((channel.id, thread)),
+            OpaquePathId::new(channel.id),
+            Json::new(RegisterThreadRequest {
+                root,
+                thread: Id::<Document>::mint(),
+            }),
         )
         .await
         .map(|axum::Json(answer)| answer)
@@ -4401,10 +4402,10 @@ mod tests {
     }
 
     /// `SRV-390`, `SRV-391`: any member of the channel, a viewer too, gets
-    /// the receipt of a link the relay holds, under its current link key.
-    /// A stranger gets none. A thread not yet linked, a thread of another
-    /// channel and a segment get none either. The ask links nothing: a later
-    /// registration still creates.
+    /// the receipt of the link a root holds. The relay signs it under its
+    /// current link key. A stranger gets none, and so do a root not linked yet and a
+    /// root of another channel. The ask links nothing: a later registration
+    /// still creates.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_member_gets_the_receipt_of_a_held_link_and_the_ask_writes_nothing(
@@ -4423,7 +4424,7 @@ mod tests {
         let mine = document(&state, alice).await;
 
         assert_eq!(
-            receipt_of(&state, vera, &channel, mine).await.err(),
+            receipt_of(&state, vera, &channel, root).await.err(),
             Some(StatusCode::NOT_FOUND),
             "no link held yet"
         );
@@ -4443,9 +4444,14 @@ mod tests {
             ),
             ..(*state).clone()
         });
-        let answer = receipt_of(&rotated, vera, &channel, mine)
+        let answer = receipt_of(&rotated, vera, &channel, root)
             .await
             .expect("a member gets the receipt");
+        assert_eq!(
+            (answer.thread, answer.created),
+            (mine, Creation::Existing),
+            "the link it holds"
+        );
         let receipt = answer.receipt.expect("a receipt");
         let verifies = |channel_id, thread| {
             ed25519_dalek::VerifyingKey::from_bytes(&new_key)
@@ -4461,25 +4467,20 @@ mod tests {
         assert!(!verifies(other.id, mine), "over that channel alone");
 
         assert_eq!(
-            receipt_of(&rotated, eve, &channel, mine).await.err(),
+            receipt_of(&rotated, eve, &channel, root).await.err(),
             Some(StatusCode::FORBIDDEN),
             "a stranger"
         );
         assert_eq!(
-            receipt_of(&rotated, alice, &other, mine).await.err(),
+            receipt_of(&rotated, alice, &other, root).await.err(),
             Some(StatusCode::NOT_FOUND),
-            "a thread of another channel"
+            "a root of another channel"
         );
         assert_eq!(
-            receipt_of(&rotated, alice, &channel, channel.segment.document_id())
+            db::held_thread(&state.db, &channel.id, root)
                 .await
-                .err(),
-            Some(StatusCode::NOT_FOUND),
-            "a segment is no thread"
-        );
-        assert_eq!(
-            db::channel_place(&state.db, &mine).await.expect("query"),
-            Some((channel.id, ambre_core::ChannelDocumentKind::Thread)),
+                .expect("query"),
+            Some(mine),
             "the asks moved no link"
         );
     }

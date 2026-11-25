@@ -184,7 +184,7 @@ it to every writer that asks.
 | `SRV-363` | `POST` | A thread registration MUST answer the link receipt of the relay: its signature, under its link key, over the channel and the document it holds for the root, the winner's after a lost race. | this spec section 3; `SRV-213`, `SRV-214`; `ambre-spec-membership.md`, `SYNC-330` | `ambre_server::routes::channels::tests::a_registration_answers_a_receipt_of_the_link_it_holds` -- database tier, the winner and the late writer each get a receipt of the winner's document. It verifies under the link key over that channel and that document alone, and neither as an erasure nor under the access-token key | none | verified |
 | `SRV-364` | `PRE` | Given `THREAD_LINK_KEY` set, the relay MUST refuse to start when the public half of its link seed is not that key. | this spec section 3; `SRV-363`; `ambre-spec-membership.md`, `SYNC-332`; `ambre-spec-zero-knowledge.md`, `ZK-057` | `ambre_server::jwt::tests::a_link_seed_of_another_key_than_the_named_one_fails_the_start` -- the public half of the seed and no named key pass, while the dev key under another seed, or a key with no link seed set, fails | none | verified |
 | `SRV-370` | `POST` | A thread registration MUST answer the receipt of the link it holds under its current link seed alone, whatever seed was current at the link. | this spec section 3; `SRV-363`, `SRV-364`; `ambre-spec-membership.md`, `SYNC-331`, `SYNC-333`; `ambre-spec-zero-knowledge.md`, `ZK-058` | `ambre_server::routes::channels::tests::a_registration_after_a_rotation_answers_under_the_new_link_key` -- database tier: a root linked under one seed, registered again under a new seed, gets a receipt that verifies under the new key and not under the retired one. The relay stores no receipt: it signs each one at the answer | none | verified |
-| `SRV-390` | `POST` | A request for the receipt of a link the relay holds in a channel MUST answer it under the current link seed to any member of that channel. | this spec section 3; `SRV-363`, `SRV-370`; `ambre-spec-membership.md`, `SYNC-350`; `ambre-spec-zero-knowledge.md`, `ZK-058` | `ambre_server::routes::channels::tests::a_member_gets_the_receipt_of_a_held_link_and_the_ask_writes_nothing` -- database tier: a viewer gets a receipt under the new key, over that channel alone. A stranger gets 403. A thread not linked yet, one of another channel and a segment get 404, and a later registration still creates | none | verified |
+| `SRV-390` | `POST` | A request for the receipt of the link a root holds MUST answer that link and its receipt under the current link seed, to any member of the channel. | this spec section 3; `SRV-363`, `SRV-370`; `ambre-spec-membership.md`, `SYNC-350`; `ambre-spec-zero-knowledge.md`, `ZK-058` | `ambre_server::routes::channels::tests::a_member_gets_the_receipt_of_a_held_link_and_the_ask_writes_nothing` -- database tier: a viewer gets the thread held, existing, and a receipt under the new key over that channel alone. A stranger gets 403, and a root not linked yet or of another channel gets 404 | none | verified |
 | `SRV-391` | `FRAME` | A request for the receipt of a link MUST write nothing. | this spec section 3; `SRV-390` | `ambre_server::routes::channels::tests::a_member_gets_the_receipt_of_a_held_link_and_the_ask_writes_nothing` -- database tier: an ask before the link leaves the registration that follows a creation, and the asks leave the link where it was | none | verified |
 
 ### 1.13 Two thread registrations race
@@ -467,9 +467,10 @@ Each answer carries the link receipt, signed over the channel and the thread (`S
 A seed of another key than `THREAD_LINK_KEY` fails the start (`SRV-364`).
 
 The relay stores no receipt, so after a rotation it signs each held link again (`SRV-370`). Any
-member of the channel also asks for the receipt of a held link alone, and the relay writes nothing
-(`SRV-390`, `SRV-391`). The ask rides the rate limit of every API route. The relay learns that this
-member asked, and it already stores the channel and the thread.
+member of the channel also asks for the receipt of the link a root holds (`SRV-390`). The ask
+takes the body of a registration, and the relay writes nothing (`SRV-391`). The ask rides the rate
+limit of every API route. The relay learns that this member asked, and it already stores the channel
+and the thread.
 
 **A thread erasure.** A root names its thread in a sealed field, which any member sets while it is
 absent. An owner of the `meta` signs the channel and a thread id, and posts the signature. Under the

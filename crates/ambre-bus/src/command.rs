@@ -251,13 +251,13 @@ pub enum SyncCommand {
     /// A reply in `thread`, the thread of `root`, a message of `segment`.
     /// The root holds `receipts`. When none counts under the link key of
     /// this client, ask the relay for the receipt of that link (`SYNC-350`).
-    /// Answered by [`crate::LogicEvent::FreshReceipt`], or by nothing.
+    /// Answered by [`crate::LogicEvent::ThreadLinked`], or by nothing.
     FreshenReceipt {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
-        receipts: Vec<ambre_core::FixedBytes<ambre_core::Signature>>,
+        receipts: Vec<crate::LinkReceipt>,
     },
     /// Ask the relay for the finalize lease of the closing segment `segment`
     /// (the Murmure segments spec). Answered by

@@ -65,13 +65,13 @@ impl<D> Runtime<D> {
         self.close_if_full(channel_id, now);
     }
 
-    /// The relay answered a fresh `receipt` of the link of `thread`, which
-    /// counts under the link key of this client. The segment of the root, or
-    /// its amendments, keep it under this member's key (`MURMURE-762`).
-    pub fn fresh_receipt(
+    /// The relay answered a `receipt` of the link of `thread`, which a root
+    /// names already. The segment of the root, or its amendments, keep it
+    /// under this member's key, unless the root holds it (`MURMURE-762`).
+    fn fresh_receipt(
         &mut self,
         channel_id: Id<Channel>,
-        segment: Id<Segment>,
+        at: (Id<Segment>, Id<Message>),
         thread: Id<Document>,
         receipt: ambre_core::FixedBytes<ambre_core::Signature>,
     ) {
@@ -81,7 +81,7 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
-        match channel.write_fresh_receipt(segment, thread, receipt, by) {
+        match channel.write_fresh_receipt(at, thread, receipt, by) {
             Ok(Some(written)) => self.ask(SyncCommand::SendUpdate {
                 document_id: written.document,
                 payload: written.delta,
@@ -131,6 +131,10 @@ impl<D> Runtime<D> {
         };
         if let Some(named) = linked.root {
             self.send_named(channel_id, named);
+        } else if let Some(receipt) = receipt {
+            // A root that names the thread already takes the receipt as a
+            // fresh one: the answer of a fresh receipt request (`SYNC-350`).
+            self.fresh_receipt(channel_id, (segment, root), thread, receipt);
         }
         if let Some(lost) = linked.replaced {
             // The replies move first: forgetting the session drops what

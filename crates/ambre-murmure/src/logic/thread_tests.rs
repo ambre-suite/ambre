@@ -641,20 +641,34 @@ fn a_member_adds_a_fresh_receipt_under_their_own_key_alone() {
     }
     let garbage = Receipt::from_array([1; 64]);
     let carols = carol
-        .write_fresh_receipt(segment, thread, garbage, carol_user)
+        .write_fresh_receipt((segment, root), thread, garbage, carol_user)
         .expect("write")
         .expect("written");
     let fresh = Receipt::from_array([0x6d; 64]);
     let bobs = bob
-        .write_fresh_receipt(segment, thread, fresh, bob_user)
+        .write_fresh_receipt((segment, root), thread, fresh, bob_user)
         .expect("write")
         .expect("written");
     assert!(
         matches!(
-            bob.write_fresh_receipt(segment, thread, fresh, bob_user),
+            bob.write_fresh_receipt((segment, root), thread, fresh, bob_user),
             Ok(None)
         ),
         "an entry that holds the receipt takes no second write"
+    );
+    assert!(
+        matches!(
+            bob.write_fresh_receipt((segment, root), thread, first, bob_user),
+            Ok(None)
+        ),
+        "a receipt the root holds takes no entry"
+    );
+    assert!(
+        matches!(
+            bob.write_fresh_receipt((segment, root), Id::<Document>::mint(), fresh, bob_user),
+            Ok(None)
+        ),
+        "a thread the root does not name takes no entry"
     );
     for (seq, (sent, by, user)) in
         (11..).zip([(&carols, &carol, carol_user), (&bobs, &bob, bob_user)])

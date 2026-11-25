@@ -1274,23 +1274,6 @@ impl SyncState {
                     },
                 });
             }
-            SyncEvent::FreshReceipt {
-                channel_id,
-                segment,
-                root,
-                thread,
-                result,
-            } => match result {
-                Ok(Some(receipt)) => self.send_to_logic(LogicEvent::FreshReceipt {
-                    channel_id,
-                    segment,
-                    root,
-                    thread,
-                    receipt,
-                }),
-                Ok(None) => {}
-                Err(error) => crate::log::warning!("Sync: a fresh receipt request: {error}"),
-            },
             SyncEvent::FinalizeLeaseAnswered {
                 channel_id,
                 segment,

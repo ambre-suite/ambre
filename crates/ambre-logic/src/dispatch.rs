@@ -870,13 +870,6 @@ impl LogicState {
                 thread,
                 receipt,
             } => self.route(|m| m.thread_linked(channel_id, segment, root, thread, receipt)),
-            LogicEvent::FreshReceipt {
-                channel_id,
-                segment,
-                root: _,
-                thread,
-                receipt,
-            } => self.route(|m| m.fresh_receipt(channel_id, segment, thread, receipt)),
             LogicEvent::ThreadLinkFailed {
                 channel_id,
                 segment: _,

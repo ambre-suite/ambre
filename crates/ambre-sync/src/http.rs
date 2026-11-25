@@ -1992,15 +1992,6 @@ pub(crate) struct ThreadResponse {
     pub receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
 }
 
-/// `GET /api/channels/{id}/threads/{thread}/receipt`: the relay's receipt of
-/// a link it holds, under its current link key (`SRV-390`). A relay with no
-/// link key answers none.
-#[derive(Deserialize)]
-pub(crate) struct LinkReceiptResponse {
-    #[serde(default)]
-    pub receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
-}
-
 /// `POST /api/channels/{id}/segments/{segment}/lease`: the lease, or none
 /// and when to ask again.
 #[derive(Deserialize)]

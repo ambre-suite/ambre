@@ -4882,16 +4882,25 @@ mod tests {
         command(&mut state, channel_id, reply_to(root, "second", false));
         assert_eq!(
             asks(&drain(&sync)),
-            [(channel_id, active, root, thread, vec![first])]
+            [(
+                channel_id,
+                active,
+                root,
+                thread,
+                vec![ambre_bus::LinkReceipt {
+                    thread,
+                    signature: first
+                }]
+            )]
         );
 
         let fresh = Receipt::from_array([0x6d; 64]);
-        state.handle_logic_event(LogicEvent::FreshReceipt {
+        state.handle_logic_event(LogicEvent::ThreadLinked {
             channel_id,
             segment: active,
             root,
             thread,
-            receipt: fresh,
+            receipt: Some(fresh),
         });
         let written: Vec<(Id<Document>, String)> = drain(&sync)
             .into_iter()
@@ -4915,8 +4924,9 @@ mod tests {
 
         command(&mut state, channel_id, reply_to(root, "third", false));
         let [(.., receipts)] = asks(&drain(&sync)).try_into().expect("one ask");
+        let signatures: Vec<Receipt> = receipts.iter().map(|r| r.signature).collect();
         assert!(
-            receipts.contains(&first) && receipts.contains(&fresh),
+            signatures.contains(&first) && signatures.contains(&fresh),
             "the next reply hands the fresh receipt too, {receipts:?}"
         );
     }

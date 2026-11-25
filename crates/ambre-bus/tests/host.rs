@@ -273,7 +273,6 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::AmendmentsLinked { .. } => "AmendmentsLinked",
         LogicEvent::AmendmentsLinkFailed { .. } => "AmendmentsLinkFailed",
         LogicEvent::ThreadLinked { .. } => "ThreadLinked",
-        LogicEvent::FreshReceipt { .. } => "FreshReceipt",
         LogicEvent::ThreadLinkFailed { .. } => "ThreadLinkFailed",
         LogicEvent::FinalizeLeaseAnswered { .. } => "FinalizeLeaseAnswered",
         LogicEvent::SegmentFinalized { .. } => "SegmentFinalized",
@@ -306,7 +305,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 54;
-const EVENT_VARIANTS: usize = 69;
+const EVENT_VARIANTS: usize = 68;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -454,7 +453,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             root: Id::<Message>::mint(),
             thread: Id::<Document>::mint(),
-            receipts: vec![ambre_core::FixedBytes::from_array([6; 64])],
+            receipts: vec![ambre_bus::LinkReceipt {
+                thread: Id::<Document>::mint(),
+                signature: ambre_core::FixedBytes::from_array([6; 64]),
+            }],
         },
         SyncCommand::TakeFinalizeLease {
             channel_id: chan,
@@ -753,13 +755,6 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             root: Id::<Message>::mint(),
             thread: Id::<Document>::mint(),
             receipt: Some(ambre_core::FixedBytes::from_array([3; 64])),
-        },
-        LogicEvent::FreshReceipt {
-            channel_id: chan,
-            segment,
-            root: Id::<Message>::mint(),
-            thread: Id::<Document>::mint(),
-            receipt: ambre_core::FixedBytes::from_array([5; 64]),
         },
         LogicEvent::ThreadLinkFailed {
             channel_id: chan,

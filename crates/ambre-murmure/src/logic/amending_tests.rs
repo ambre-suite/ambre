@@ -748,7 +748,7 @@ fn a_fresh_receipt_of_a_locked_root_rides_in_the_amendments_and_a_fold_keeps_it(
     let bob_user = Id::<User>::mint();
     let fresh = Receipt::from_array([0x6d; 64]);
     let written = bob
-        .write_fresh_receipt(segment, thread, fresh, bob_user)
+        .write_fresh_receipt((segment, root), thread, fresh, bob_user)
         .expect("write")
         .expect("written");
     assert_eq!(
