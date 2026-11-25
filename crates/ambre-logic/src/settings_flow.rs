@@ -637,8 +637,8 @@ mod tests {
     }
 
     /// `SETTINGS-035`: a change an earlier session made offline survives the
-    /// page in the local copy. The next open sends it under the nonce of that
-    /// session once the relay's replay is in, and a session the relay holds
+    /// page in the local copy. Once the relay's replay is in, the next open
+    /// sends it under the nonce of that session. A session the relay holds
     /// whole is forgotten.
     #[test]
     fn a_change_left_offline_by_an_earlier_page_leaves_at_the_next_open() {

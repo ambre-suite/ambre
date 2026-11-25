@@ -52,7 +52,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-029` | `POST` | Once the settings document is loaded, the client MUST write the boot hint from it. | this spec section 3, the boot | `ambre_app::switchboard::tests::the_settings_of_the_account_reach_the_page_as_one_effect` -- each settings change calls for the effect that writes the hint; `ambre_app::platform::tests::the_boot_hint_reads_back_from_the_storage_and_a_sign_out_deletes_it` -- wasm tier, the written hint reads back | none | verified |
 | `SETTINGS-011` | `FRAME` | Opening the settings MUST NOT hold back the open of another document. | this spec section 3, the store | `ambre_logic::settings_flow::tests::the_settings_open_holds_back_no_other_open` | none | verified |
 | `SETTINGS-030` | `FAIL` | Given a settings document whose sealed kind is not the settings kind, the client MUST refuse it, write nothing into it and keep the defaults. | this spec section 3, the store; `SETTINGS-018` | `ambre_logic::settings::tests::a_document_with_no_settings_marker_takes_no_write` | none | verified |
-| `SETTINGS-031` | `FAIL` | Given a device that already opened the settings document of its user, a relay answer naming another one MUST be refused, and the device MUST keep the one it opened. | this spec section 3, the store; `SETTINGS-002` | not built | unbuilt -- lands with the `The settings document survives offline` Story (`ambre-roadmap.md` MVP). A device keeps no record of the document it opened in an earlier session; within one session `SETTINGS-040` holds. | unimplemented |
+| `SETTINGS-031` | `FAIL` | Given a device that already opened the settings document of its user, a relay answer naming another one MUST be refused, and the device MUST keep the one it opened. | this spec section 3, the store; `SETTINGS-002` | `ambre_logic::settings_flow::tests::the_kept_settings_document_opens_and_another_relay_answer_is_refused` -- the relay answer waits for the store, and the kept document opens whichever answer comes first; `ambre_logic::persistence::tests::a_kept_settings_document_outlives_the_page_and_is_never_replaced` -- wasm tier, the kept name reads back on a later page and a second one never replaces it | none | verified |
 | `SETTINGS-040` | `FAIL` | Given a second settings document named in one session, the client MUST refuse it and keep the one it opened. | this spec section 3, the store; `SETTINGS-031` | `ambre_logic::settings_flow::tests::a_second_settings_document_named_in_a_session_is_refused` | none | verified |
 
 ### 1.3 Boot a page before the unlock
@@ -68,7 +68,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SETTINGS-012` | `POST` | A change MUST reach every other signed-in device of the user as a delta of the settings document. | this spec section 3, the merge | `ambre_logic::settings::tests::a_change_reaches_the_other_device_as_one_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` -- a second device takes the delta | none | verified |
-| `SETTINGS-035` | `POST` | A change made while the socket is down MUST reach the relay once the socket is back. | this spec section 3, the merge; `RESID-019` | not built | unbuilt -- lands with the `The settings document survives offline` Story (`ambre-roadmap.md` MVP). The settings document keeps no local copy, so a change made offline lives until the page closes. | unimplemented |
+| `SETTINGS-035` | `POST` | A change made while the socket is down MUST reach the relay once the socket is back. | this spec section 3, the merge; `RESID-019` | `ambre_logic::settings_flow::tests::a_change_made_while_the_socket_is_down_leaves_once_it_is_back` -- in the page, the change past the last echo leaves again; `ambre_logic::settings_flow::tests::a_change_left_offline_by_an_earlier_page_leaves_at_the_next_open` -- after a reload, the local copy sends it under the nonce of its session once the replay is in | none | verified |
 | `SETTINGS-036` | `POST` | Changes made within one coalescing delay MUST leave the device as one delta. | this spec section 3, the budget; `ambre-spec-budgets.md section 8` | `ambre_logic::settings::tests::a_burst_of_writes_leaves_as_one_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` | none | verified |
 | `SETTINGS-037` | `POST` | A change of the theme or of the interface language MUST rewrite the boot hint of the device. | this spec section 3, the boot | `ambre_app::switchboard::tests::the_settings_of_the_account_reach_the_page_as_one_effect`; `ambre_app::platform::tests::the_boot_hint_reads_back_from_the_storage_and_a_sign_out_deletes_it` -- wasm tier, a later hint replaces the first | none | verified |
 | `SETTINGS-013` | `FRAME` | Changing a setting MUST NOT change a setting of another section. | this spec section 3, the catalogue; `SETTINGS-003` | `ambre_logic::settings::tests::a_write_changes_no_other_section` | none | verified |
@@ -78,7 +78,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SETTINGS-014` | `POST` | Signing out MUST delete the local copy of the settings document. | this spec section 3, the store; `ambre-spec-residency.md` | structural -- the settings document never reaches the local store: the Logic thread holds it outside the document table the store persists | none | verified |
+| `SETTINGS-014` | `POST` | Signing out MUST delete the local copy of the settings document. | this spec section 3, the store; `ambre-spec-residency.md` | `ambre_logic::settings_flow::tests::signing_out_erases_the_local_copy_of_the_settings` -- the sign-out hands the store the erase of the copy | none | verified |
 | `SETTINGS-039` | `POST` | Signing out MUST delete the boot hint. | this spec section 3, the boot | `ambre_app::platform::tests::the_boot_hint_reads_back_from_the_storage_and_a_sign_out_deletes_it` -- wasm tier, the delete leaves no hint | none | verified |
 | `SETTINGS-015` | `FRAME` | Signing out MUST NOT delete the settings document on the relay. | this spec section 3, the store | `ambre_server::routes::tests::handler_tests::a_sign_out_keeps_the_settings_document_on_the_relay` | none | verified |
 
@@ -87,8 +87,8 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 37 `verified`, 3 `unimplemented`: no settings document exists. Every row lands
-  with one Story.
+* **Verification.** 39 `verified`, 1 `unimplemented`: no command title reads the interface language
+  yet. The row lands with one Story.
 
 ---
 
@@ -136,6 +136,16 @@ A first unlock needs the relay, so the creation never runs offline.
 A relay could point a client at another document of that user, whose log the user also signed. The
 sealed kind refuses it, and no setting is written into a Prose document (`SETTINGS-030`). A device
 keeps the identifier it opened, and refuses an answer naming another (`SETTINGS-031`).
+
+**Offline.** The device keeps the identifier beside its trust pins, in the clear: the relay knows it
+already. At sign-in, the relay's answer waits for that row, and the kept document opens first. The
+document keeps a sealed local copy, as any document does, and no eviction takes it. A sign-out
+erases the copy and keeps the identifier (`SETTINGS-014`). A change made offline reaches the relay in
+one of two ways (`SETTINGS-035`):
+
+1. The socket comes back in the same page: what the relay never echoed leaves again.
+2. The page closed first: the next open sends it under the nonce of the session that wrote it, once
+   the relay's replay is in (`AUTHOR-028`).
 
 **The key.** The document key is random, and wrapped for the user's own exchange key, as any
 document key is (`SETTINGS-017`). The exchange key derives from the Master Seed, so the account
@@ -244,7 +254,8 @@ metadata `ambre-spec-zero-knowledge.md` accepts (`ZK-055`).
 
 * `crates/ambre-client-core/src/settings.rs` -- the catalogue, the values, the boot hint;
 * `crates/ambre-logic/src/settings.rs` -- the document, its checks and the coalescing delay;
-* `crates/ambre-logic/src/settings_flow.rs` -- the open, the imports, the writes and the view;
+* `crates/ambre-logic/src/settings_flow.rs` -- the open, the imports, the writes, the copy and the view;
+* `crates/ambre-logic/src/persistence.rs` and `crates/ambre-app/src/persist.rs` -- the kept identifier;
 * `crates/ambre-sync/src/settings.rs` -- the read or the claim at each unlock;
 * `crates/ambre-server/src/routes/settings.rs` and `src/db/settings.rs` -- the pointer and the claim;
 * `crates/ambre-app/src/settings_view.rs` and `src/platform.rs` -- the boot and the hint.

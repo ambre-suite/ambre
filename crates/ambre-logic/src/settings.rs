@@ -121,13 +121,18 @@ impl SettingsDoc {
     /// # Errors
     /// [`SettingsRefusal::Undecodable`] for bytes that are no update.
     pub fn import(&mut self, bytes: &Payload<DeltaBytes>) -> Result<(), SettingsRefusal> {
-        self.take_in(bytes.as_bytes(), Source::Relay)
+        self.take_in(bytes, Source::Relay)
     }
 
     /// Imports `bytes`, a delta or a snapshot. What arrived needs no second
     /// send under this session's nonce. Only the operations the bytes carry
     /// count, so a write of this session still waiting on its delay leaves.
-    fn take_in(&mut self, bytes: &[u8], source: Source) -> Result<(), SettingsRefusal> {
+    fn take_in<K: ambre_core::PayloadKind>(
+        &mut self,
+        bytes: &Payload<K>,
+        source: Source,
+    ) -> Result<(), SettingsRefusal> {
+        let bytes = bytes.as_bytes();
         let end = LoroDoc::decode_import_blob_meta(bytes, false)
             .map_err(|_| SettingsRefusal::Undecodable)?
             .partial_end_vv;
@@ -149,14 +154,12 @@ impl SettingsDoc {
         snapshot: Option<&Payload<SnapshotBytes>>,
         deltas: &[Payload<DeltaBytes>],
     ) {
-        let rows = snapshot
-            .map(Payload::as_bytes)
-            .into_iter()
-            .chain(deltas.iter().map(Payload::as_bytes));
-        for row in rows {
-            if self.take_in(row, Source::Store).is_err() {
-                tracing::warn!("Logic: a row of the settings copy did not import");
-            }
+        let mut refused = snapshot.is_some_and(|row| self.take_in(row, Source::Store).is_err());
+        for row in deltas {
+            refused |= self.take_in(row, Source::Store).is_err();
+        }
+        if refused {
+            tracing::warn!("Logic: a row of the settings copy did not import");
         }
     }
 
@@ -254,7 +257,7 @@ impl SettingsDoc {
         &mut self,
         bytes: &Payload<SnapshotBytes>,
     ) -> Result<(), SettingsRefusal> {
-        self.take_in(bytes.as_bytes(), Source::Relay)
+        self.take_in(bytes, Source::Relay)
     }
 
     /// Every setting of the catalogue, read (`SETTINGS-010`).

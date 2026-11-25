@@ -1562,7 +1562,7 @@ mod wasm_tests {
     }
 
     /// `SETTINGS-031` at rest: the settings document a user opened reads back
-    /// on a later open of the store, a second one never replaces it, and
+    /// on a later open of the store. A second one never replaces it, and
     /// another user reads none.
     #[wasm_bindgen_test]
     async fn a_kept_settings_document_outlives_the_page_and_is_never_replaced() {
