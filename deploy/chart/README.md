@@ -113,9 +113,25 @@ empty key, a malformed key and the development key. The pod then stops before Ca
 says why (`SRV-368`): read it with `kubectl logs <web pod> -c link-key`. No value of the chart
 turns the patch off.
 
-A new key is a new Secret and a restart of the relay and of the web pod. Every receipt signed under
-the older key then counts as none. A browser that cached the older Sync worker keeps the older key
-until its cache drops the file.
+**Rotate the link key.** A leaked seed lets anyone sign a receipt, and a receipt over a thread
+that does not exist blocks each removal of the channel. A new seed is the only answer:
+
+1. draw a new pair: `openssl genpkey -algorithm ed25519 -outform DER -out link.der`, then the
+   seed is `tail -c 32 link.der | od -An -v -tx1 | tr -d ' \n'`, and the key is
+   `openssl pkey -inform DER -in link.der -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n'`;
+2. write both into the Secret that `existingSecret` names, here `ambre`: `kubectl -n ambre patch secret ambre --type merge -p
+   '{"stringData":{"thread-link-seed":"<seed>","thread-link-key":"<key>"}}'`, then delete
+   `link.der`;
+3. restart both: `kubectl -n ambre rollout restart deployment/<release>-relay deployment/<release>-web`.
+   The relay checks the new seed against the new key (`SRV-364`), and the web pod patches the new
+   key into a fresh copy (`SRV-365`);
+4. check the served client: `THREAD_LINK_KEY=<key> python3 scripts/link_key.py served https://<domain>`.
+
+The older key then counts nothing, in no client. The relay keeps no receipt: it signs each one
+when it answers a registration, so every link it holds gets a receipt under the new key at its next
+registration (`SRV-370`). A thread the relay never linked, which a leaked seed could vouch for,
+gets none. A browser asks for the Sync worker again before each use (`SRV-371`), so a reload takes
+the new key. A tab open across the rotation keeps the older key until it reloads.
 
 **Check the served client.** The patch changes 32 bytes of the Sync worker alone (`SRV-367`).
 Download the `ambre-sync-*_bg.wasm` the page names, then run

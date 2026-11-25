@@ -46,6 +46,7 @@ def tree(root: Path, worker: bytes | None = None) -> Path:
     data = wasm() if worker is None else worker
     (root / WORKER).write_bytes(data)
     (root / f"{WORKER}.gz").write_bytes(gzip.compress(data, mtime=0))
+    (root / lk.HEADERS).write_text(f"/*\n  Cross-Origin-Opener-Policy: same-origin\n/{WORKER}\n  Cache-Control: no-cache\n")
     return root
 
 
@@ -127,6 +128,38 @@ class Patch(unittest.TestCase):
                     lk.patch(root, value, dev=False)
                 self.assertEqual(files(root), before)
 
+    def test_a_tree_whose_headers_let_a_browser_keep_the_worker_is_refused(self) -> None:
+        """`SRV-372`: the patched file keeps its name, so a patch under a cache rule
+        that skips revalidation would leave a browser on its older key."""
+        cases = {
+            "no headers file": None,
+            "no rule for the worker": "/*\n  Cache-Control: no-cache\n",
+            "a rule of another file": f"/other_bg.wasm\n  Cache-Control: no-cache\n/{WORKER}\n  X-Other: 1\n",
+            "a rule that keeps the file": f"/{WORKER}\n  Cache-Control: max-age=31536000, immutable\n",
+        }
+        for name, text in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as d:
+                root = tree(Path(d))
+                if text is None:
+                    (root / lk.HEADERS).unlink()
+                else:
+                    (root / lk.HEADERS).write_text(text)
+                before = files(root)
+                with self.assertRaisesRegex(lk.SlotError, "older key"):
+                    lk.patch(root, KEY, dev=False)
+                self.assertEqual(files(root), before)
+
+    def test_the_headers_of_the_build_pass_the_patch(self) -> None:
+        """`SRV-371`, `SRV-372`: the headers the release hook writes are the ones the patch reads."""
+        import trunk_post_build as hook
+
+        with tempfile.TemporaryDirectory() as d:
+            root = tree(Path(d))
+            for name in ("ambre-sync-0123456789abcdef_loader.js", "ambre-call-1_loader.js", "ambre-thread-2.js"):
+                (root / name).write_text("script")
+            hook.write_headers(root)
+            self.assertIsNone(lk.headers_refusal(root, root / WORKER))
+
     def test_two_slots_in_two_files_are_refused(self) -> None:
         tree(self.root)
         (self.root / "ambre-call-1_bg.wasm").write_bytes(wasm())
@@ -194,17 +227,38 @@ class Zero(unittest.TestCase):
 
 
 class Served(unittest.TestCase):
-    """`SRV-369`: the check reads the Sync worker the page names."""
+    """`SRV-369`, `SRV-373`: the check reads the Sync worker the page names, and its cache rule."""
 
-    def test_the_worker_comes_from_the_address_of_the_page(self) -> None:
-        asked: list[str] = []
-        page = b'<meta name="ambre-sync-worker" content="/ambre-sync-0123456789abcdef_loader.js">'
+    PAGE = b'<meta name="ambre-sync-worker" content="/ambre-sync-0123456789abcdef_loader.js">'
+    FRESH = {"Cache-Control": "no-cache", "ETag": '"sb2k4q1a"'}
 
+    def opener(self, asked: list[str], headers: dict[str, str]):
         def urlopen(request: object, **_: object) -> mock.MagicMock:
             asked.append(request.full_url)
             answer = mock.MagicMock()
-            answer.__enter__.return_value.read.return_value = page if len(asked) == 1 else wasm(bytes.fromhex(KEY))
+            inner = answer.__enter__.return_value
+            inner.read.return_value = self.PAGE if len(asked) == 1 else wasm(bytes.fromhex(KEY))
+            inner.headers = {} if len(asked) == 1 else headers
             return answer
+
+        return urlopen
+
+    def test_a_worker_a_browser_may_keep_fails(self) -> None:
+        cases = {
+            "no cache rule": {"ETag": '"x"'},
+            "a rule that keeps it": {"Cache-Control": "max-age=31536000, immutable", "ETag": '"x"'},
+            "no ETag": {"Cache-Control": "no-cache"},
+        }
+        for name, headers in cases.items():
+            with self.subTest(name), mock.patch.object(
+                lk.urllib.request, "urlopen", side_effect=self.opener([], headers)
+            ), mock.patch.dict(lk.os.environ, {lk.VARIABLE: KEY}), mock.patch.object(sys, "stderr", io.StringIO()) as err:
+                self.assertEqual(lk.main(["served", "https://localhost"]), 1)
+                self.assertIn("older key", err.getvalue())
+
+    def test_the_worker_comes_from_the_address_of_the_page(self) -> None:
+        asked: list[str] = []
+        urlopen = self.opener(asked, self.FRESH)
 
         with mock.patch.object(lk.urllib.request, "urlopen", side_effect=urlopen), mock.patch.dict(
             lk.os.environ, {lk.VARIABLE: KEY}

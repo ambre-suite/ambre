@@ -18,7 +18,10 @@ Commands:
   * a key that is not 64 hexadecimal digits;
   * the development key, unless `--dev` is given;
   * no slot, or more than one, under `DIR`;
-  * a slot that already holds a key, or that ends before its 32 bytes.
+  * a slot that already holds a key, or that ends before its 32 bytes;
+  * a `_headers` under `DIR` that does not serve the patched file under
+    `Cache-Control: no-cache`, so a browser would keep an older key
+    (`SRV-372`).
   It then writes again the `.br` and `.gz` copies of the patched file. No
   other byte of `DIR` changes (`SRV-367`).
 * `empty DIST` fails unless `DIST` holds exactly one slot, all zero: the gate
@@ -27,8 +30,10 @@ Commands:
 * `zero FILE OUT` writes `FILE` with its slot zeroed to `OUT`. A reader then
   compares the digest of `OUT` with the release manifest (`ZK-059`).
 * `served ORIGIN` fetches the Sync worker that `ORIGIN` serves and fails
-  unless its slot holds the key of `THREAD_LINK_KEY`. It trusts any
-  certificate, so it serves the tests of a stack under an internal authority.
+  unless its slot holds the key of `THREAD_LINK_KEY`. It also fails unless
+  the answer carries `Cache-Control: no-cache` and an `ETag` (`SRV-373`). It
+  trusts any certificate, so it serves the tests of a stack under an
+  internal authority.
 * `lint` reads the build, the release, the compose file and the Rust sources,
   and fails on each of these:
   * the marker or the development key of this script differs from the Rust
@@ -80,6 +85,11 @@ KEY_LEN = 32
 DEV_KEY = "927308f53d6765503d2b64c103ab5aa47206ab39502cfe8f98442fdb543100b7"
 HEX = re.compile(r"[0-9a-fA-F]{64}")
 EMPTY_GATE = "scripts/link_key.py empty /out/dist"
+# The headers file of the build (`scripts/trunk_post_build.py`), and the cache
+# rule it gives the patched file: the browser asks again before each use, so a
+# rotated key reaches it at the next load (`SRV-371`, `SRV-372`).
+HEADERS = "_headers"
+REVALIDATE = "no-cache"
 
 
 class SlotError(Exception):
@@ -146,6 +156,31 @@ def empty_refusal(dist: Path) -> str | None:
     return None
 
 
+def revalidated(headers: str, name: str) -> bool:
+    """Whether `headers`, a `_headers` text, serves the file `name` under `REVALIDATE`."""
+    rule: str | None = None
+    for line in headers.splitlines():
+        if line and not line[0].isspace():
+            rule = line.strip()
+            continue
+        header, _, value = line.strip().partition(":")
+        if rule is not None and rule.endswith("/" + name) and header.strip().lower() == "cache-control":
+            if REVALIDATE in [v.strip().lower() for v in value.split(",")]:
+                return True
+    return False
+
+
+def headers_refusal(tree: Path, path: Path) -> str | None:
+    """Why a browser could keep an older copy of `path` under `tree`, or `None` (`SRV-372`)."""
+    name = path.relative_to(tree).as_posix()
+    headers = tree / HEADERS
+    if not headers.is_file():
+        return f"no {HEADERS} under {tree}: the web server would let a browser keep the older key"
+    if not revalidated(headers.read_text(encoding="utf-8"), name):
+        return f"{HEADERS} does not serve {name} under Cache-Control: {REVALIDATE}, so a browser keeps its older key"
+    return None
+
+
 def recompress(path: Path) -> list[Path]:
     """Write again each `.br` and `.gz` copy beside `path`, and return them."""
     written = []
@@ -168,6 +203,9 @@ def patch(tree: Path, value: str | None, dev: bool) -> Path:
     data = path.read_bytes()
     if data[at : at + KEY_LEN] != bytes(KEY_LEN):
         raise SlotError(f"the slot of {path.relative_to(tree)} holds a key: patch a copy of the published files")
+    stale = headers_refusal(tree, path)
+    if stale:
+        raise SlotError(stale)
     if Path(f"{path}.br").exists() and shutil.which("brotli") is None:
         raise SlotError(f"{path.name}.br needs the brotli command, and none is on the path")
     path.write_bytes(data[:at] + bytes.fromhex(value.strip()) + data[at + KEY_LEN :])
@@ -176,23 +214,35 @@ def patch(tree: Path, value: str | None, dev: bool) -> Path:
 
 
 def sync_worker(origin: str) -> bytes:
-    """The wasm of the Sync worker that `origin` serves, found through its page."""
+    """The wasm of the Sync worker that `origin` serves, found through its page.
+
+    It fails unless the answer makes the browser ask again before each use
+    (`SRV-373`): `Cache-Control: no-cache`, and an `ETag` the web server
+    changes with the file.
+    """
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
 
-    def get(url: str) -> bytes:
+    def get(url: str) -> tuple[bytes, object]:
         request = urllib.request.Request(url, headers={"Accept-Encoding": "identity"})
         with urllib.request.urlopen(request, context=context, timeout=30) as answer:
-            return answer.read()
+            return answer.read(), answer.headers
 
-    page = get(origin.rstrip("/") + "/").decode()
+    page = get(origin.rstrip("/") + "/")[0].decode()
     found = re.search(r'<meta name="ambre-sync-worker" content="([^"]+)"', page)
     if found is None or not found.group(1).endswith("_loader.js"):
         raise SlotError(f"the page of {origin} names no Sync worker")
     loader = found.group(1)
     url = loader if loader.startswith("http") else origin.rstrip("/") + "/" + loader.lstrip("/")
-    return get(url.removesuffix("_loader.js") + "_bg.wasm")
+    wasm, headers = get(url.removesuffix("_loader.js") + "_bg.wasm")
+    control = [v.strip().lower() for v in (headers.get("Cache-Control") or "").split(",")]
+    if REVALIDATE not in control or not headers.get("ETag"):
+        raise SlotError(
+            f"the served Sync worker answers Cache-Control {headers.get('Cache-Control')!r} and ETag "
+            f"{headers.get('ETag')!r}: a browser may keep an older key"
+        )
+    return wasm
 
 
 def dev_key_of(source: str) -> str:

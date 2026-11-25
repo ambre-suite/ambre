@@ -510,6 +510,14 @@ The published client therefore holds an empty link key slot (`ZK-057`). Each ins
 key of its own relay into a copy of the files, with no rebuild (`ambre-spec-server.md`,
 `SRV-365`). An empty slot gives no key, so the client counts no receipt and logs why (`ZK-058`).
 
+**A rotation retires the older key whole.** A leaked seed signs any receipt, and a receipt over a
+thread that does not exist blocks each removal of its channel. A new seed is the only answer, so
+the slot holds the new key alone, and the older key counts nothing (`ZK-058`). The relay signs
+again each link its store holds, under the new key, at the next registration
+(`ambre-spec-sequencer.md`, `SRV-370`). A link the leak forged is in no store, so it gets no new
+receipt. The browser asks for the Sync worker again before each use, so a reload takes the new key
+(`ambre-spec-server.md`, `SRV-371`).
+
 **A reader checks a patched client.** The patch changes 32 bytes of the Sync worker alone
 (`SRV-367`). A reader sets them to zero with `scripts/link_key.py zero`. The file then has the
 digest of the release manifest (`ZK-059`).
@@ -585,6 +593,8 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The log head of an update is public and signed | sealing the head inside the ciphertext | a hidden rotation leaves the member without the new key, so a head sealed under it is the one head that member cannot read (`SYNC-207`) |
 | The log head and entry of a presence sample are public and signed | sealing them, as the cursor is | the same reason: the sample a hidden rotation brings is sealed under the key the member lacks (`SYNC-263`) |
 | A release publishes an empty link key slot, and each install patches it | a key pinned at build time, which a repository variable names | only the operator of one relay holds the seed of that key, so the published web image works beside that relay alone. A self-hoster would rebuild the client, and a rebuild with another key reaches another client digest |
+| A rotation retires the older key whole, and the relay signs each held link again | a list of retired keys in the slot, each counting a receipt signed before a cut-off | a leaked seed signs any cut-off: a time, a sequence or a counter is a field of the forged receipt. A cut-off on the clock of the client is sound, but the leaked seed then blocks each removal for the whole window, which the rotation must end. A list in the new slot helps no client still on the older one. Only the links the relay stores are no forgery, so only a new signature over them carries them across |
+| A rotated key reaches a browser through revalidation | a file name of the Sync worker that changes with the patched key | the release manifest names each file, and a reader checks a served file by that name (`ZK-059`). A new name also changes the page and the loader that name it, so a patch would change three files |
 | The patch writes 32 bytes of a copy | a key the client fetches from the relay at run time | the relay that a census guards against would then name the key its own receipts verify under. A patch at install time keeps the key in the files the operator serves, which a reader checks against the manifest (`ZK-059`) |
 
 ---

@@ -928,10 +928,12 @@ authority: the role here hides what the relay would refuse anyway.
   code of its own, under no receipt or a false one, leaves the thread with no proof. No later
   writer can add one (`MURMURE-733`), so a relay that hides that thread gets it erased. The same
   holds for a field written before `SYNC-332`. `SYNC-333` binds the fix.
-* **A client counts the receipts of one link key.** Each install patches the key of its relay
-  into the client (`ambre-spec-server.md`, `SRV-365`). A new key is a new patch and a restart,
-  and every receipt signed under the older key then counts as none. The relay checks its seed
-  against the key its deployment names (`SRV-364`), and the patch writes that same key.
+* **A rotation of the link key leaves each older receipt counting as none.** A new key retires
+  the older one whole (`ambre-spec-zero-knowledge.md`), and the relay signs each link it holds
+  again under it (`ambre-spec-sequencer.md`, `SRV-370`). No client yet writes that receipt
+  beside a `thread` field that holds an older one. Until then, a relay that hides such a thread
+  gets it erased. `SYNC-333` binds the fix for a thread a writer replies in. A thread nobody writes
+  in after the rotation stays without a receipt that counts.
 * **A removal opens each segment of the channel twice.** The Logic thread reads it for its threads,
   then the census opens it again for its clocks (`SYNC-312`). The read opens one document at a
   time, so its wait grows with the history of the channel.

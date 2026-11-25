@@ -43,7 +43,8 @@ web server, so a refusal is the policy and not a broken network (`SRV-352`).
 
 `link-key served ORIGIN CONTEXT` runs on a cluster of the chart: the Sync
 worker that `ORIGIN` serves holds the `thread-link-key` of the Secret in its
-slot (`SRV-365`). `link-key refuse CONTEXT` then writes the development key,
+slot (`SRV-365`), under `Cache-Control: no-cache` and an `ETag` (`SRV-373`).
+`link-key refuse CONTEXT` then writes the development key,
 then an empty key, into the Secret and restarts the web server each time. The
 pod must stop in its init container, and its log must say why (`SRV-368`).
 
@@ -669,7 +670,11 @@ def secret_key(kubectl: list[str]) -> str:
 
 
 def link_key_served(kubectl: list[str], origin: str) -> int:
-    """Finds the key of the Secret in the slot of the client the web server serves (`SRV-365`)."""
+    """Finds the key of the Secret in the slot of the client the web server serves (`SRV-365`).
+
+    The fetch also fails on an answer a browser may keep without asking
+    again, since a rotated key would then not reach it (`SRV-373`).
+    """
     named = secret_key(kubectl)
     try:
         held = link_key.slot_bytes(link_key.sync_worker(origin)).hex()
