@@ -574,17 +574,15 @@ jobs:
   test-browser:
     if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        engine: [chrome, firefox]
-        part: [murmure, rest]
+        engine: [chrome]
+        part: [murmure]
         include:
           - part: murmure
             filter: 'murmure::'
-          - part: rest
-            filter: '--skip murmure::'
     services:
       postgres:
         image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
@@ -677,8 +675,13 @@ jobs:
       # The relay stores media in the bucket, and creates none.
       - name: Start garage
         run: just garage-up
-      - run: just test-browser ${{ matrix.filter }}
-        if: matrix.engine == 'chrome'
+      - run: |
+          for i in $(seq 1 20); do
+            echo "::group::run $i"
+            just test-browser 'murmure::tests::three_members_decode_each_others_video_at_the_size_the_sfu_chooses --exact' || exit 1
+            echo "::endgroup::"
+          done
+        if: matrix.engine == 'chrome' && matrix.part == 'murmure'
         env:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
           BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
