@@ -69,7 +69,6 @@ ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | p
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | worker_url() | ret | Option<String>	local	the address of a worker script the page ships, read off its page meta and handed whole by each caller to the one foreign constructor that spawns it
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
-ambre-app | src/switchboard.rs | crate::switchboard | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/switchboard.rs | crate::switchboard | Notice.text | field | String	free-text	the words of a notice the user reads
 ambre-app | src/switchboard.rs | crate::switchboard | Notice::new(text) | param | impl Into<String>	free-text	the words of a notice the user reads
 ambre-app | src/switchboard.rs | crate::switchboard | Notice::visual(text) | param | impl Into<String>	free-text	the words of a notice the user reads
