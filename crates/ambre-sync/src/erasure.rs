@@ -68,6 +68,14 @@ pub(crate) struct ErasureParams {
     pub author: Author,
 }
 
+impl ErasureParams {
+    /// These params, for the erasure of `hidden`. The struct update lives
+    /// here, out of the browser task of the census, so a host test reads it.
+    pub(crate) fn hiding(self, hidden: Vec<Id<Document>>) -> Self {
+        Self { hidden, ..self }
+    }
+}
+
 /// The signature `author` puts on the erasure of `thread` in `channel_id`.
 pub(crate) fn sign_erasure(
     author: &Author,

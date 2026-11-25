@@ -820,6 +820,53 @@ mod tests {
         assert!(codes(&rx).is_empty(), "a head that holds the removal");
     }
 
+    /// `SYNC-298`: the current key is in use from the lowest number of a
+    /// delta opened under it. A later delta under that key keeps the number,
+    /// so a delta under the retired key numbered between them still warns. A
+    /// rotation counts the next key from its own first delta.
+    #[test]
+    fn the_current_key_is_in_use_from_its_lowest_delta() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        let mut watch = HeadWatch::default();
+        watch.read(walk(&entries).heads());
+        let behind = walk(&entries[..3]).heads().last();
+        let (retired, current, next) = (
+            crate::DocumentKey::generate().id(),
+            crate::DocumentKey::generate().id(),
+            crate::DocumentKey::generate().id(),
+        );
+        let frame = |seq: u64, key, current, signer: &Person| OpenedFrame {
+            seq: Seq::nth(seq),
+            key,
+            current,
+            head: behind,
+            signer: signer.public(),
+        };
+        assert!(!watch.writes_behind(frame(5, current, current, &alice)));
+        // A number the current key already holds is no delta after it.
+        assert!(!watch.writes_behind(frame(5, retired, current, &bob)));
+        assert!(!watch.writes_behind(frame(10, current, current, &alice)));
+        assert!(watch.writes_behind(frame(7, retired, current, &bob)));
+
+        assert!(!watch.writes_behind(frame(12, next, next, &alice)));
+        assert!(watch.writes_behind(frame(15, current, next, &carol)));
+    }
+
     /// An honest relay serves the revoke on the second read: no warning,
     /// and Bob's next delta signs the head he now holds (`SYNC-206`,
     /// `SYNC-207`).
