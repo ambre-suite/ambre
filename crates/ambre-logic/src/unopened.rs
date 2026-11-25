@@ -12,6 +12,9 @@ mod tests {
     type Segments = Vec<(Id<Document>, Option<Seq<Relay>>)>;
     use ambre_bus::{ChannelActivity, Relay, Seq};
     use ambre_core::activity::ActivityCounters;
+    use ambre_core::{Authored, Instant};
+    use ambre_murmure::message::MurmureCommand;
+    use ambre_murmure::{ChannelState, ChannelType};
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
         let (to_ui, ui_rx) = test_link();
@@ -32,6 +35,17 @@ mod tests {
     const META_LAST: Seq<Relay> = Seq::<Relay>::new(8);
 
     fn list(state: &mut LogicState, metas: &[(Id<Channel>, Id<Meta>)]) {
+        let metas: Vec<_> = metas.iter().map(|&(c, m)| (c, m, None)).collect();
+        list_calls(state, &metas);
+    }
+
+    /// A listed channel with its `meta` and its live call, if any.
+    ///
+    /// Written out at its uses, the type fails `clippy::type_complexity`.
+    type Listed = (Id<Channel>, Id<Meta>, Option<Id<ambre_core::id::Call>>);
+
+    /// A listing whose channels each name their live call, if any.
+    fn list_calls(state: &mut LogicState, metas: &[Listed]) {
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: Vec::new(),
             spaces: Vec::new(),
@@ -39,10 +53,11 @@ mod tests {
             peers: Vec::new(),
             metas: metas
                 .iter()
-                .map(|&(channel_id, meta)| ChannelMeta {
+                .map(|&(channel_id, meta, call)| ChannelMeta {
                     channel_id,
                     meta,
                     last: Some(META_LAST),
+                    call,
                 })
                 .collect(),
         });
@@ -331,5 +346,113 @@ mod tests {
             "got {sent:?}"
         );
         assert!(!state.route(|m| m.reads_channel_copy(meta.document_id())));
+    }
+
+    /// The calls each roster ask names, with its channel and its `meta`.
+    fn roster_asks(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(Id<ambre_core::id::Call>, Id<Channel>, Id<Document>)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|command| match command {
+                SyncCommand::AskCallRoster {
+                    call,
+                    channel,
+                    meta,
+                } => Some((call, channel, meta)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A channel never opened shows its live call (the Murmure calls spec). A ring cue of its
+    /// segment names the call, and so does the listing. The tick of the shown channel asks who
+    /// is in it under its `meta`. An end cue, or an answer of no state, takes the call away.
+    #[test]
+    fn a_channel_never_opened_shows_the_live_call_its_cue_or_the_listing_names() {
+        let (mut state, ui, sync) = harness();
+        let (channel, meta, segment) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            Id::<Document>::mint(),
+        );
+        list(&mut state, &[(channel, meta)]);
+        answer(
+            &mut state,
+            &[(channel, segment, ChannelDocumentKind::Segment)],
+        );
+        drain(&sync);
+
+        let shown = Id::<Channel>::mint();
+        let held = ChannelState::create(
+            shown,
+            ChannelType::Public,
+            None,
+            Instant::<Authored>::new(1),
+        )
+        .expect("create");
+        state.hold_channel(held);
+        let tick = |state: &mut LogicState, now: u64| {
+            state.handle_logic_command(LogicCommand::Channel {
+                channel_id: shown,
+                command: MurmureCommand::Tick {
+                    now: Instant::<Authored>::new(now),
+                },
+            });
+        };
+        let call = Id::<ambre_core::id::Call>::mint();
+        let cue = |kind| LogicEvent::CallCue {
+            document_id: segment,
+            cue: ambre_bus::CallCue {
+                call,
+                kind,
+                at: Instant::<Authored>::new(1),
+            },
+        };
+        state.handle_logic_event(cue(ambre_bus::CueKind::Ring));
+        tick(&mut state, 10_000);
+        assert_eq!(roster_asks(&sync), [(call, channel, meta.document_id())]);
+
+        drain(&ui);
+        state.handle_logic_event(cue(ambre_bus::CueKind::End));
+        let gone = drain(&ui).into_iter().any(|event| {
+            matches!(
+                event,
+                UiEvent::Channel {
+                    channel_id,
+                    event: ambre_murmure::message::MurmureEvent::CallMembers {
+                        members: ambre_bus::CallMembers::Gone,
+                        ..
+                    },
+                } if channel_id == channel
+            )
+        });
+        assert!(gone, "the end cue takes the mark away");
+        tick(&mut state, 20_000);
+        assert!(
+            roster_asks(&sync).is_empty(),
+            "an ended call is asked no more"
+        );
+
+        // A call that started before the watch: the listing names it.
+        let later = Id::<ambre_core::id::Call>::mint();
+        let stranger = (Id::<Channel>::mint(), Id::<Meta>::mint(), Some(later));
+        list_calls(&mut state, &[(channel, meta, Some(later)), stranger]);
+        tick(&mut state, 30_000);
+        assert_eq!(
+            roster_asks(&sync),
+            [(later, channel, meta.document_id())],
+            "the listing names the call of a channel it watches alone"
+        );
+        state.handle_logic_event(LogicEvent::CallRoster {
+            call: later,
+            channel,
+            members: ambre_bus::CallMembers::Gone,
+        });
+        tick(&mut state, 40_000);
+        assert!(
+            roster_asks(&sync).is_empty(),
+            "a gone call is asked no more"
+        );
     }
 }

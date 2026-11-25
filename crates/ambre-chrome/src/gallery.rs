@@ -36,7 +36,10 @@ const FRAME_SECTION: ambre_core::StaticKey<ambre_core::PanelSections> =
 /// The command the action-list specimens run: one line of text and an icon.
 static ACTION: ambre_commands::Command = ambre_commands::Command {
     id: ambre_core::StaticKey::<ambre_core::Commands>::new("gallery.action"),
-    title: |_: &ambre_commands::Locale| ambre_core::Validated::new("Insert row above"),
+    title: ambre_commands::TitleWords {
+        en: "Insert row above",
+        fr: "Insert row above",
+    },
     icon: None,
     keybindings: &[],
     category: ambre_core::StaticKey::<ambre_core::Categories>::new("gallery"),

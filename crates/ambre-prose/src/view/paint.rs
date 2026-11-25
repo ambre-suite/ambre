@@ -311,7 +311,7 @@ impl ProseUiState {
             paint_sheet(surface, palette, page.top, width, height);
         }
         // The cell fills go under the selections, so an opaque fill never
-        // hides them (`PROSE-UI-281`).
+        // hides them (`PROSE-UI-282`).
         for page in &frame.pages {
             surface.push_transform(Affine::translate((0.0, page.top.get())));
             fill_cells(surface, page);
@@ -1927,7 +1927,7 @@ mod tests {
         assert!(fill < selected && selected < text);
     }
 
-    /// `PROSE-UI-281`: a cell fill goes under the selection of the text it
+    /// `PROSE-UI-282`: a cell fill goes under the selection of the text it
     /// holds, so an opaque fill never hides the selection. The screen draws
     /// it once, and a print, which has no selection, draws it from its walk.
     #[test]

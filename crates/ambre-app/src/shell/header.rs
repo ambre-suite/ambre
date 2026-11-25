@@ -9,7 +9,7 @@
 // ============================================================================
 
 use super::super::*;
-use ambre_chrome::commands::{Command, Home, Locale};
+use ambre_chrome::commands::{Command, Home};
 use ambre_core::{Commands, StaticKey};
 
 /// The commands of `table` that `region` homes, in the order of the table.
@@ -49,7 +49,7 @@ pub(crate) fn HomedRows(
         .into_iter()
         .map(|command| {
             let id = command.id;
-            let label = (command.title)(&Locale::En).into_string();
+            let label = command.title.pick(&ambre_chrome::language()).into_string();
             let off = move || disabled.is_some_and(|d| d.with(|ids| ids.contains(&id)));
             view! {
                 <button

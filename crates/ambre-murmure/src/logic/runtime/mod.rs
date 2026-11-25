@@ -148,6 +148,9 @@ pub struct Runtime<D> {
     /// The asks of who is in the calls of each open channel (the Murmure
     /// calls spec).
     call_asks: HashMap<Id<Channel>, calls::CallAsks>,
+    /// The live call of each channel this thread holds no state of (`MURMURE-691`). A sealed
+    /// cue or the ask of the live calls names it. Removed at its end, and on logout.
+    unheld_calls: HashMap<Id<Channel>, Id<Call>>,
     /// The declines of a ring whose channel was not open, each held until the
     /// channel opens (the Murmure calls spec, the ring).
     declines: HashMap<Id<Channel>, Vec<crate::message::MurmureCommand>>,
@@ -237,6 +240,7 @@ impl<D> Runtime<D> {
             owed_replays: HashMap::new(),
             channel_watchers: HashMap::new(),
             call_asks: HashMap::new(),
+            unheld_calls: HashMap::new(),
             declines: HashMap::new(),
             meta_asks: Vec::new(),
             channel_members: HashMap::new(),
@@ -306,6 +310,7 @@ impl<D> Runtime<D> {
         self.erasing.clear();
         self.erase_owed.clear();
         self.call_asks.clear();
+        self.unheld_calls.clear();
         self.declines.clear();
         self.handing_off.clear();
         self.direct.clear();

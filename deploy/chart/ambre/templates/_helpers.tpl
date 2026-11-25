@@ -91,3 +91,31 @@ securityContext:
 {{- define "ambre.domain" -}}
 {{- required "domain: the public name of the suite" .Values.domain -}}
 {{- end -}}
+
+{{/* A peer of a NetworkPolicy: the pods of one component of this release. */}}
+{{- define "ambre.peer" -}}
+- podSelector:
+    matchLabels: {{- include "ambre.selector" . | nindent 6 }}
+{{- end -}}
+
+{{/*
+The public addresses of the internet, as NetworkPolicy peers: every address
+but the private, shared, link-local and loopback ranges, so a cluster address
+and the metadata service of a cloud stay out of reach.
+*/}}
+{{- define "ambre.publicAddresses" -}}
+- ipBlock:
+    cidr: 0.0.0.0/0
+    except: [10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16]
+- ipBlock:
+    cidr: ::/0
+    except: ["::1/128", "fc00::/7", "fe80::/10"]
+{{- end -}}
+
+{{/* The rule that lets a pod resolve the name of a Service. */}}
+{{- define "ambre.dnsEgress" -}}
+- to: {{- toYaml .Values.networkPolicy.dns | nindent 4 }}
+  ports:
+    - {protocol: UDP, port: 53}
+    - {protocol: TCP, port: 53}
+{{- end -}}

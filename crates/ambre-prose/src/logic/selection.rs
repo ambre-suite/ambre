@@ -396,13 +396,22 @@ impl ProseState {
         Ok(())
     }
 
-    /// Set the body font of the document (`PROSE-UI-261`). One write, so
-    /// one undo takes it back.
-    pub(super) fn set_default_font(&mut self, family: &ambre_core::FontFamily) -> ProseOutcome {
-        if doc::read_defaults(&self.doc, &self.roots).font_family == *family {
-            return ProseOutcome::nothing();
-        }
-        if let Err(e) = doc::write_default_font(&self.doc, family) {
+    /// Set the body font or the heading font of the document
+    /// (`PROSE-UI-261`, `PROSE-UI-266`). One write, so one undo takes it
+    /// back.
+    pub(super) fn set_default_font(&mut self, font: crate::message::DefaultFont) -> ProseOutcome {
+        use crate::message::DefaultFont;
+        let now = doc::read_defaults(&self.doc, &self.roots);
+        let written = match font {
+            DefaultFont::Body(family) if now.font_family != family => {
+                doc::write_default_font(&self.doc, &family)
+            }
+            DefaultFont::Heading(family) if now.heading_font_family != family => {
+                doc::write_heading_font(&self.doc, family.as_ref())
+            }
+            DefaultFont::Body(_) | DefaultFont::Heading(_) => return ProseOutcome::nothing(),
+        };
+        if let Err(e) = written {
             return Self::err_write(e);
         }
         self.commit_with(Vec::new())
@@ -814,7 +823,7 @@ pub(crate) mod tests {
         let (mut state, first, second, _, _) = fresh();
         let body = FontFamily::from_label("Noto Serif");
         let out = state.handle_command(ProseCommand::SetDefaultFont {
-            family: body.clone(),
+            font: crate::message::DefaultFont::Body(body.clone()),
         });
         assert!(out.update.is_some());
         assert_eq!(state.defaults().font_family, body);
@@ -836,7 +845,7 @@ pub(crate) mod tests {
         );
         // The same font again writes nothing.
         let again = state.handle_command(ProseCommand::SetDefaultFont {
-            family: FontFamily::from_label("Noto Serif"),
+            font: crate::message::DefaultFont::Body(FontFamily::from_label("Noto Serif")),
         });
         assert!(again.update.is_none());
         state.handle_command(ProseCommand::Undo);
@@ -844,6 +853,94 @@ pub(crate) mod tests {
             state.defaults().font_family,
             crate::doc::DocDefaults::default().font_family
         );
+    }
+
+    /// The heading font is written, set on every heading level and on no
+    /// body run, and a font mark still wins over it. The entry that names
+    /// no family deletes the key, and one undo takes each write back
+    /// (`PROSE-UI-266`).
+    #[test]
+    fn the_heading_font_reaches_every_heading_and_no_body_run() {
+        use crate::message::DefaultFont;
+        let (mut state, first, second, _, _) = fresh();
+        let body = state.defaults().font_family;
+        let heading = FontFamily::from_label("Noto Serif");
+        let out = state.handle_command(ProseCommand::SetDefaultFont {
+            font: DefaultFont::Heading(Some(heading.clone())),
+        });
+        assert!(out.update.is_some());
+        assert_eq!(state.defaults().heading_font_family, Some(heading.clone()));
+        for level in [
+            HeadingLevel::H1,
+            HeadingLevel::H2,
+            HeadingLevel::H3,
+            HeadingLevel::H4,
+            HeadingLevel::H5,
+            HeadingLevel::H6,
+        ] {
+            state.handle_command(ProseCommand::SetHeadingLevel {
+                block_id: first,
+                level: Some(level),
+            });
+            assert_eq!(
+                state.resolved_runs(&first)[0].1.font_family,
+                Some(heading.clone()),
+                "{level:?}"
+            );
+        }
+        assert_eq!(
+            state.resolved_runs(&second)[0].1.font_family,
+            Some(body.clone()),
+            "a body run keeps the body font"
+        );
+        // The shaper sets the heading in the font, and the body in its own.
+        let shaped = |state: &ProseState, block: &BlockId| {
+            crate::layout::measure::EffectiveStyle::resolve(
+                &state.defaults(),
+                &crate::doc::blocks(state.document()),
+                &crate::events::tree_id(*block),
+                ambre_core::Weight::Regular,
+            )
+            .font_family
+        };
+        assert_eq!(shaped(&state, &first), heading);
+        assert_eq!(shaped(&state, &second), body);
+        let lora = FontFamily::from_label("Lora");
+        mark(
+            &mut state,
+            (first, Pos::<DocChar>::ZERO),
+            (first, Pos::<DocChar>::new(5)),
+            MarkRoot::FontFamily,
+            Some("Lora"),
+        );
+        assert_eq!(state.resolved_runs(&first)[0].1.font_family, Some(lora));
+        state.handle_command(ProseCommand::Undo);
+
+        let Some(ProseEvent::LayoutShaped { layout }) = state.layout_event() else {
+            panic!("the change is laid out");
+        };
+        let shaped = layout
+            .get::<crate::layout::run::ShapedLayout>()
+            .expect("a shaped layout");
+        assert_eq!(
+            shaped.layout.fonts.heading,
+            Some(heading.clone()),
+            "the panel reads the layout's font"
+        );
+
+        // The entry that names no family deletes the key: one write.
+        let out = state.handle_command(ProseCommand::SetDefaultFont {
+            font: DefaultFont::Heading(None),
+        });
+        assert!(out.update.is_some());
+        assert_eq!(state.defaults().heading_font_family, None);
+        assert_eq!(state.resolved_runs(&first)[0].1.font_family, Some(body));
+        let again = state.handle_command(ProseCommand::SetDefaultFont {
+            font: DefaultFont::Heading(None),
+        });
+        assert!(again.update.is_none(), "an absent key again writes nothing");
+        state.handle_command(ProseCommand::Undo);
+        assert_eq!(state.defaults().heading_font_family, Some(heading));
     }
 
     /// A document of one paragraph per entry, and the selection from the

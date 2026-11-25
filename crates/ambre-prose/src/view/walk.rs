@@ -208,7 +208,7 @@ pub struct PageView<'v> {
 }
 
 /// Who draws the opaque fills under the glyphs: the box of each highlight
-/// mark (`PROSE-UI-280`) and the fill of each table cell (`PROSE-UI-281`).
+/// mark (`PROSE-UI-280`) and the fill of each table cell (`PROSE-UI-282`).
 ///
 /// The screen draws its selections before the walk, so an opaque fill the
 /// walk drew would hide them. The screen therefore draws the fills itself,

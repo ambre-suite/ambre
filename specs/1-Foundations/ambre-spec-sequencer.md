@@ -188,13 +188,27 @@ it to every writer that asks.
 |---|---|---|---|---|---|---|
 | `SRV-214` | `CONC` | Two registrations for one root MUST link one document, and each MUST be answered that document. | this spec section 3; `MURMURE-108` | `ambre_server::db::channels::tests::two_racing_registrations_keep_one_thread_document` -- database tier, both answer the one linked document; `ambre_server::routes::channels::tests::a_writer_registers_a_thread_and_a_late_one_learns_it` -- database tier, the late caller reads `created: false` | none | verified |
 
+### 1.14 An owner erases a thread name
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-347` | `FAIL` | The relay MUST record an erasure of a thread name only from an owner of the channel's `meta`, or from a writer of a `meta` that holds no owner (`SRV-359`), under that caller's signature over the channel and the thread, and MUST refuse an erasure of a document the channel groups. | this spec section 3; `ambre-spec-membership.md`, `SYNC-322` | `ambre_server::routes::channels::tests::an_owner_alone_erases_a_thread_the_channel_does_not_group` -- database tier, an editor and a stranger are refused, a signature by another key or over another channel is refused, a thread and a segment of the channel are refused, two erasures keep one row, and a member lists it | none | verified |
+| `SRV-349` | `FAIL` | The relay MUST record an erasure of a thread name in a direct message from any of its writers, under that caller's signature over the channel and the thread, and MUST refuse it from a stranger and for a document the channel groups. | this spec section 3; `SRV-347`, `SRV-175`, `SYNC-327` | `ambre_server::routes::channels::tests::a_writer_of_a_direct_message_erases_a_thread_name` -- database tier, a stranger is refused, a signature by another member is refused, a segment of the channel is refused, a writer's erasure is kept and listed to another member under that writer's key | none | verified |
+| `SRV-359` | `FAIL` | The relay MUST record an erasure of a thread name from a writer who owns nothing exactly when the channel's `meta` holds no owner, whether the channel has a space or not. | this spec section 3; `SRV-347`, `SRV-349`, `SRV-175`, `SRV-174`; `ambre-spec-membership.md`, `SYNC-327` | `ambre_server::routes::channels::tests::a_writer_erases_exactly_when_the_meta_holds_no_owner` -- database tier, an editor of a public channel is refused while its owner stays, and erases once the last owner left; `ambre_server::routes::channels::tests::a_writer_of_a_direct_message_erases_a_thread_name` -- database tier, a direct message holds no owner from its creation | none | verified |
+
+### 1.15 An erasure races a thread link
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-353` | `CONC` | Given an erasure and a registration of one thread id in one channel, the relay MUST keep the first step it commits and refuse the second. The channel MUST never link an erased thread nor erase a linked one. | this spec section 3; `SRV-347`, `SRV-213`; `ambre-spec-membership.md`, `SYNC-322` | `ambre_server::db::channels::tests::an_erasure_and_a_thread_registration_take_turns` -- database tier, the test holds the channel row lock and queues the two steps behind it in both orders: the first step wins, the second reads 409, and the channel holds the link or the erasure alone | none | verified |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
   All three read **none exists**, as does the cold start of the same table.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 85 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 89 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -443,6 +457,20 @@ of the channel. One transaction, under the channel row lock, links it as that ro
 (`SRV-213`), and touches no other document (`SRV-215`). Of two racing links one is kept, and the
 other caller is answered it (`SRV-214`). The relay learns the identifier of the root, never its text.
 
+**A thread erasure.** A root names its thread in a sealed field, which any member sets while it is
+absent. An owner of the `meta` signs the channel and a thread id, and posts the signature. Under the
+channel row lock, the relay refuses an id the channel groups, then keeps one row per thread. It
+learns the id and the owner's key alone (`ZK-015`, `SRV-347`).
+
+A `meta` with no owner takes the erasure from any of its writers (`SRV-359`). A direct message
+holds none (`SRV-349`), nor a public channel its last owner left (`SRV-174`). The relay reads the
+member rows and the census reads the log, so the two agree.
+
+**An erasure races a thread link.** The channel row lock orders an erasure and a link of one id:
+the first to commit wins, and the relay refuses the second (`SRV-353`). So no erasure covers a
+linked thread. An honest reply names its fresh thread id only once the link holds, so it meets no
+erasure.
+
 **A fold.** A delete in the amendments erases nothing while the final snapshot still holds the
 text. So a writer folds the amendments into a new snapshot of the segment.
 
@@ -510,6 +538,7 @@ sees is how long a document takes to open.
 | the hour turns | the oldest snapshots beyond ten are removed, and the index is trimmed to the horizon |
 | a writer asks for the finalize lease of a closing segment | a wait, or the lease with its horizon, the segment then locked for good |
 | a writer commits a final snapshot under its lease | the segment becomes `final`, and every delta stays |
+| an owner, or a writer of a direct message, erases a thread name no document of the channel answers | one signed row per thread, listed to each member of the channel |
 | a writer links a document to a locked segment | the one amendments document of the segment, its own or an earlier one |
 | a writer asks for the fold lease of a final segment | a refusal with nothing to fold, a wait, or the lease with the amendments and their reach |
 | a writer commits a fold snapshot under its lease | the fold is recorded, and the final snapshot stays |

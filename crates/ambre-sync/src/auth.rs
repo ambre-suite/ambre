@@ -731,6 +731,8 @@ mod unlock_tests {
 #[cfg(test)]
 mod provider_tests {
     use super::*;
+    // The tests that read the socket opens run on the native mock transport alone.
+    #[cfg(not(target_arch = "wasm32"))]
     use crate::http::{Credential, TokenPair};
 
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
@@ -744,6 +746,7 @@ mod provider_tests {
         )
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn signed_in(keys_stored: ambre_bus::KeySetup) -> SyncEvent {
         SyncEvent::ProviderSignedIn {
             id: ambre_bus::next_request(),
@@ -759,6 +762,7 @@ mod provider_tests {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// A provider sign-in leaves its tokens on the worker (`CHROME-096`). What
     /// Logic hears of it names the person, and carries no byte of a token.
     /// No key is held yet, so no socket opens.
@@ -818,6 +822,7 @@ mod provider_tests {
         assert!(no_relay(&rx), "the return");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-270`: with no relay, an unlock fails at once and holds no key.
     /// An unlock never mints the keys it did not find.
     #[test]
@@ -855,6 +860,7 @@ mod provider_tests {
         )));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// A build without the development sign-in refuses a sign-in by a bare
     /// name (`ZK-045`). No key is derived and the socket stays closed. A
     /// failed refresh then signs in again with no name either.
@@ -879,6 +885,7 @@ mod provider_tests {
         assert_eq!(state.socket_opens.get(), 0);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// An account that owes its keys is marked so, which keeps the socket
     /// closed until the setup stores them.
     #[test]
@@ -2045,6 +2052,7 @@ mod set_up_keys_tests {
         assert!(state.master_seed.is_none());
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-293`, `SYNC-294`: a recovery answered by the relay opens the
     /// session on the recovered keys. Logic hears the recovery, then the
     /// session, and no second unlock is asked. A session that holds keys
@@ -2132,6 +2140,7 @@ mod set_up_keys_tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-255`: once the keys are stored, the worker holds them and the new
     /// pair, and opens the socket the setup owed. It tells Logic the words,
     /// then the session.

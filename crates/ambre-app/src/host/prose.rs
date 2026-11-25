@@ -64,7 +64,7 @@ pub(crate) fn page_palette(theme: Theme) -> PagePalette {
 /// Where the canvas's top-left corner sits on the page. The chrome moves the
 /// view's positions onto the page by it. A canvas pixel is a CSS pixel
 /// (`CANVAS-032`), so the offset is the whole conversion.
-fn canvas_origin() -> Point<Px<Css>> {
+pub(crate) fn canvas_origin() -> Point<Px<Css>> {
     web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
@@ -471,6 +471,13 @@ impl ProseView {
             {
                 self.annotations.selection_words.set(words);
             }
+        }
+        // The selection a pick of the panel copies into its write, so a
+        // later caret move leaves the write where it was picked
+        // (`PROSE-UI-281`).
+        let selection = self.state.picked_selection();
+        if self.annotations.selection.get_untracked() != selection {
+            self.annotations.selection.set(selection);
         }
         // The page the layout was measured on, for the context panel
         // (`PROSE-UI-253`).

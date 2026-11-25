@@ -3101,22 +3101,103 @@ pub(crate) mod tests {
     /// The width the camera opens at: the top size of the call video row.
     const TOP_WIDTH: u64 = 1280;
 
-    /// The width `page` encodes its layer `rid` at now, 0 before its first frame. A headless
-    /// engine whose encoder lacks the CPU scales the camera down, so every layer shrinks
-    /// together (the call video row of `ambre-spec-budgets.md section 1`).
-    async fn sent_width(page: &Page, rid: &str) -> u64 {
-        video_stats(page).await["sent"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|s| s["rid"].as_str() == Some(rid))
-            .and_then(|s| s["width"].as_u64())
-            .unwrap_or(0)
+    /// The layers of one sender, from the top down: the order the SFU climbs them in.
+    const LAYERS: [&str; 3] = ["h", "m", "l"];
+
+    /// What one sender encodes on each layer, read over the polls of one wait.
+    ///
+    /// A headless engine whose encoder lacks the CPU scales the camera down, so every layer
+    /// shrinks together (the call video row of `ambre-spec-budgets.md section 1`). It also
+    /// drops frames of its top layer. Chrome reports a width of 0 for a layer with no frame in
+    /// the last 800 ms. The SFU still forwards the frames that layer encodes. So a layer keeps
+    /// the last width it encoded at, and counts as sent once it encodes a frame during the wait.
+    #[derive(Debug, Default)]
+    struct Sent {
+        /// Per layer: its rid, its frame count at the first poll, at the last poll, and the
+        /// last width it encoded at.
+        layers: Vec<(String, u64, u64, u64)>,
     }
 
-    /// Waits until `page` decodes exactly two videos: the top layer of `top`, and the lowest
-    /// layer of `low`. Each reads the width its sender encodes it at now. Each grew past `frames`
-    /// more pictures than `before` held. Answers the stats id of the top layer.
+    impl Sent {
+        /// Takes one reading of [`video_stats`] of the sender.
+        fn read(&mut self, stats: &Value) {
+            for s in stats["sent"].as_array().into_iter().flatten() {
+                let Some(rid) = s["rid"].as_str() else {
+                    continue;
+                };
+                let frames = s["frames"].as_u64().unwrap_or(0);
+                let width = s["width"].as_u64().unwrap_or(0);
+                match self.layers.iter_mut().find(|l| l.0 == rid) {
+                    Some(layer) => {
+                        layer.2 = frames;
+                        if width > 0 {
+                            layer.3 = width;
+                        }
+                    }
+                    None => self.layers.push((rid.to_owned(), frames, frames, width)),
+                }
+            }
+        }
+
+        /// The last width the layer `rid` encoded at, 0 when it encoded no frame during the
+        /// wait.
+        fn width(&self, rid: &str) -> u64 {
+            self.layers
+                .iter()
+                .find(|l| l.0 == rid && l.2 > l.1)
+                .map_or(0, |l| l.3)
+        }
+
+        /// The width of the top layer the sender encodes during the wait: the layer the SFU
+        /// forwards to the receiver of a speaker. 0 before a layer encodes a frame.
+        fn top(&self) -> u64 {
+            LAYERS
+                .iter()
+                .map(|rid| self.width(rid))
+                .find(|w| *w > 0)
+                .unwrap_or(0)
+        }
+    }
+
+    /// The stats id of the top layer when `stats` of a receiver decode exactly two videos: one
+    /// at `top_width` and one at `low_width`. Each grew past `frames` more pictures than
+    /// `before` held. None otherwise, so a size the SFU did not choose never matches.
+    fn top_and_low_in(
+        stats: &Value,
+        before: &Value,
+        frames: u64,
+        top_width: u64,
+        low_width: u64,
+    ) -> Option<String> {
+        let received = stats["received"].as_array().cloned().unwrap_or_default();
+        let grew = |entry: &Value| {
+            let id = entry["id"].as_str().unwrap_or_default();
+            let was = before["received"]
+                .as_array()
+                .and_then(|r| r.iter().find(|b| b["id"].as_str() == Some(id)))
+                .and_then(|b| b["frames"].as_u64())
+                .unwrap_or(0);
+            entry["frames"].as_u64().unwrap_or(0) >= was + frames
+        };
+        let at = |width: u64| {
+            received
+                .iter()
+                .filter(|r| width > 0 && r["width"].as_u64() == Some(width) && grew(r))
+                .collect::<Vec<_>>()
+        };
+        let (top, low) = (at(top_width), at(low_width));
+        let apart = top_width != low_width || top.len() == 2;
+        (received.len() == 2 && !top.is_empty() && !low.is_empty() && apart).then(|| {
+            top.first()
+                .and_then(|t| t["id"].as_str())
+                .unwrap_or_default()
+                .to_owned()
+        })
+    }
+
+    /// Waits until `page` decodes exactly two videos: the top layer `top` encodes, and the
+    /// lowest layer of `low`. Each reads the last width its sender encoded it at. Each grew past
+    /// `frames` more pictures than `before` held. Answers the stats id of the top layer.
     async fn top_and_low(
         page: &Page,
         before: &Value,
@@ -3125,48 +3206,120 @@ pub(crate) mod tests {
         low: &Page,
     ) -> String {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        let (mut top_sent, mut low_sent) = (Sent::default(), Sent::default());
         loop {
-            let (top_width, low_width) = (sent_width(top, "h").await, sent_width(low, "l").await);
+            top_sent.read(&video_stats(top).await);
+            low_sent.read(&video_stats(low).await);
+            let (top_width, low_width) = (top_sent.top(), low_sent.width("l"));
             let stats = video_stats(page).await;
-            let received = stats["received"].as_array().cloned().unwrap_or_default();
-            let grew = |entry: &Value| {
-                let id = entry["id"].as_str().unwrap_or_default();
-                let was = before["received"]
-                    .as_array()
-                    .and_then(|r| r.iter().find(|b| b["id"].as_str() == Some(id)))
-                    .and_then(|b| b["frames"].as_u64())
-                    .unwrap_or(0);
-                entry["frames"].as_u64().unwrap_or(0) >= was + frames
-            };
-            let at = |width: u64| {
-                received
-                    .iter()
-                    .filter(|r| width > 0 && r["width"].as_u64() == Some(width) && grew(r))
-                    .collect::<Vec<_>>()
-            };
-            let (top, low) = (at(top_width), at(low_width));
-            let apart = top_width != low_width || top.len() == 2;
-            if received.len() == 2 && !top.is_empty() && !low.is_empty() && apart {
+            if let Some(id) = top_and_low_in(&stats, before, frames, top_width, low_width) {
                 assert_eq!(
                     stats["opened"],
                     json!(true),
                     "a video without its transform"
                 );
-                return top
-                    .first()
-                    .and_then(|t| t["id"].as_str())
-                    .unwrap_or_default()
-                    .to_owned();
+                return id;
             }
             if std::time::Instant::now() >= deadline {
                 panic!(
                     "within 60 s, the page decoded {stats:#}, not the top layer at \
-                     {top_width} and the lowest at {low_width}, and logged {:#?}",
+                     {top_width} and the lowest at {low_width}, as the senders encode \
+                     {top_sent:?} and {low_sent:?}, and logged {:#?}",
                     page.browser.console().await
                 );
             }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
+    }
+
+    /// The `sent` of [`video_stats`]: each layer with its frame count and width.
+    fn sent_stats(layers: &[(&str, u64, u64)]) -> Value {
+        let sent: Vec<Value> = layers
+            .iter()
+            .map(|(rid, frames, width)| {
+                json!({ "rid": rid, "frames": frames, "width": width, "limit": "cpu" })
+            })
+            .collect();
+        json!({ "sent": sent })
+    }
+
+    /// The `received` of [`video_stats`]: each video with its frame count and width.
+    fn received_stats(videos: &[(&str, u64, u64)]) -> Value {
+        let received: Vec<Value> = videos
+            .iter()
+            .map(|(id, frames, width)| json!({ "id": id, "frames": frames, "width": width }))
+            .collect();
+        json!({ "received": received, "opened": true })
+    }
+
+    /// The run of `main` at `f525473b5`: Chrome starves the top encoder, so the top layer
+    /// reads a width of 0 between two of its frames. The top layer keeps the width it last
+    /// encoded at, and the receiver of the speaker matches it.
+    #[test]
+    fn a_top_layer_short_of_cpu_keeps_the_width_it_last_encoded_at() {
+        let mut sent = Sent::default();
+        sent.read(&sent_stats(&[
+            ("l", 2000, 240),
+            ("m", 1996, 480),
+            ("h", 700, 960),
+        ]));
+        sent.read(&sent_stats(&[
+            ("l", 2348, 240),
+            ("m", 2344, 480),
+            ("h", 832, 0),
+        ]));
+        assert_eq!(sent.top(), 960, "{sent:?}");
+        assert_eq!(sent.width("l"), 240, "{sent:?}");
+        let before = received_stats(&[("ada", 1000, 960), ("carol", 1900, 240)]);
+        let now = received_stats(&[("ada", 1126, 960), ("carol", 2064, 240)]);
+        assert_eq!(
+            top_and_low_in(&now, &before, 30, sent.top(), sent.width("l")),
+            Some("ada".to_owned())
+        );
+    }
+
+    /// A top layer with no frame during the wait is not sent. The top moves to the next layer
+    /// down, which the SFU then forwards to the receiver of the speaker.
+    #[test]
+    fn a_top_layer_that_encodes_nothing_hands_the_top_to_the_next_layer() {
+        let mut sent = Sent::default();
+        sent.read(&sent_stats(&[
+            ("l", 2000, 240),
+            ("m", 1996, 480),
+            ("h", 832, 960),
+        ]));
+        sent.read(&sent_stats(&[
+            ("l", 2348, 240),
+            ("m", 2344, 480),
+            ("h", 832, 0),
+        ]));
+        assert_eq!(sent.top(), 480, "{sent:?}");
+        let mut fresh = Sent::default();
+        fresh.read(&sent_stats(&[("h", 832, 960)]));
+        assert_eq!(fresh.top(), 0, "one reading proves no frame: {fresh:?}");
+    }
+
+    /// A receiver that decodes a size the SFU did not choose never matches. The cases: the
+    /// speaker below its top, the other above its lowest, both at one size, a stopped video.
+    #[test]
+    fn a_size_the_sfu_did_not_choose_never_matches() {
+        let before = received_stats(&[("ada", 1000, 960), ("carol", 1900, 240)]);
+        let wrong = [
+            received_stats(&[("ada", 1126, 480), ("carol", 2064, 240)]),
+            received_stats(&[("ada", 1126, 960), ("carol", 2064, 480)]),
+            received_stats(&[("ada", 1126, 240), ("carol", 2064, 240)]),
+            received_stats(&[("ada", 1126, 960), ("carol", 2064, 960)]),
+            received_stats(&[("ada", 1010, 960), ("carol", 2064, 240)]),
+            received_stats(&[("ada", 1126, 960)]),
+        ];
+        for now in wrong {
+            assert_eq!(top_and_low_in(&now, &before, 30, 960, 240), None, "{now:#}");
+        }
+        assert_eq!(
+            top_and_low_in(&before, &before, 30, 0, 240),
+            None,
+            "no top layer sent"
+        );
     }
 
     /// `CALL-008`, `CALL-096`, `CALL-099` and the video half of `CALL-001`, `CALL-011` and
@@ -3910,6 +4063,181 @@ pub(crate) mod tests {
         for page in [&ada_page, &bob_page] {
             click_header(page, ".murmure-call-hang-up").await;
         }
+    }
+
+    /// `MURMURE-699`, `MURMURE-698`: Ada and Bob are in a call from #general. Ada sends her
+    /// camera while the fake microphone of Chrome beeps, so she speaks. Bob opens #random, and
+    /// the call floats over it as a bubble. A press on its faces opens the mini video.
+    ///
+    /// Bob's canvas draws Ada's video inside the box the bubble published: two readbacks differ,
+    /// and every moved pixel lies in that box. A shot of the whole page, cut to the box, moves
+    /// too. The box of the bubble holds only still words. So those moved pixels are the canvas
+    /// seen through it, and no outline or shadow of the bubble covers them. No video element
+    /// enters the page (`CALL-015`).
+    ///
+    /// The host draws the mini video over the overlay of every application alike. Only Murmure
+    /// runs it here, since a call ends with a switch of application (`MURMURE-726`).
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_press_on_the_faces_of_the_bubble_shows_the_video_of_the_speaker() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        prompt(&ada_page, ".murmure-space", "murmure-new-channel", "random").await;
+        open(&bob_page, "random").await;
+        open(&bob_page, "general").await;
+        open(&ada_page, "general").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        read_until(
+            &bob_page,
+            "Ada and Bob in the call",
+            |h| in_call(h, &[&ada, &bob]),
+            ROSTER_WAIT,
+        )
+        .await;
+        click_header(&ada_page, ".murmure-call-camera").await;
+        camera_pressed(&ada_page, "true").await;
+        bob_page
+            .browser
+            .wait_for(
+                "ten paints of a video in the region",
+                "return performance.getEntriesByName('ambre:video-paint').length >= 10;",
+                std::time::Duration::from_secs(40),
+            )
+            .await;
+
+        // Bob shows another channel: the call floats over it, folded.
+        open(&bob_page, "random").await;
+        let faces = bob_page
+            .browser
+            .wait_for(
+                "the faces of the bubble",
+                "const f = document.querySelector('.murmure-call-float .murmure-float-faces'); \
+                 return f ? [f.getAttribute('aria-label'), f.getAttribute('aria-pressed')] : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(faces, json!(["Show the video of the call", "false"]));
+        bob_page
+            .browser
+            .script(
+                "document.querySelector('.murmure-float-faces').click(); \
+                 document.activeElement?.blur(); return true;",
+                json!([]),
+            )
+            .await;
+        // The mini video opens on Ada's camera once her voice names her the speaker.
+        bob_page
+            .browser
+            .wait_for(
+                "the mini video of the bubble",
+                "return document.querySelector('.murmure-call-float')?.dataset.mini === 'video';",
+                std::time::Duration::from_secs(20),
+            )
+            .await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let placed = bob_page
+            .browser
+            .script(
+                "const m = document.querySelector('.murmure-float-mini').getBoundingClientRect(); \
+                 const c = document.querySelector(arguments[0]).getBoundingClientRect(); \
+                 return [m.left - c.left, m.top - c.top, m.right - c.left, m.bottom - c.top, \
+                   window.devicePixelRatio || 1];",
+                json!([CHANNEL]),
+            )
+            .await;
+        let at = |i: usize| placed[i].as_f64().unwrap_or(0.0);
+        let ratio = at(4);
+        let first = canvas_alone(&bob_page).await;
+        let seen = shot_of(&bob_page, ".murmure-float-mini").await;
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let second = canvas_alone(&bob_page).await;
+        let seen_after = shot_of(&bob_page, ".murmure-float-mini").await;
+        let (moved, bounds) = changed(&first, &second);
+        assert!(
+            moved >= 300,
+            "only {moved} pixels moved under the mini video"
+        );
+        let [left, top, right, bottom] = bounds.expect("a box of moved pixels");
+        let inside = |v: u32, low: f64, high: f64| {
+            let v = f64::from(v);
+            v >= low * ratio - 2.0 && v <= high * ratio + 2.0
+        };
+        assert!(
+            inside(left, at(0), at(2))
+                && inside(right, at(0), at(2))
+                && inside(top, at(1), at(3))
+                && inside(bottom, at(1), at(3)),
+            "the moved pixels {bounds:?} leave the box {placed}"
+        );
+        let (shown, _) = changed(&seen, &seen_after);
+        assert!(
+            shown >= 300,
+            "only {shown} pixels of the page moved in the box: the bubble covers the canvas"
+        );
+        assert_eq!(
+            video_elements(&bob_page).await,
+            json!(0),
+            "a video element in the page"
+        );
+        let mut paints = video_paints(&bob_page).await;
+        paints.sort_by(f64::total_cmp);
+        let q = |q: f64| paints[((paints.len() as f64 - 1.0) * q).round() as usize];
+        eprintln!(
+            "video paints with the bubble: {} frames, median {:.2} ms, p95 {:.2} ms",
+            paints.len(),
+            q(0.5),
+            q(0.95)
+        );
+
+        // A second press folds it, and the bubble publishes no mini video.
+        bob_page
+            .browser
+            .script(
+                "document.querySelector('.murmure-float-faces').click(); return true;",
+                json!([]),
+            )
+            .await;
+        bob_page
+            .browser
+            .wait_for(
+                "the folded bubble",
+                "return !document.querySelector('.murmure-float-mini');",
+                STEP,
+            )
+            .await;
+        bob_page
+            .browser
+            .script(
+                "document.querySelector('.murmure-call-float .murmure-call-hang-up')?.click(); \
+                 return true;",
+                json!([]),
+            )
+            .await;
+        click_header(&ada_page, ".murmure-call-hang-up").await;
+    }
+
+    /// The pixels of the channel canvas of `page`, as [`canvas_shot`] reads them, with the call
+    /// bubble transparent during the shot. Its clock then moves no pixel of the shot, and its
+    /// layout, so the box it published, stays.
+    async fn canvas_alone(page: &Page) -> image::RgbImage {
+        let fade = "const b = document.querySelector('.murmure-call-float'); \
+                    if (b) b.style.opacity = arguments[0]; return true;";
+        page.browser.script(fade, json!(["0"])).await;
+        let shot = canvas_shot(page).await;
+        page.browser.script(fade, json!([""])).await;
+        shot
     }
 
     /// The pixels of the canvas `selector`, cut out of a screenshot of the whole page. The shot

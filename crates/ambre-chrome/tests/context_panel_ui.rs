@@ -9,7 +9,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_chrome::commands::{Command, Home, Locale, Property, Reach, Reading};
+use ambre_chrome::commands::{Command, Home, Property, Reach, Reading};
 use ambre_chrome::{
     Choice, ColourField, CommandButton, ContextPanel, DockSide, Field, Fold, LengthField,
     PanelPrefs, PanelSection, PanelWidth, Segmented, reach_markers,
@@ -29,7 +29,10 @@ const TEXT: StaticKey<PanelSections> = StaticKey::<PanelSections>::new("t.text")
 
 static BOLD: Command = Command {
     id: StaticKey::<Commands>::new("t.format.bold"),
-    title: |_: &Locale| ambre_core::Validated::new("Bold"),
+    title: ambre_commands::TitleWords {
+        en: "Bold",
+        fr: "Bold",
+    },
     icon: None,
     keybindings: &[],
     category: StaticKey::<Categories>::new("format"),
@@ -39,19 +42,28 @@ static BOLD: Command = Command {
 
 static INK: Property = Property {
     id: StaticKey::<Properties>::new("t.ink"),
-    title: |_: &Locale| ambre_core::Validated::new("Text colour"),
+    title: ambre_commands::TitleWords {
+        en: "Text colour",
+        fr: "Text colour",
+    },
     icon: None,
 };
 
 static MARGIN: Property = Property {
     id: StaticKey::<Properties>::new("t.margin"),
-    title: |_: &Locale| ambre_core::Validated::new("Margin"),
+    title: ambre_commands::TitleWords {
+        en: "Margin",
+        fr: "Margin",
+    },
     icon: None,
 };
 
 static ORIENT: Property = Property {
     id: StaticKey::<Properties>::new("t.orientation"),
-    title: |_: &Locale| ambre_core::Validated::new("Orientation"),
+    title: ambre_commands::TitleWords {
+        en: "Orientation",
+        fr: "Orientation",
+    },
     icon: None,
 };
 

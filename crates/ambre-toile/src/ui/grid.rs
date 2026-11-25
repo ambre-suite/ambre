@@ -10,7 +10,7 @@
 
 use ambre_canvas::Palette;
 use ambre_core::{Board, Px};
-use ambre_draw::{DrawSurface, Point};
+use ambre_draw::{DrawSurface, Point, Rect, Vec2};
 
 use super::viewport::ViewportTransform;
 
@@ -87,8 +87,179 @@ pub fn snap_world(p: Point, step: Px<Board>) -> Point {
     Point::new((p.x / step).round() * step, (p.y / step).round() * step)
 }
 
+/// Whether this user shows the board's grid. View state alone: the status bar
+/// toggles it and no peer sees it (`CHROME-149`). A hidden grid also holds
+/// back the snap, so no gesture lands on a grid the user cannot see.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GridShown {
+    /// The grid paints, and the snap of the board applies.
+    #[default]
+    Shown,
+    /// The ground paints bare, and every gesture commits where it ends.
+    Hidden,
+}
+
+impl GridShown {
+    /// The other state, which the toggle of the status bar picks.
+    #[must_use]
+    pub fn toggled(self) -> Self {
+        match self {
+            Self::Shown => Self::Hidden,
+            Self::Hidden => Self::Shown,
+        }
+    }
+}
+
+/// The snap of the board and the grid of this user, which the panel and the
+/// status bar read.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BoardLook {
+    /// Whether the board asks its gestures to land on the grid.
+    pub snap: crate::message::GridSnap,
+    /// Whether this user shows the grid.
+    pub grid: GridShown,
+    /// What the board lies on.
+    pub ground: crate::message::BoardGround,
+    /// A write of the board section the view has not sent yet. One signal
+    /// carries the look and the write, so Main holds one signal type.
+    pub asked: Option<crate::message::BoardEdit>,
+}
+
+/// The light tints the board section offers after the ground of the theme
+/// (`TOILE-UI-430`). Each one is light, so dark content reads on it in both
+/// themes.
+pub const TINTS: [(&str, ambre_core::Rgba); 6] = [
+    ("Ivory", ambre_core::Rgba::from_bits(0xFFFD_F5FF)),
+    ("Lemon", ambre_core::Rgba::from_bits(0xFDF8_DCFF)),
+    ("Mint", ambre_core::Rgba::from_bits(0xE6F4_EAFF)),
+    ("Sky", ambre_core::Rgba::from_bits(0xE8F1_FBFF)),
+    ("Lavender", ambre_core::Rgba::from_bits(0xEFEA_F8FF)),
+    ("Blush", ambre_core::Rgba::from_bits(0xFBEA_EAFF)),
+];
+
+/// The step a drag, a resize and a nudge land on, `None` when they land
+/// free. It is the step the grid draws at `zoom`, so the dots a user sees
+/// are the points a gesture lands on (`TOILE-UI-025`).
+#[must_use]
+pub fn snap_step(
+    snap: crate::message::GridSnap,
+    shown: GridShown,
+    zoom: ambre_core::Scale<Board, ambre_core::View>,
+    unit: Px<Board>,
+) -> Option<Px<Board>> {
+    (snap == crate::message::GridSnap::Snapped && shown == GridShown::Shown)
+        .then(|| grid_step(zoom, GridUnit::of_register(unit)))
+}
+
+/// The delta that lands the corner `anchor` of a moved box on the grid,
+/// from the raw delta of the pointer. The boxes of the selection keep their
+/// offsets to each other.
+#[must_use]
+pub fn snap_delta(anchor: Point, raw: Vec2, step: Px<Board>) -> Vec2 {
+    snap_world(anchor + raw, step) - anchor
+}
+
+/// `r` with each edge on the grid, never narrower or lower than one step.
+#[must_use]
+pub fn snap_rect(r: Rect, step: Px<Board>) -> Rect {
+    let p0 = snap_world(Point::new(r.x0, r.y0), step);
+    let p1 = snap_world(Point::new(r.x1, r.y1), step);
+    let s = step.get();
+    // An edge that collapses onto its opposite keeps one step from it, on
+    // the side the pointer dragged it to.
+    let far = |lo: f64, hi: f64, raw: f64| {
+        if (hi - lo).abs() >= s {
+            hi
+        } else if raw >= 0.0 {
+            lo + s
+        } else {
+            lo - s
+        }
+    };
+    Rect::new(
+        p0.x,
+        p0.y,
+        far(p0.x, p1.x, r.x1 - r.x0),
+        far(p0.y, p1.y, r.y1 - r.y0),
+    )
+}
+
+/// The delta of a nudge on the grid. The corner `anchor` moves to the next
+/// grid line along `dir`, on each axis that `dir` names by its sign.
+#[must_use]
+pub fn nudge_on_grid(anchor: Point, dir: Vec2, step: Px<Board>) -> Vec2 {
+    let s = step.get();
+    let axis = |at: f64, sign: f64| {
+        if sign == 0.0 {
+            return 0.0;
+        }
+        let q = at / s;
+        let k = q.round();
+        // A corner on a line moves one whole step. A corner between two
+        // lines moves to the next one in the direction of the nudge.
+        let on = (q - k).abs() < 1e-6;
+        let to = match (on, sign > 0.0) {
+            (true, true) => k + 1.0,
+            (true, false) => k - 1.0,
+            (false, true) => q.ceil(),
+            (false, false) => q.floor(),
+        };
+        to * s - at
+    };
+    Vec2::new(axis(anchor.x, dir.x), axis(anchor.y, dir.y))
+}
+
 /// The side of a grid dot, in screen pixels, at every zoom (`TOILE-UI-280`).
 const DOT: ambre_core::Px<ambre_core::Surface> = ambre_core::Px::<ambre_core::Surface>::new(1.5);
+
+/// The ground a board lies on and the colour of its grid dots.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GroundColours {
+    /// The fill under the whole canvas.
+    pub ground: ambre_draw::Color,
+    /// The colour of one grid dot.
+    pub dot: ambre_draw::Color,
+}
+
+impl GroundColours {
+    /// The colours of `ground` in the theme of `palette` (`TOILE-UI-430`).
+    /// A tint draws as it is in both themes. Its dots take a shade off it,
+    /// darker on a light tint and lighter on a dark one.
+    #[must_use]
+    pub fn of(palette: &Palette, ground: crate::message::BoardGround) -> Self {
+        match ground {
+            crate::message::BoardGround::Theme => Self {
+                ground: palette.ground,
+                dot: palette.grid_dot,
+            },
+            crate::message::BoardGround::Tint(tint) => {
+                let [r, g, b, _] = tint.channels();
+                let luma = 0.2126 * f64::from(r) + 0.7152 * f64::from(g) + 0.0722 * f64::from(b);
+                // The light theme puts its dots at about 0.86 of its ground.
+                let shade = |c: u8| {
+                    let c = f64::from(c);
+                    let to = if luma >= 128.0 {
+                        c * 0.84
+                    } else {
+                        c + (255.0 - c) * 0.2
+                    };
+                    // A channel in 0..=255 stays in it, so the cast keeps it.
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        reason = "the shade of a byte channel stays within 0..=255"
+                    )]
+                    let byte = to.round().clamp(0.0, 255.0) as u8;
+                    byte
+                };
+                Self {
+                    ground: ambre_draw::Color::from_rgba8(r, g, b, 255),
+                    dot: ambre_draw::Color::from_rgba8(shade(r), shade(g), shade(b), 255),
+                }
+            }
+        }
+    }
+}
 
 /// Fill the board background only, without the grid. Used by presentation
 /// focus mode (`toile-presentation`), which hides the grid so the audience sees
@@ -96,11 +267,11 @@ const DOT: ambre_core::Px<ambre_core::Surface> = ambre_core::Px::<ambre_core::Su
 pub fn paint_background<S: DrawSurface>(
     surface: &mut S,
     cam: &ViewportTransform,
-    palette: &Palette,
+    colours: GroundColours,
 ) {
     surface.fill_rect(
         ambre_draw::Rect::new(0.0, 0.0, cam.size.width, cam.size.height),
-        palette.ground,
+        colours.ground,
     );
 }
 
@@ -111,11 +282,11 @@ pub fn paint_background<S: DrawSurface>(
 pub fn paint_grid<S: DrawSurface>(
     surface: &mut S,
     cam: &ViewportTransform,
-    palette: &Palette,
+    colours: GroundColours,
     unit: Px<Board>,
 ) {
     // Board background fills the whole canvas.
-    paint_background(surface, cam, palette);
+    paint_background(surface, cam, colours);
 
     let step = grid_step(cam.zoom, GridUnit::of_register(unit)).get();
     let s2w = cam.screen_to_world();
@@ -144,7 +315,7 @@ pub fn paint_grid<S: DrawSurface>(
         for &sx in &xs {
             surface.fill_rect(
                 ambre_draw::Rect::new(sx - half, sy - half, sx + half, sy + half),
-                palette.grid_dot,
+                colours.dot,
             );
         }
     }
@@ -201,9 +372,14 @@ mod tests {
         ambre_canvas::theme::LIGHT
     }
 
+    /// The colours of a board on the ground of the light theme.
+    fn theme_colours() -> GroundColours {
+        GroundColours::of(&palette(), crate::message::BoardGround::Theme)
+    }
+
     fn grid_ops(cam: &ViewportTransform, unit: f64) -> Vec<DrawOp> {
         let mut surface = RecordingSurface::new();
-        paint_grid(&mut surface, cam, &palette(), Px::<Board>::new(unit));
+        paint_grid(&mut surface, cam, theme_colours(), Px::<Board>::new(unit));
         surface.ops().to_vec()
     }
 
@@ -334,7 +510,7 @@ mod tests {
     fn the_background_fills_the_canvas_first() {
         let cam = ViewportTransform::new(ambre_draw::Size::new(640.0, 480.0));
         let mut bare = RecordingSurface::new();
-        paint_background(&mut bare, &cam, &palette());
+        paint_background(&mut bare, &cam, theme_colours());
         for ops in [grid_ops(&cam, BASE_GRID.get()), bare.ops().to_vec()] {
             match ops.first() {
                 Some(DrawOp::FillRect { rect, color }) => {
@@ -344,6 +520,98 @@ mod tests {
                 other => panic!("the background comes first: {other:?}"),
             }
         }
+    }
+
+    /// `TOILE-UI-025`: a gesture lands on the step the grid draws, and on
+    /// none while the board lands free or this user hides the grid.
+    #[test]
+    fn the_snap_step_is_the_drawn_step() {
+        use crate::message::GridSnap;
+        let unit = Px::<Board>::new(32.0);
+        for z in [0.1, 0.5, 1.0, 3.0, 10.0] {
+            let zoom = ambre_core::Scale::<Board, ambre_core::View>::positive(z);
+            let drawn = grid_step(zoom, GridUnit::of_register(unit));
+            assert_eq!(
+                snap_step(GridSnap::Snapped, GridShown::Shown, zoom, unit),
+                Some(drawn)
+            );
+            assert_eq!(
+                snap_step(GridSnap::Free, GridShown::Shown, zoom, unit),
+                None
+            );
+            assert_eq!(
+                snap_step(GridSnap::Snapped, GridShown::Hidden, zoom, unit),
+                None
+            );
+        }
+    }
+
+    /// `TOILE-UI-425`, `TOILE-UI-426`: a moved corner lands on a crossing. A
+    /// resized box keeps one step, and a nudge reaches the next line.
+    #[test]
+    fn a_snapped_geometry_sits_on_the_step() {
+        let step = Px::<Board>::new(20.0);
+        let moved = snap_delta(Point::new(3.0, 7.0), Vec2::new(25.0, -18.0), step);
+        assert_eq!(Point::new(3.0, 7.0) + moved, Point::new(20.0, -20.0));
+        assert_eq!(
+            snap_rect(Rect::new(3.0, 7.0, 52.0, 9.0), step),
+            Rect::new(0.0, 0.0, 60.0, 20.0)
+        );
+        assert_eq!(
+            snap_rect(Rect::new(3.0, 7.0, -2.0, 9.0), step),
+            Rect::new(0.0, 0.0, -20.0, 20.0)
+        );
+        let at = |p: Point, d: Vec2| p + nudge_on_grid(p, d, step);
+        assert_eq!(
+            at(Point::new(20.0, 40.0), Vec2::new(1.0, 0.0)),
+            Point::new(40.0, 40.0)
+        );
+        assert_eq!(
+            at(Point::new(20.0, 40.0), Vec2::new(0.0, -1.0)),
+            Point::new(20.0, 20.0)
+        );
+        assert_eq!(
+            at(Point::new(23.0, 5.0), Vec2::new(-1.0, 0.0)),
+            Point::new(20.0, 5.0)
+        );
+        assert_eq!(
+            at(Point::new(23.0, 5.0), Vec2::new(0.0, 1.0)),
+            Point::new(23.0, 20.0)
+        );
+    }
+
+    /// `TOILE-UI-430`: the ground of the theme follows the theme. A tint
+    /// draws as it is in both, and its dots take a shade off it by its
+    /// luminance.
+    #[test]
+    fn a_tint_draws_alike_in_both_themes_with_dots_off_it() {
+        use crate::message::BoardGround;
+        use ambre_canvas::theme::{DARK, LIGHT};
+        for p in [&LIGHT, &DARK] {
+            let theme = GroundColours::of(p, BoardGround::Theme);
+            assert_eq!((theme.ground, theme.dot), (p.ground, p.grid_dot));
+        }
+        let luma = |c: ambre_draw::Color| {
+            let [r, g, b, _] = c.to_rgba8().to_u8_array();
+            u32::from(r) + u32::from(g) + u32::from(b)
+        };
+        for (_, tint) in TINTS {
+            let light = GroundColours::of(&LIGHT, BoardGround::Tint(tint));
+            assert_eq!(light, GroundColours::of(&DARK, BoardGround::Tint(tint)));
+            assert_eq!(ambre_draw::list::rgba_of(light.ground), tint);
+            assert!(
+                luma(light.dot) < luma(light.ground),
+                "a light tint takes darker dots"
+            );
+        }
+        let night = GroundColours::of(
+            &LIGHT,
+            BoardGround::Tint(ambre_core::Rgba::from_bits(0x2020_30FF)),
+        );
+        assert!(
+            luma(night.dot) > luma(night.ground),
+            "a dark tint takes lighter dots"
+        );
     }
 
     /// `TOILE-UI-421`: snapping moves a world point to the nearest multiple of
