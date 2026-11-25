@@ -2399,10 +2399,12 @@ async fn the_bubble_publishes_what_it_covers_and_the_box_of_its_mini_video() {
                 (mini_box.x0 + 2.0, mini_box.y0 + 2.0),
                 (mini_box.x1 - 2.0, mini_box.y1 - 2.0),
             ] {
+                let top = at(x, y);
                 assert_eq!(
-                    at(x, y).as_ref(),
+                    top.as_ref(),
                     Some(&mini_el),
-                    "the mini box is topmost at ({x}, {y})"
+                    "the mini box is topmost at ({x}, {y}), not {:?}",
+                    top.as_ref().map(web_sys::Element::class_name)
                 );
             }
         } else {

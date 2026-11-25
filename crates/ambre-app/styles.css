@@ -4875,35 +4875,53 @@ body {
         align-self: flex-start;
     }
 
-    /* The bubble clips what it paints to its own round box, the cover of
-       the mini video included. */
+    /* An open bubble paints no background of its own: each row paints its
+       own, and the box of the mini video between them paints nothing over a
+       picture. The canvas then shows through the box (`CALL-015`). */
     .murmure-call-float[data-mini] {
+        gap: 0;
+        padding: 0;
         overflow: hidden;
+        background: transparent;
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-grip,
+    .murmure-call-float[data-mini] > .murmure-float-faces,
+    .murmure-call-float[data-mini] > .murmure-float-controls {
+        align-self: stretch;
+        background: var(--surface);
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-grip {
+        padding: var(--space-3) var(--space-3) var(--space-2);
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-faces {
+        padding: 0 var(--space-3) var(--space-2) calc(2 * var(--space-3));
+        border-radius: 0;
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-controls {
+        padding: var(--space-2) var(--space-3) var(--space-3);
+    }
+
+    /* The ring of the faces stays inside their row, off the box below. */
+    .murmure-float-faces:focus-visible {
+        outline: var(--focus-width) solid var(--accent);
+        outline-offset: calc(-1 * var(--focus-width));
     }
 
     .murmure-float-mini {
-        position: relative;
-        z-index: -1;
         display: grid;
         place-items: center;
         aspect-ratio: 16 / 9;
-        border-radius: var(--radius-md);
         background: var(--surface-2);
         color: var(--text-dim);
         font-size: var(--font-xs);
     }
 
-    /* Over a picture, nothing of the bubble paints inside the box: the
-       bubble gives up its background, and the shadow of the box paints it
-       everywhere else. The box sits under the other children, so its shadow
-       covers none of them, and no outline of a control reaches into it. */
-    .murmure-call-float[data-mini="video"] {
-        background: transparent;
-    }
-
     .murmure-call-float[data-mini="video"] .murmure-float-mini {
         background: transparent;
-        box-shadow: 0 0 0 100vmax var(--surface);
     }
 }
 
