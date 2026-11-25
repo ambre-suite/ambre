@@ -1180,6 +1180,19 @@ mod tests {
         act: MembershipAct,
         role: Role,
     ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
+        shaped_entry(document, position, who, act, role, |_| {})
+    }
+
+    /// The entry [`signed_entry`] writes, with `shape` applied to it before
+    /// `who` signs it.
+    fn shaped_entry(
+        document: Id<Document>,
+        position: u64,
+        who: Id<User>,
+        act: MembershipAct,
+        role: Role,
+        shape: crate::routes::tests::handler_tests::SlotPart,
+    ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
         use ed25519_dalek::Signer;
         let key = signing_key_of(who);
         let mut entry = ambre_protocol::MembershipEntry {
@@ -1203,6 +1216,7 @@ mod tests {
             elsewhere: ambre_protocol::Elsewhere::Uncapped,
             signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
+        shape(&mut entry);
         entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
             key.sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
@@ -1904,6 +1918,58 @@ mod tests {
         .await;
         assert_eq!(status(answer), StatusCode::BAD_REQUEST);
         assert_eq!(role_on(&state, meta, alice).await, None);
+    }
+
+    /// Holds `SRV-400` at the self-join. A self-join with any part of the
+    /// slot of the cap adds no member and no entry. The same entry with no
+    /// cap lands.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_self_join_with_a_cap_adds_no_member(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        let meta = channel.meta.document_id();
+        open_log(&state, meta, bob).await;
+        let Joinable { role, .. } = joinable(&state, &session(alice), &channel.id)
+            .await
+            .expect("joinable");
+        let request = |entry| {
+            Json::new(JoinChannelRequest {
+                doc_key_enc: ambre_core::Encoded::new([1; 48].to_vec()),
+                entry: Some(entry),
+            })
+        };
+
+        for (name, part) in crate::routes::tests::handler_tests::CAP_SLOT {
+            let entry = shaped_entry(meta, 1, alice, MembershipAct::SelfJoin, role, part);
+            let answer = join_channel(
+                State(state.clone()),
+                session(alice),
+                OpaquePathId::new(channel.id),
+                request(entry),
+            )
+            .await;
+            assert_eq!(
+                status(answer),
+                StatusCode::BAD_REQUEST,
+                "a self-join with {name}"
+            );
+            assert_eq!(role_on(&state, meta, alice).await, None, "{name}");
+            assert_eq!(log_length(&state, meta).await, 1, "{name}");
+        }
+        let entry = signed_entry(meta, 1, alice, MembershipAct::SelfJoin, role);
+        let answer = join_channel(
+            State(state.clone()),
+            session(alice),
+            OpaquePathId::new(channel.id),
+            request(entry),
+        )
+        .await;
+        assert_eq!(status(answer), StatusCode::NO_CONTENT);
+        assert_eq!(log_length(&state, meta).await, 2);
     }
 
     /// The head of the log of `meta` reaches a caller the self-join would

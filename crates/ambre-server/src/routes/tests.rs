@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod handler_tests {
+pub(super) mod handler_tests {
     use axum::Router;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
@@ -1653,6 +1653,121 @@ mod handler_tests {
             "no refused entry joins the log"
         );
 
+        let changed = serde_json::json!({ "role": "viewer", "entry": sealed(change, &owner_key) });
+        let (status, _) =
+            status_and_code(&app, json_request("PATCH", &member, &owner, &changed)).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    /// A change that sets one part of the slot of the cap on an entry.
+    pub(crate) type SlotPart = fn(&mut ambre_protocol::MembershipEntry);
+
+    /// Each part of the slot of the cap, set on an entry that is no revoke.
+    /// The cap a revoke sets, a document cap and the floor of a channel
+    /// revoke (`SYNC-340`).
+    pub(crate) const CAP_SLOT: [(&str, SlotPart); 3] = [
+        ("a cap", |entry| {
+            entry.cap = Some(ambre_core::Seq::<ambre_protocol::messages::DeltaAuthor>::new(2));
+        }),
+        ("a document cap", |entry| {
+            entry.document_caps = vec![ambre_protocol::DocumentCap {
+                document: Id::<Document>::mint(),
+                cap: ambre_core::Seq::<ambre_protocol::messages::DeltaAuthor>::new(2),
+            }];
+        }),
+        ("a floor", |entry| {
+            entry.elsewhere = ambre_protocol::Elsewhere::Zero;
+        }),
+    ];
+
+    /// Holds `SRV-400`. The relay refuses a creation, an invite and a role
+    /// change with any part of the slot of the cap. The caller signs each
+    /// one, and every other field is right. The log keeps nothing of them,
+    /// and the same entries with no cap land.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_cap_on_an_act_but_a_revoke_is_refused(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@cap.test", 53).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@cap.test", 54).await;
+        let doc = Id::<Document>::mint();
+        let doc_id = doc.to_string();
+        let me = (owner_id, &owner_key);
+        let bob = (bob_id, &bob_key);
+        let capped = |mut entry: ambre_protocol::MembershipEntry, part: SlotPart| {
+            part(&mut entry);
+            sealed(entry, &owner_key)
+        };
+
+        let create = entry_at(doc, 0, owner_id, me, MembershipAct::Create, Role::Owner);
+        let creation = |entry| {
+            serde_json::json!({
+                "doc_type": "prose", "document_id": doc_id,
+                "doc_key_enc": base64_encode(&[5u8; 73]), "entry": entry,
+            })
+        };
+        for (name, part) in CAP_SLOT {
+            let body = creation(capped(create.clone(), part));
+            let (status, _) =
+                status_and_code(&app, json_request("POST", "/api/documents", &owner, &body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "a creation with {name}");
+        }
+        let create = sealed(create, &owner_key);
+        let (status, _) = status_and_code(
+            &app,
+            json_request("POST", "/api/documents", &owner, &creation(create.clone())),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let share = format!("/api/documents/{doc_id}/share");
+        let invite = entry_at(doc, 1, owner_id, bob, MembershipAct::Invite, Role::Editor);
+        let invitation = |entry| {
+            serde_json::json!({
+                "invitee_email": "bob@cap.test", "role": "editor",
+                "doc_key_enc": base64_encode(&[9u8; 73]), "key_id": key_id_hex(1),
+                "entry": entry,
+            })
+        };
+        for (name, part) in CAP_SLOT {
+            let body = invitation(capped(invite.clone(), part));
+            let (status, _) =
+                status_and_code(&app, json_request("POST", &share, &owner, &body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "an invite with {name}");
+        }
+        assert_eq!(served_log(&app, &owner, &doc_id).await, [create.as_str()]);
+        let invite = sealed(invite, &owner_key);
+        let (status, _) = status_and_code(
+            &app,
+            json_request("POST", &share, &owner, &invitation(invite.clone())),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let member = format!("/api/documents/{doc_id}/members/{bob_id}");
+        let change = entry_at(
+            doc,
+            2,
+            owner_id,
+            bob,
+            MembershipAct::ChangeRole,
+            Role::Viewer,
+        );
+        for (name, part) in CAP_SLOT {
+            let body =
+                serde_json::json!({ "role": "viewer", "entry": capped(change.clone(), part) });
+            let (status, _) =
+                status_and_code(&app, json_request("PATCH", &member, &owner, &body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "a role change with {name}");
+        }
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [create.as_str(), invite.as_str()],
+            "no refused entry joins the log"
+        );
         let changed = serde_json::json!({ "role": "viewer", "entry": sealed(change, &owner_key) });
         let (status, _) =
             status_and_code(&app, json_request("PATCH", &member, &owner, &changed)).await;
