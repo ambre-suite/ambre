@@ -198,7 +198,7 @@ pub(super) fn run(verb: CallVerb, relay: MurmureRelay) {
 
 /// One icon of the call: its tooltip names the command of `verb`, and its press performs `verb`
 /// (the Murmure calls spec). A toggle passes the verb of its state, so its tooltip names
-/// what a press does now (`CHROME-254`). One component serves every icon, so the page compiles
+/// what a press does now (`CHROME-256`). One component serves every icon, so the page compiles
 /// one view of an icon of the call.
 #[component]
 fn CallIcon(

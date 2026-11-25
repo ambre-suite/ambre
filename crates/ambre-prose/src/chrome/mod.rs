@@ -482,7 +482,8 @@ pub fn ProseFormatBar(
 }
 
 /// The glyph a command of the page declares, resolved to its asset.
-pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Icon> {
+#[must_use]
+pub fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Icon> {
     Some(match command.icon?.as_str() {
         "format-bold" => icondata::BsTypeBold,
         "format-italic" => icondata::BsTypeItalic,
@@ -493,6 +494,10 @@ pub(crate) fn icon_of(command: &ambre_commands::Command) -> Option<icondata::Ico
         "format-subscript" => icondata::MdiFormatSubscript,
         "format-clear" => icondata::MdiFormatClear,
         "file-document-edit-outline" => icondata::MdiFileDocumentEditOutline,
+        "format-text" => icondata::MdiFormatText,
+        "image-outline" => icondata::MdiImageOutline,
+        "table-plus" => icondata::MdiTablePlus,
+        "border-horizontal" => icondata::MdiBorderHorizontal,
         _ => return None,
     })
 }

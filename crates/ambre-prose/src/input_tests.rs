@@ -3594,3 +3594,27 @@ fn the_suggestion_mode_command_turns_the_mode_on_then_off() {
         assert_eq!(rig.logic.is_suggesting(), expected == EditMode::Suggesting);
     }
 }
+
+/// `CHROME-254`: text, a table and a separator of the creation bar each
+/// land after the block the caret sits in, and need no selection. With no
+/// caret, the bar inserts nothing.
+#[test]
+fn each_insert_of_the_creation_bar_lands_after_the_caret_block() {
+    use crate::commands::{INSERT_SEPARATOR, INSERT_TABLE, INSERT_TEXT};
+    use crate::events::BlockType;
+    for (id, kind) in [
+        (INSERT_TEXT, BlockType::Paragraph),
+        (INSERT_TABLE, BlockType::Table),
+        (INSERT_SEPARATOR, BlockType::HRule),
+    ] {
+        let mut rig = Rig::new(&["first", "last"]);
+        assert_eq!(rig.format(id), None, "{id:?} with no caret");
+        let first = rig.blocks()[0];
+        caret_at(&mut rig, first, 2);
+        assert!(rig.format(id).is_some(), "{id:?}");
+        let blocks = rig.blocks();
+        assert_eq!(blocks.len(), 3, "{id:?}");
+        assert_eq!(blocks.first(), Some(&first));
+        assert_eq!(rig.logic.block_type_of(&blocks[1]), Some(kind), "{id:?}");
+    }
+}

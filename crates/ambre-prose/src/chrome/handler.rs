@@ -30,7 +30,8 @@ use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, review_intent};
 /// The signal Prose's chords act through. `Copy`, so the handler is too.
 #[derive(Clone, Copy)]
 pub struct ProseHandler {
-    /// The formatting id the view drains, shared with the format bar.
+    /// The formatting or insert id the view drains, shared with the format
+    /// bar and the creation bar.
     pub format: RwSignal<Option<StaticKey<Commands>>>,
     /// The suggestion at the caret, as the view last published it.
     pub at_caret: RwSignal<Option<HoveredSuggestion>>,
@@ -81,7 +82,9 @@ impl CommandHandler for ProseHandler {
         };
         // A menu entry that formats lands where a control or a chord
         // leaves its id; the view drains it (`CHROME-214`).
-        if formats_selection(id) {
+        // A command of the creation bar that inserts a block lands there
+        // too, and the view resolves it at the caret (`CHROME-180`).
+        if formats_selection(id) || crate::view::slash::inserted(id).is_some() {
             self.format.set(Some(id));
             return Vec::new();
         }

@@ -426,7 +426,7 @@ impl Fill {
     }
 
     /// The verb a press of the fill button performs, whose command names the button
-    /// (`CHROME-254`).
+    /// (`CHROME-256`).
     #[must_use]
     pub const fn verb(self) -> ambre_commands::CallVerb {
         match self {

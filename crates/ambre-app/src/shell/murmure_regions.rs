@@ -583,7 +583,7 @@ fn every_icon_reaches_a_call_command(root: &web_sys::Element) -> u32 {
 
 /// Each icon of the call controls, of the call bubble and of the ring reaches a command of the
 /// Murmure table (`MURMURE-730`). Its tooltip names that command (`CHROME-185`, `CHROME-186`). A
-/// toggle names the command its press runs now: mute reads Unmute once muted (`CHROME-254`).
+/// toggle names the command its press runs now: mute reads Unmute once muted (`CHROME-256`).
 #[wasm_bindgen_test]
 async fn each_icon_of_the_call_names_its_command_in_a_tooltip() {
     use super::call_bar::{CallFloat, RingAlert};

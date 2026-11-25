@@ -319,7 +319,7 @@ fn pointer(el: &web_sys::Element, name: &str, kind: &str) {
     el.dispatch_event(&ev).unwrap();
 }
 
-/// `CHROME-254`: a toggle passes the tip of the command its press runs now. The name, the
+/// `CHROME-256`: a toggle passes the tip of the command its press runs now. The name, the
 /// accessible name, the chord, the description and the reach follow the state.
 #[wasm_bindgen_test]
 async fn a_toggle_icon_names_the_command_its_press_runs() {

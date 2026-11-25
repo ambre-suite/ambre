@@ -227,7 +227,7 @@ fn fixed_origin(el: &web_sys::Element) -> Point<Px<Css>> {
 ///
 /// `tip` names the command the icon reaches. It gives the name, the chord, the description and
 /// the reach, in place of `label`, `chord`, `description` and `reach`. It may follow a
-/// state: a toggle names the command its press runs now (`CHROME-254`).
+/// state: a toggle names the command its press runs now (`CHROME-256`).
 ///
 /// `pressed` makes it a toggle. `checked` makes it one radio of a group, as a
 /// segment of a [`SegmentBar`] is. `expanded` makes it the opener of a list or

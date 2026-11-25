@@ -13,6 +13,7 @@ deployment runs on any host".
 | `compose/Caddyfile` | the web server: the certificate, the client, and the routes to the relay, the object store and the SFU |
 | `compose/garage.toml` | the object store |
 | `compose/caddy_headers.py` | writes the headers file of a client build as Caddy directives |
+| `chart/` | the Helm chart of a Kubernetes cluster (`SRV-309`), and `chart/README.md` says how to install it |
 
 ## Run Ambre on one server
 

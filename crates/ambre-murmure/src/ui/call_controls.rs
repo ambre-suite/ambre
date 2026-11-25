@@ -143,7 +143,7 @@ impl Camera {
     }
 
     /// The verb a press of the button performs, whose command names the button
-    /// (`CHROME-254`).
+    /// (`CHROME-256`).
     pub fn verb(self) -> ambre_commands::CallVerb {
         match self.press() {
             CameraPress::Stop => ambre_commands::CallVerb::CameraOff,
@@ -251,7 +251,7 @@ impl Share {
     }
 
     /// The verb a press of the button performs, whose command names the button
-    /// (`CHROME-254`).
+    /// (`CHROME-256`).
     pub fn verb(self) -> ambre_commands::CallVerb {
         match self.press() {
             SharePress::Stop => ambre_commands::CallVerb::StopSharing,

@@ -17,6 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 132 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 31 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | implemented | 161 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 20 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 23 |  |
@@ -43,7 +44,6 @@
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | partial | 161 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 40 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 18 |  |
@@ -57,7 +57,7 @@
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
 | `server` | The one process every client talks to. | partial | 136 | 1 |
-| `shell` | Where each command of a document page lives. | partial | 99 |  |
+| `shell` | Where each command of a document page lives. | partial | 101 |  |
 | `sync` | The one part of the client that talks to the network. | partial | 91 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
@@ -66,4 +66,4 @@
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 26 implemented, 22 partial, 2 design-only. 1939 contract rows, 14 loose.**
+**50 features: 27 implemented, 21 partial, 2 design-only. 1941 contract rows, 14 loose.**

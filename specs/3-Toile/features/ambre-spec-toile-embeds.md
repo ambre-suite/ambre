@@ -243,7 +243,7 @@ routes every document-tagged event whose id is a live child there instead (`TOIL
 
 ## 4. SURFACE
 
-Two File-menu entries place an embed (`TOILE-086`, `TOILE-087`). Both are shell intents, and the
+Two entries of the creation bar place an embed (`TOILE-086`, `TOILE-087`). Both are shell intents, and the
 launcher owns the dialog. A web address is typed into the DOM, and the document list is the
 launcher's alone. What crosses back into the board is the answer -- an address or a reference --
 never the gesture, exactly as a dropped file does.
@@ -274,8 +274,8 @@ the user comes after that check, and never widens it.
 
 | Trigger | What happens |
 |---|---|
-| File -> "Embed a document..." | the launcher's document list opens, this board excluded; picking one mints a `doc_embed` at the centre of the view holding that document's reference (`TOILE-086`, `TOILE-225`) |
-| File -> "Embed a web page..." | a field takes an address; only `https` survives, and a refusal is read beside the field rather than found on the board (`TOILE-087`, `TOILE-088`) |
+| "Embed a document..." in the creation bar | the launcher's document list opens, this board excluded; picking one mints a `doc_embed` at the centre of the view holding that document's reference (`TOILE-086`, `TOILE-225`) |
+| "Embed a web page..." in the creation bar | a field takes an address; only `https` survives, and a refusal is read beside the field rather than found on the board (`TOILE-087`, `TOILE-088`) |
 | a web embed on screen, its site never chosen | no frame mounts and no request leaves; a prompt over the placeholder names the site and offers "Load once", "Always for this site" and "Never for this site" (`TOILE-299`, `TOILE-300`) |
 | a web embed on screen, its site loaded always or this embed loaded once | a sandboxed frame is mounted over the canvas where the board paints its placeholder, laid out once at the element's world size and moved by the board's own transform (`TOILE-088`) |
 | a web embed on screen, its site refused | no frame mounts; a line says that pages of the site do not load on this device, beside "Ask again" (`TOILE-303`) |

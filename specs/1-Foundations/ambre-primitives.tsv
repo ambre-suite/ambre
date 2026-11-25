@@ -5074,4 +5074,5 @@ ambre-prose | src/view/panel.rs | crate::view::panel | ListChoice::label() | ret
 ambre-prose | src/view/panel.rs | crate::view::panel | style_label() | ret | &'static str	free-text	the name of a paragraph style a person reads
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::is_swept() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/channel/sweeping.rs | crate::logic::channel::sweeping | ChannelState::sweep_arrival() | ret | bool	generic	state flag/predicate
+ambre-toile | src/chrome/floatbar.rs | crate::chrome::floatbar | property_title() | ret | String	free-text	the label a person reads in the tooltip of a colour trigger
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | CallIcon(class) | param | &'static str	free-text	the class an icon of the call gives its button for the stylesheet and the tests, as IconButton(class)

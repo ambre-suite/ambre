@@ -402,39 +402,38 @@ body {
     opacity: 1;
 }
 
-/* Toile tool palette / primary toolbar (toile-ui SS5quinquies.A). It carries the
-   `.ambre-commandbar` class too, so every button / hover / active-fill / `.sep` /
-   tooltip rule above applies unchanged -- visually identical to the Trame bar. This
-   modifier only re-docks it as a floating vertical palette. It floats inside the
-   content cell, so a context panel docked to the left covers none of it. */
-.ambre-tool-palette {
+/* The creation bar (`CHROME-152`, `CHROME-153`): one bar of what a page can
+   add, the same in Prose, Trame and Toile. It floats centred at the bottom of
+   the content cell, so a context panel on either side covers none of it. */
+.ambre-creation-bar {
     position: absolute;
-    top: 50%;
-    left: 8px;
-    transform: translateY(-50%);
+    left: 50%;
+    bottom: var(--space-6);
+    transform: translateX(-50%);
     z-index: 60;
-    flex-direction: column;
-    min-height: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-low);
 }
 
-/* The shared `.sep` is a vertical rule in the horizontal bar; here it must run
-   horizontally across the vertical stack. */
-.ambre-tool-palette .sep {
-    width: auto;
-    height: 1px;
+/* A rule between two groups of the bar, as the board's tools and its embeds. */
+.ambre-creation-bar .sep {
+    width: 1px;
     align-self: stretch;
-    margin: var(--space-2) var(--space-2);
+    margin: var(--space-1) var(--space-2);
+    background: var(--border);
 }
 
-/* The shared tooltip sits below the button in the docked bar; on a left-docked
-   vertical palette it reads better to its right. */
-.ambre-tool-palette :is(button, select)[aria-label]:not(.ambre-ctx-menu *, .ambre-icon-button)::after {
-    top: 50%;
-    left: calc(100% + 6px);
-    transform: translateY(-50%);
+/* The bar sits on the bottom edge, so a tooltip rises above its button
+   rather than hanging under it. */
+.ambre-creation-bar .ambre-tip {
+    margin-top: 0;
+    transform: translate(-50%, calc(-100% - var(--control-lg) - var(--space-3)));
 }
 
 /* The format bar over a selection (`CHROME-105`), which Prose and Murmure hand
