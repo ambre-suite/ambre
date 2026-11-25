@@ -53,6 +53,48 @@ async fn switch_theme(page: &Page) {
         .await;
 }
 
+/// Clicks the control of the context panel named `label`, once it shows.
+async fn press(page: &Page, label: &str) {
+    page.browser
+        .wait_for(
+            label,
+            &format!(
+                "const b = document.querySelector('.ambre-ctx-panel [aria-label=' + JSON.stringify({}) + ']'); \
+                 if (!b) return false; b.click(); return true;",
+                Value::String(label.to_owned())
+            ),
+            STEP,
+        )
+        .await;
+}
+
+/// Waits until the context panel shows `attribute` at `value`: its side or
+/// its fold.
+async fn wait_panel(page: &Page, attribute: &str, value: &str) {
+    page.browser
+        .wait_for(
+            &format!("the panel {attribute} {value}"),
+            &format!(
+                "const p = document.querySelector('.ambre-ctx-panel'); \
+                 return !!p && p.getAttribute({}) === {};",
+                Value::String(attribute.to_owned()),
+                Value::String(value.to_owned())
+            ),
+            STEP,
+        )
+        .await;
+}
+
+/// Docks the panel to the left, as a person does.
+async fn dock_left(page: &Page) {
+    press(page, "Dock the panel to the left").await;
+}
+
+/// Collapses the panel of the application the page shows.
+async fn collapse(page: &Page) {
+    press(page, "Collapse the panel").await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,9 +103,10 @@ mod tests {
 
     use crate::relay::Relay;
 
-    /// `SETTINGS-012`, `SETTINGS-023`: a theme switched on one device of an
-    /// account shows on the other, through the relay. A switch back on the
-    /// second device shows on the first.
+    /// `SETTINGS-012`, `SETTINGS-041`: a theme switched on one device of an
+    /// account shows on the other, through the relay, and a switch back on
+    /// the second shows on the first. The side of the panel follows the
+    /// account in every application, and its fold in one application alone.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -88,5 +131,21 @@ mod tests {
         switch_theme(&phone).await;
         wait_theme(&phone, &first).await;
         wait_theme(&laptop, &first).await;
+
+        // One side for every application (`SETTINGS-041`).
+        wait_panel(&phone, "data-side", "right").await;
+        dock_left(&laptop).await;
+        wait_panel(&laptop, "data-side", "left").await;
+        wait_panel(&phone, "data-side", "left").await;
+
+        // One fold per application: Trame folds on the phone, and Prose stays
+        // open on the laptop until it opens Trame.
+        collapse(&phone).await;
+        wait_panel(&phone, "data-fold", "rail").await;
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        wait_panel(&laptop, "data-fold", "open").await;
+        laptop.open_new("trame").await;
+        wait_panel(&laptop, "data-fold", "rail").await;
+        wait_panel(&laptop, "data-side", "left").await;
     }
 }
