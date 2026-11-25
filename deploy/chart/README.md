@@ -106,8 +106,13 @@ A deployment with a seed of its own must build its own client, under `images.web
 draws the seed and prints its public half, `thread-link-key`. Build the web target of
 `deploy/Dockerfile` with `--build-arg AMBRE_THREAD_LINK_KEY=<that key>`. A release build fails
 without the key, or with the development key. The relay checks its seed against
-`thread-link-key` and refuses to start under another key (`SRV-364`). It cannot see the key that
-the client it serves pins: a published client under a seed of its own names no thread.
+`thread-link-key` and refuses to start under another key (`SRV-364`).
+
+The web image keeps the key its client pins in `/etc/ambre/thread-link-key` (`SRV-431`). Before
+Caddy starts, the init container `link-key` of the web pod compares that key with
+`thread-link-key`. Under another key, the pod stops, and the log of `link-key` names both keys
+(`SRV-430`). Read it with `kubectl logs <web pod> -c link-key`. No value of the chart turns the
+comparison off: a published web image beside a seed of its own names no thread.
 
 ## Sign-in
 

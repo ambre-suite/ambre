@@ -86,7 +86,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
 # `AMBRE_THREAD_LINK_KEY` names the public link key of the relay that serves
 # this client, in hex. A release refuses to build without one, or with the
 # development key (`ZK-057`, `scripts/link_key.py`). A `DEV_LOGIN` build pins
-# the development key when it names none.
+# the development key when it names none. Each build writes the key it pins
+# to `thread-link-key`, which the web pod of the chart compares with the key
+# of its Secret before Caddy starts (`SRV-430`, `SRV-431`).
 FROM toolchain AS web-build
 # The trunk that `scripts/client_digest.py` pins: another trunk writes another page.
 ARG TRUNK_VERSION=0.22.1
@@ -102,10 +104,13 @@ ARG AMBRE_THREAD_LINK_KEY=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
     --mount=type=cache,target=/src/target,id=target-web,sharing=locked \
     set -eu; \
+    mkdir -p /out; \
     if [ -n "${DEV_LOGIN}" ]; then \
+        python3 scripts/link_key.py pinned --dev > /out/thread-link-key; \
         trunk build --cargo-profile=wasm-release --features dev-login --dist /out/dist; \
     else \
         python3 scripts/link_key.py check; \
+        python3 scripts/link_key.py pinned > /out/thread-link-key; \
         trunk build --release --dist /out/dist; \
     fi; \
     python3 deploy/compose/caddy_headers.py /out/dist/_headers > /out/headers.caddy
@@ -152,6 +157,8 @@ FROM caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac523
 RUN cp /usr/bin/caddy /tmp/caddy && mv /tmp/caddy /usr/bin/caddy
 COPY --from=web-build /out/dist /srv/ambre
 COPY --from=web-build /out/headers.caddy /etc/caddy/headers.caddy
+# The link key the client pins, which no request reads (`SRV-431`).
+COPY --from=web-build /out/thread-link-key /etc/ambre/thread-link-key
 COPY deploy/compose/Caddyfile /etc/caddy/Caddyfile
 
 # The one-shot preparation of the object store: its layout, the key of the

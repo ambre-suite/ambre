@@ -47,6 +47,29 @@ class Check(unittest.TestCase):
         self.assertIsNone(lk.refusal(KEY.upper(), DEV))
 
 
+class Pinned(unittest.TestCase):
+    """`SRV-431`: the key each build writes is the key the client pins."""
+
+    def test_a_release_pins_the_named_key_in_lowercase(self) -> None:
+        self.assertEqual(lk.pinned(KEY.upper(), DEV, dev_build=False), (KEY, None))
+
+    def test_a_release_writes_no_key_where_the_check_fails(self) -> None:
+        for value in (None, "", "zz" * 32, DEV):
+            with self.subTest(value=value):
+                key, why = lk.pinned(value, DEV, dev_build=False)
+                self.assertIsNone(key)
+                self.assertIsNotNone(why)
+
+    def test_a_dev_build_with_no_key_pins_the_dev_key(self) -> None:
+        for value in (None, ""):
+            with self.subTest(value=value):
+                self.assertEqual(lk.pinned(value, DEV, dev_build=True), (DEV, None))
+
+    def test_a_dev_build_pins_the_key_it_names(self) -> None:
+        self.assertEqual(lk.pinned(KEY, DEV, dev_build=True), (KEY, None))
+        self.assertIsNone(lk.pinned("zz" * 32, DEV, dev_build=True)[0])
+
+
 class Lint(unittest.TestCase):
     """`ZK-057`: each release build of the tree runs the check first."""
 
@@ -63,6 +86,18 @@ class Lint(unittest.TestCase):
         planted = DOCKERFILE.replace(f"python3 {lk.CHECK}; \\", "true; \\")
         self.assertNotEqual(planted, DOCKERFILE)
         self.assertTrue(any("before" in f for f in lk.check_dockerfile(planted)))
+
+    def test_a_build_that_writes_no_pinned_key_fails(self) -> None:
+        for write in (f"python3 {lk.PINNED} --dev > {lk.BUILT}; \\", f"python3 {lk.PINNED} > {lk.BUILT}; \\"):
+            with self.subTest(write=write):
+                planted = DOCKERFILE.replace(write, "true; \\")
+                self.assertNotEqual(planted, DOCKERFILE)
+                self.assertTrue(any("writes" in f for f in lk.check_dockerfile(planted)))
+
+    def test_a_web_image_without_the_pinned_key_fails(self) -> None:
+        planted = DOCKERFILE.replace(f"COPY --from=web-build {lk.BUILT} {lk.KEPT}", "")
+        self.assertNotEqual(planted, DOCKERFILE)
+        self.assertTrue(any("no COPY" in f for f in lk.check_dockerfile(planted)))
 
     def test_a_digest_without_the_check_fails(self) -> None:
         planted = release()

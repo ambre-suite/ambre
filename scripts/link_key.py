@@ -16,6 +16,13 @@ of these:
 * the development key, `DEV_LINK_KEY` of
   `crates/ambre-protocol/src/thread_erasure.rs`, read from that file.
 
+`pinned` prints the key the client build pins, in lowercase hex, and the web
+image keeps it in `/etc/ambre/thread-link-key` (`SRV-431`). The web pod of the
+chart compares it with the key of its Secret (`SRV-430`). A release build pins
+the key `check` passes, and fails where `check` fails. With `--dev`, for a
+build of the sign-in by bare name, no key or an empty one prints the
+development key, which that build then pins.
+
 `lint` reads `deploy/Dockerfile` and `.github/workflows/release.yml`, and
 fails on each of these:
 
@@ -25,7 +32,10 @@ fails on each of these:
 * a job of the release that runs `just reproducible` with no `check` step
   before it, or whose `AMBRE_THREAD_LINK_KEY` is not `vars.THREAD_LINK_KEY`;
 * an image build of the release that passes no `AMBRE_THREAD_LINK_KEY` from
-  `vars.THREAD_LINK_KEY` as a build argument.
+  `vars.THREAD_LINK_KEY` as a build argument;
+* a `trunk build` of the `web-build` stage that no `pinned` into
+  `/out/thread-link-key` precedes in its `RUN`, or a `web` stage that does not
+  copy that file to `/etc/ambre/thread-link-key`.
 
 The key is public, so a repository variable holds it, never a secret. The
 seed stays with the deployment. The build of the crate refuses a malformed
@@ -54,6 +64,10 @@ PROTOCOL = ROOT / "crates/ambre-protocol/src/thread_erasure.rs"
 VARIABLE = "AMBRE_THREAD_LINK_KEY"
 SOURCE = "${{ vars.THREAD_LINK_KEY }}"
 CHECK = "scripts/link_key.py check"
+PINNED = "scripts/link_key.py pinned"
+# Where the build writes the key it pins, and where the web image keeps it.
+BUILT = "/out/thread-link-key"
+KEPT = "/etc/ambre/thread-link-key"
 HEX = re.compile(r"[0-9a-fA-F]{64}")
 
 
@@ -77,6 +91,24 @@ def refusal(value: str | None, dev: str) -> str | None:
     if value.lower() == dev:
         return f"{VARIABLE} names the development key, under which any member signs a receipt"
     return None
+
+
+def pinned(value: str | None, dev: str, dev_build: bool) -> tuple[str | None, str | None]:
+    """The key a client build pins, in lowercase hex, and why it pins none.
+
+    A release build pins the key `refusal` passes. A build of the sign-in by
+    bare name pins the named key, or the development key when it names none.
+    """
+    if dev_build and not value:
+        return dev, None
+    if dev_build:
+        if not HEX.fullmatch(value):
+            return None, f"{VARIABLE} must be 64 hex digits"
+        return value.lower(), None
+    why = refusal(value, dev)
+    if why is not None:
+        return None, why
+    return value.lower(), None
 
 
 def stage(dockerfile: str, name: str) -> list[str]:
@@ -109,6 +141,17 @@ def check_dockerfile(dockerfile: str) -> list[str]:
         before = line[: line.index("trunk build --release")]
         if CHECK not in before:
             faults.append(f"Dockerfile web-build: a release builds before `{CHECK}`")
+    written = re.compile(rf"{re.escape(PINNED)}( --dev)? > {re.escape(BUILT)}")
+    for line in (line for line in lines if "trunk build" in line):
+        # Each build reads the write between it and the build before it, so
+        # the write of one branch never passes the build of the other.
+        starts = [m.start() for m in re.finditer(r"trunk build", line)]
+        for begin, at in zip([0, *starts], starts):
+            if not written.search(line[begin:at]):
+                faults.append(f"Dockerfile web-build: a client builds before `{PINNED}` writes {BUILT}")
+    kept = rf"\s*COPY\s+--from=web-build\s+{re.escape(BUILT)}\s+{re.escape(KEPT)}\s*$"
+    if not any(re.match(kept, line) for line in stage(dockerfile, "web")):
+        faults.append(f"Dockerfile web: no COPY of {BUILT} to {KEPT}, so the pod cannot read the key it pins")
     return faults
 
 
@@ -154,12 +197,19 @@ def main(args: list[str]) -> int:
             print(f"link_key: {why} (ZK-057)", file=sys.stderr)
             return 1
         return 0
+    if args in (["pinned"], ["pinned", "--dev"]):
+        key, why = pinned(os.environ.get(VARIABLE), dev_key(PROTOCOL.read_text()), args == ["pinned", "--dev"])
+        if key is None:
+            print(f"link_key: {why} (ZK-057)", file=sys.stderr)
+            return 1
+        print(key)
+        return 0
     if args == ["lint"]:
         faults = check_dockerfile(DOCKERFILE.read_text()) + check_release(yaml.safe_load(RELEASE.read_text()))
         for fault in faults:
             print(f"link_key: {fault} (ZK-057)", file=sys.stderr)
         return 1 if faults else 0
-    print("usage: link_key.py check | lint", file=sys.stderr)
+    print("usage: link_key.py check | pinned [--dev] | lint", file=sys.stderr)
     return 2
 
 

@@ -95,6 +95,37 @@ spec:
         checksum/caddyfile: {{ printf "%s%s%s" $domain $tls (toJson .Values.garage.enabled) | sha256sum }}
     spec:
       {{- include "ambre.podSecurity" (dict "uid" 1000) | nindent 6 }}
+      # The client counts the receipts of the one link key its build pins
+      # (`ZK-057`), and the relay signs under the seed of `thread-link-key`
+      # (`SRV-364`). Under another key, the pod stops here and names both
+      # (`SRV-430`). An image with no pinned key stops too.
+      initContainers:
+        - name: link-key
+          image: {{ include "ambre.image" $c }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          env:
+            {{- include "ambre.secretEnv" (dict "root" . "name" "THREAD_LINK_KEY" "key" "thread-link-key") | nindent 12 }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              file=/etc/ambre/thread-link-key
+              if [ ! -s "$file" ]; then
+                echo "link key: the web image pins no key in $file; build it from deploy/Dockerfile" >&2
+                exit 1
+              fi
+              pinned=$(tr -d '[:space:]' < "$file" | tr 'A-F' 'a-f')
+              named=$(printf '%s' "$THREAD_LINK_KEY" | tr -d '[:space:]' | tr 'A-F' 'a-f')
+              if [ "${#pinned}" -ne 64 ] || [ "$pinned" != "$named" ]; then
+                echo "link key: the client pins $pinned, and thread-link-key of the Secret names $named; build the web image with --build-arg AMBRE_THREAD_LINK_KEY=$named" >&2
+                exit 1
+              fi
+              echo "link key: the client pins $pinned, the key of thread-link-key"
+          {{- with .Values.web.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
       containers:
         - name: web
           image: {{ include "ambre.image" $c }}
