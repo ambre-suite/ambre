@@ -893,6 +893,18 @@ pub(crate) mod tests {
             Some(body.clone()),
             "a body run keeps the body font"
         );
+        // The shaper sets the heading in the font, and the body in its own.
+        let shaped = |state: &ProseState, block: &BlockId| {
+            crate::layout::measure::EffectiveStyle::resolve(
+                &state.defaults(),
+                &crate::doc::blocks(state.document()),
+                &crate::events::tree_id(*block),
+                ambre_core::Weight::Regular,
+            )
+            .font_family
+        };
+        assert_eq!(shaped(&state, &first), heading);
+        assert_eq!(shaped(&state, &second), body);
         let lora = FontFamily::from_label("Lora");
         mark(
             &mut state,

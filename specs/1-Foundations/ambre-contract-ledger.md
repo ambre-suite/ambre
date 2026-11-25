@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5182 rows: 4785 shipped, of which 14 loose. 397 unbuilt.**
+**5184 rows: 4790 shipped, of which 14 loose. 394 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1782 | 583 | 996 | 846 | 564 | 4771 |
+| `verified` | 1785 | 583 | 996 | 848 | 564 | 4776 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 146 | 42 | 21 | 21 | 167 | 397 |
+| `unimplemented` | 144 | 42 | 21 | 20 | 167 | 394 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -82,7 +82,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-undo.md` | 25 | 25 | 25 |  |  |
-| `ambre-spec-user-settings.md` | 40 | 37 | 37 |  | 3 |
+| `ambre-spec-user-settings.md` | 41 | 40 | 40 |  | 1 |
 | `ambre-spec-zero-knowledge.md` | 55 | 54 | 53 | 1 | 1 |
 | `ambre-spec-zoom.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
@@ -156,7 +156,7 @@
 | `ambre-spec-prose-import-export.md` | 104 | 104 | 104 |  |  |
 | `ambre-spec-prose-inline-styles.md` | 31 | 29 | 29 |  | 2 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
-| `ambre-spec-prose-page-rendering.md` | 25 | 23 | 23 |  | 2 |
+| `ambre-spec-prose-page-rendering.md` | 26 | 25 | 25 |  | 1 |
 | `ambre-spec-prose-pagination.md` | 59 | 59 | 59 |  |  |
 | `ambre-spec-prose-pdf-export.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-prose-ruler.md` | 9 | 9 | 9 |  |  |
@@ -281,7 +281,7 @@
 | `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..102,111..129 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311,313,337..338 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
-| `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210,236,255 |
+| `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210,236,255,280 |
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123,125,127..128,136..143 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039,103..104 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076,228..230,257 |
@@ -368,6 +368,6 @@
 | `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154,286..288,290..291,298..301 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064,067 |
 | `ambre-spec-undo.md` | UNDO-001..025 |
-| `ambre-spec-user-settings.md` | SETTINGS-001..040 |
+| `ambre-spec-user-settings.md` | SETTINGS-001..041 |
 | `ambre-spec-zero-knowledge.md` | ZK-001..055 |
 | `ambre-spec-zoom.md` | ZOOM-001..011 |
