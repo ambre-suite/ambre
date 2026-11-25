@@ -55,7 +55,7 @@ fn prop(
 
 /// The label of the property of `id`, as a control names it.
 fn label_of(id: ambre_core::StaticKey<ambre_core::Properties>) -> String {
-    (prop(id).title)(&ambre_chrome::commands::Locale::En).into_string()
+    prop(id).title.pick(&ambre_chrome::language()).into_string()
 }
 
 /// The title and the sections of the page's context panel.

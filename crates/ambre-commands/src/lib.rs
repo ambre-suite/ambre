@@ -24,13 +24,52 @@ use ambre_core::{Categories, Commands, Count, Icons, NarrowCount, Properties, St
 use std::collections::HashMap;
 use std::hash::Hash;
 
-/// Locale selector for command labels. Minimal today (the two shipping UI
-/// languages); extend as i18n grows.
+/// The interface language a person reads the chrome in: one variant per
+/// language that ships (`SETTINGS-024`, `SETTINGS-033`). English is the
+/// default, the language of every label at its declaration.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Locale {
     #[default]
-    Fr,
     En,
+    Fr,
+}
+
+impl Locale {
+    /// Every language that ships, in the order a picker lists them.
+    pub const ALL: [Self; 2] = [Self::En, Self::Fr];
+}
+
+/// The words of one label in every language that ships, as data. One
+/// shared [`TitleWords::pick`] reads every label of the workspace: a
+/// function per label cost Main about 50 bytes each (`ambre-spec-budgets.md`
+/// section 5). Adding a language adds a field, so a table that forgets the
+/// new language does not compile.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TitleWords {
+    /// The English words, the language of the declaration.
+    pub en: &'static str,
+    /// The French words.
+    pub fr: &'static str,
+}
+
+impl TitleWords {
+    /// The title in `locale`, as a person reads it.
+    #[must_use]
+    pub fn pick(&self, locale: &Locale) -> ambre_core::Validated<CommandTitle> {
+        ambre_core::Validated::new(match locale {
+            Locale::En => self.en,
+            Locale::Fr => self.fr,
+        })
+    }
+
+    /// The same words as the description of a command (`CHROME-185`).
+    #[must_use]
+    pub fn describe(&self, locale: &Locale) -> ambre_core::Validated<CommandDescription> {
+        ambre_core::Validated::new(match locale {
+            Locale::En => self.en,
+            Locale::Fr => self.fr,
+        })
+    }
 }
 
 /// The label of a command in one locale, which a person reads in a menu or
@@ -66,14 +105,11 @@ impl ambre_core::Displayed for RegionName {}
 /// region does not compile:
 ///
 /// ```compile_fail,E0063
-/// use ambre_commands::{Command, CommandTitle, Locale};
-/// use ambre_core::{Categories, Commands, StaticKey, Validated};
-/// fn title(_: &Locale) -> Validated<CommandTitle> {
-///     Validated::new("Bold")
-/// }
+/// use ambre_commands::{Command, TitleWords};
+/// use ambre_core::{Categories, Commands, StaticKey};
 /// const BOLD: Command = Command {
 ///     id: StaticKey::<Commands>::new("t.format.bold"),
-///     title,
+///     title: TitleWords { en: "Bold", fr: "Gras" },
 ///     icon: None,
 ///     keybindings: &[],
 ///     category: StaticKey::<Categories>::new("format"),
@@ -161,9 +197,9 @@ pub enum CallVerb {
 /// expose them through [`CommandSource`].
 pub struct Command {
     pub id: StaticKey<Commands>,
-    /// Localized label. A function (not a string) so labels stay i18n-driven
-    /// without the registry owning a translation table.
-    pub title: fn(&Locale) -> ambre_core::Validated<CommandTitle>,
+    /// The label in every language that ships, read through
+    /// [`TitleWords::pick`] in the interface language (`SETTINGS-033`).
+    pub title: TitleWords,
     pub icon: Option<StaticKey<Icons>>,
     /// Every chord the command answers, the announced one first. A slice and
     /// not one chord, because a command may answer two. Redo takes
@@ -175,9 +211,10 @@ pub struct Command {
     /// so a command without a home does not compile.
     pub home: Home,
     /// One line the tooltip of the icon shows under the name, where the name
-    /// is not enough (`CHROME-185`). A function of the locale, as the title.
-    /// `None` for a command its name describes.
-    pub description: Option<fn(&Locale) -> ambre_core::Validated<CommandDescription>>,
+    /// is not enough (`CHROME-185`). Its words in every language, as the
+    /// title, read through [`TitleWords::describe`]. `None` for a command its
+    /// name describes.
+    pub description: Option<TitleWords>,
 }
 
 impl Command {
@@ -197,8 +234,8 @@ impl Command {
 /// construction, so no description can file it elsewhere.
 pub struct Property {
     pub id: StaticKey<Properties>,
-    /// Localized label, as a command's.
-    pub title: fn(&Locale) -> ambre_core::Validated<CommandTitle>,
+    /// The label in every language that ships, as a command's.
+    pub title: TitleWords,
     pub icon: Option<StaticKey<Icons>>,
 }
 
@@ -584,7 +621,7 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
             defects.push(TableDefect::DescribedTwice(cmd.id));
         }
         for locale in [Locale::Fr, Locale::En] {
-            if (cmd.title)(&locale).as_str().trim().is_empty() {
+            if cmd.title.pick(&locale).as_str().trim().is_empty() {
                 defects.push(TableDefect::Unlabelled(cmd.id, locale));
             }
         }
@@ -596,7 +633,7 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
         }
         if let Some(description) = cmd.description {
             for locale in [Locale::Fr, Locale::En] {
-                if description(&locale).as_str().trim().is_empty() {
+                if description.describe(&locale).as_str().trim().is_empty() {
                     defects.push(TableDefect::BlankDescription(cmd.id, locale));
                 }
             }
@@ -720,26 +757,22 @@ mod tests {
         assert_eq!(shared::zoom_step(Key::Char(KeyChar::Z), ctrl), None);
     }
 
-    fn bold_title(l: &Locale) -> ambre_core::Validated<CommandTitle> {
-        match l {
-            Locale::Fr => ambre_core::Validated::new("Gras"),
-            Locale::En => ambre_core::Validated::new("Bold"),
-        }
-    }
+    const BOLD_TITLE: crate::TitleWords = crate::TitleWords {
+        en: "Bold",
+        fr: "Gras",
+    };
 
-    fn italic_title(l: &Locale) -> ambre_core::Validated<CommandTitle> {
-        match l {
-            Locale::Fr => ambre_core::Validated::new("Italique"),
-            Locale::En => ambre_core::Validated::new("Italic"),
-        }
-    }
+    const ITALIC_TITLE: crate::TitleWords = crate::TitleWords {
+        en: "Italic",
+        fr: "Italique",
+    };
 
     const FORMAT: StaticKey<Categories> = StaticKey::<Categories>::new("format");
 
     const COMMANDS: &[Command] = &[
         Command {
             id: StaticKey::<Commands>::new("prose.format.bold"),
-            title: bold_title,
+            title: BOLD_TITLE,
             icon: Some(StaticKey::<Icons>::new("bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: FORMAT,
@@ -748,7 +781,7 @@ mod tests {
         },
         Command {
             id: StaticKey::<Commands>::new("prose.format.italic"),
-            title: italic_title,
+            title: ITALIC_TITLE,
             icon: Some(StaticKey::<Icons>::new("italic")),
             keybindings: &[KeyBinding::primary(KeyChar::I)],
             category: FORMAT,
@@ -763,7 +796,7 @@ mod tests {
     const EDITING: &[Command] = &[
         Command {
             id: StaticKey::<Commands>::new("prose.history.redo"),
-            title: bold_title,
+            title: BOLD_TITLE,
             icon: None,
             keybindings: shared::REDO_CHORDS,
             category: FORMAT,
@@ -772,7 +805,7 @@ mod tests {
         },
         Command {
             id: shared::COPY,
-            title: bold_title,
+            title: BOLD_TITLE,
             icon: None,
             keybindings: shared::COPY_CHORDS,
             category: FORMAT,
@@ -781,7 +814,7 @@ mod tests {
         },
         Command {
             id: shared::PASTE,
-            title: bold_title,
+            title: BOLD_TITLE,
             icon: None,
             keybindings: shared::PASTE_CHORDS,
             category: FORMAT,
@@ -793,8 +826,8 @@ mod tests {
     #[test]
     fn find_returns_matching_command() {
         let cmd = find(COMMANDS, StaticKey::<Commands>::new("prose.format.italic")).unwrap();
-        assert_eq!((cmd.title)(&Locale::Fr).as_str(), "Italique");
-        assert_eq!((cmd.title)(&Locale::En).as_str(), "Italic");
+        assert_eq!(cmd.title.pick(&Locale::Fr).as_str(), "Italique");
+        assert_eq!(cmd.title.pick(&Locale::En).as_str(), "Italic");
         assert!(find(COMMANDS, StaticKey::<Commands>::new("prose.format.unknown")).is_none());
     }
 
@@ -865,20 +898,14 @@ mod tests {
         }
     }
 
-    fn blank(_: &Locale) -> ambre_core::Validated<CommandTitle> {
-        ambre_core::Validated::default()
-    }
+    const BLANK: crate::TitleWords = crate::TitleWords { en: "", fr: "" };
 
-    fn blank_description(_: &Locale) -> ambre_core::Validated<CommandDescription> {
-        ambre_core::Validated::new(" ")
-    }
+    const BLANK_DESCRIPTION: crate::TitleWords = crate::TitleWords { en: " ", fr: " " };
 
-    fn english_only(l: &Locale) -> ambre_core::Validated<CommandTitle> {
-        match l {
-            Locale::Fr => ambre_core::Validated::new(" "),
-            Locale::En => ambre_core::Validated::new("Bold"),
-        }
-    }
+    const ENGLISH_ONLY: crate::TitleWords = crate::TitleWords {
+        en: "Bold",
+        fr: " ",
+    };
 
     /// A command on the file outside the Ambre menu is a defect of the table.
     /// So is a command on the account outside the avatar menu. A
@@ -891,7 +918,7 @@ mod tests {
         let bold = StaticKey::<Commands>::new("t.format.bold");
         let entry = |id, category, home| Command {
             id,
-            title: bold_title,
+            title: BOLD_TITLE,
             icon: None,
             keybindings: &[],
             category,
@@ -926,7 +953,7 @@ mod tests {
         let bold = StaticKey::<Commands>::new("t.format.bold");
         let entry = |id, category, home| Command {
             id,
-            title: bold_title,
+            title: BOLD_TITLE,
             icon: None,
             keybindings: &[],
             category,
@@ -967,16 +994,16 @@ mod tests {
         let broken = [
             Command {
                 id: bold,
-                title: blank,
+                title: BLANK,
                 icon: Some(StaticKey::<Icons>::new(" ")),
                 keybindings: CHORD,
                 category: StaticKey::<Categories>::new(""),
                 home: Home::ContextPanel,
-                description: Some(blank_description),
+                description: Some(BLANK_DESCRIPTION),
             },
             Command {
                 id: other,
-                title: english_only,
+                title: ENGLISH_ONLY,
                 icon: None,
                 keybindings: CHORD,
                 category: FORMAT,
@@ -985,7 +1012,7 @@ mod tests {
             },
             Command {
                 id: bold,
-                title: bold_title,
+                title: BOLD_TITLE,
                 icon: None,
                 keybindings: &[],
                 category: FORMAT,
@@ -1049,9 +1076,7 @@ mod tests {
         assert_eq!(s.toggled, ambre_core::Toggle::Off);
     }
 
-    fn t(_: &Locale) -> ambre_core::Validated<CommandTitle> {
-        ambre_core::Validated::new("x")
-    }
+    const T: crate::TitleWords = crate::TitleWords { en: "x", fr: "x" };
 
     const BOLD: StaticKey<Commands> = StaticKey::<Commands>::new("t.bold");
     const SAVE: StaticKey<Commands> = StaticKey::<Commands>::new("t.save");
@@ -1060,7 +1085,7 @@ mod tests {
     const TABLE: &[Command] = &[
         Command {
             id: BOLD,
-            title: t,
+            title: T,
             icon: None,
             keybindings: &[],
             category: StaticKey::<Categories>::new("format"),
@@ -1069,7 +1094,7 @@ mod tests {
         },
         Command {
             id: SAVE,
-            title: t,
+            title: T,
             icon: None,
             keybindings: &[],
             category: StaticKey::<Categories>::new("file"),
@@ -1080,7 +1105,7 @@ mod tests {
 
     const PROPS: &[Property] = &[Property {
         id: FILL,
-        title: t,
+        title: T,
         icon: None,
     }];
 

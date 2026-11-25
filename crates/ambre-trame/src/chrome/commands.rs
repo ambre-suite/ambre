@@ -16,7 +16,7 @@
 
 use crate::message::TrameEvent;
 use ambre_bus::{DocType, Embed, UiEvent};
-use ambre_chrome::commands::{Keymap, Locale};
+use ambre_chrome::commands::Keymap;
 use ambre_chrome::{CommandStates, MenuEntry, Toasts};
 
 use super::icons;
@@ -248,7 +248,7 @@ fn entry(row: registry::MenuRow) -> Option<MenuEntry> {
         registry::MenuRow::Command(id) => id,
     };
     let cmd = ambre_chrome::commands::find(COMMANDS, id)?;
-    let entry = MenuEntry::command(cmd, &Locale::En);
+    let entry = MenuEntry::command(cmd, &ambre_chrome::language());
     Some(match cmd.icon.and_then(icons::resolve) {
         Some(icon) => entry.icon(icon),
         None => entry,

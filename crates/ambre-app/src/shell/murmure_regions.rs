@@ -2050,7 +2050,7 @@ fn the_format_bar_shows_the_prose_controls_of_the_murmure_marks() {
         };
         let command = COMMANDS.iter().find(|c| c.id == id).unwrap();
         assert_eq!(
-            (command.title)(&ambre_chrome::commands::Locale::En).as_str(),
+            command.title.pick(&ambre_chrome::language()).as_str(),
             label
         );
         at.push(prose.iter().position(|shown| *shown == id).unwrap());

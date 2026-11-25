@@ -83,8 +83,13 @@ pub(crate) fn chrome_capabilities(downloads: &Path) -> Value {
             "--use-fake-ui-for-media-stream",
             // A call test plays a tone through an audio context, with no gesture.
             "--autoplay-policy=no-user-gesture-required",
+            // The belt finds the chrome by its English words. The page boots
+            // in the browser's language without a hint (`SETTINGS-033`), so
+            // the browser names English whatever the machine runs.
+            "--lang=en-US",
         ],
         "prefs": {
+            "intl.accept_languages": "en-US",
             "download.default_directory": downloads.display().to_string(),
             "download.prompt_for_download": false,
         },
@@ -115,6 +120,9 @@ fn firefox_capabilities(downloads: &Path) -> Value {
     let mut options = json!({
         "args": ["-headless"],
         "prefs": {
+            // The belt finds the chrome by its English words, as for Chrome.
+            "intl.accept_languages": "en-US",
+            "intl.locale.requested": "en-US",
             // geckodriver serves no log endpoint: the console goes to the
             // standard output instead, which `collect_console` reads.
             "devtools.console.stdout.content": true,

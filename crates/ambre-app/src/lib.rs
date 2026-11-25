@@ -820,6 +820,12 @@ pub fn main() {
         platform::boot_theme(platform::system_scheme()),
     ));
     inject_theme(theme_ctl.get());
+    // The interface language of the boot hint, or the browser's, set before
+    // the first frame so no label shows in another (`SETTINGS-033`).
+    ambre_chrome::set_language(settings_view::boot_language(
+        platform::boot_hint().as_ref(),
+        &platform::browser_language(),
+    ));
     // The settings of the account, which the header and the panel follow
     // when another device moves them. None before the settings answer.
     let account_settings = RwSignal::new(None);
@@ -1303,6 +1309,12 @@ pub fn main() {
                             platform::set_theme(&settings_theme, theme);
                         }
                         account_settings.set(Some(settings.clone()));
+                        // Another device, or the picker, moved the language:
+                        // every label redraws (`SETTINGS-037`).
+                        ambre_chrome::set_language(ambre_chrome::interface_locale(
+                            &settings.interface_language,
+                            &platform::browser_language(),
+                        ));
                         platform::keep_boot_hint(&settings.boot_hint());
                     }
                     switchboard::Effect::Send(command) => {

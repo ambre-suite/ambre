@@ -24,28 +24,12 @@ use crate::ui::grid::CtxScope;
 /// Declare one command per line: the constant, its identity, its label, its
 /// icon, its default chord, its category and its home region (`CHROME-148`).
 ///
-/// A macro rather than 26 hand-written blocks, because `Command::title` is a
-/// plain `fn` pointer. It captures nothing, so every command needs a function
-/// item of its own. Generating them from one line each is what makes the single
-/// declaration site real. A second label for a command cannot be written
-/// without a second line here.
+/// Each line carries the English label, then the French one. One line per
+/// command is what makes the single declaration site real. A second label for
+/// a command cannot be written without a second line here.
 macro_rules! commands {
-    ($($name:ident = $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr, $home:ident;)*) => {
+    ($($name:ident = $id:expr, $label:literal, $fr:literal, $icon:expr, $chords:expr, $category:expr, $home:ident;)*) => {
         $(pub const $name: StaticKey<Commands> = $id;)*
-
-        // The generated title functions. Named after the constants, so the
-        // module carries the case exemption rather than every call site.
-        #[expect(
-            non_snake_case,
-            reason = "each title function takes the name of its command constant"
-        )]
-        mod titles {
-            use super::Locale;
-            // One language ships today and nothing supplies an active locale,
-            // so the label is the same for both variants
-            // (`ambre-spec-commands.md` section 5).
-            $(pub fn $name(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> { ambre_core::Validated::new($label) })*
-        }
 
         /// Every command Trame contributes, described once. The launcher builds
         /// the command store and the keymap from this table. Every view of a
@@ -53,7 +37,7 @@ macro_rules! commands {
         pub const COMMANDS: &[Command] = &[
             $(Command {
                 id: $name,
-                title: titles::$name,
+                title: ambre_commands::TitleWords { en: $label, fr: $fr },
                 icon: $icon,
                 keybindings: $chords,
                 category: $category,
@@ -92,55 +76,55 @@ const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 // as well (`UI-THREAD-011`). Undo and Redo take the shared chord lists, which
 // is where Ctrl+Y is declared beside Ctrl+Shift+Z.
 commands! {
-    BOLD = StaticKey::<Commands>::new("trame.format.bold"), "Bold", Some(StaticKey::<Icons>::new("format-bold")), &[KeyBinding::primary(KeyChar::B)], FORMAT, ContextPanel;
-    ITALIC = StaticKey::<Commands>::new("trame.format.italic"), "Italic", Some(StaticKey::<Icons>::new("format-italic")), &[KeyBinding::primary(KeyChar::I)], FORMAT, ContextPanel;
-    UNDO = StaticKey::<Commands>::new("trame.history.undo"), "Undo", Some(StaticKey::<Icons>::new("undo")), shared::UNDO_CHORDS, HISTORY, AmbreMenu;
-    REDO = StaticKey::<Commands>::new("trame.history.redo"), "Redo", Some(StaticKey::<Icons>::new("redo")), shared::REDO_CHORDS, HISTORY, AmbreMenu;
-    INSERT_ROW_ABOVE = StaticKey::<Commands>::new("trame.row.insert_above"), "Insert row above", Some(StaticKey::<Icons>::new("table-row-plus-before")), &[], STRUCTURE, ContextPanel;
-    INSERT_ROW_BELOW = StaticKey::<Commands>::new("trame.row.insert_below"), "Insert row below", Some(StaticKey::<Icons>::new("table-row-plus-after")), &[], STRUCTURE, ContextPanel;
-    INSERT_COL_LEFT = StaticKey::<Commands>::new("trame.col.insert_left"), "Insert column left", Some(StaticKey::<Icons>::new("table-column-plus-before")), &[], STRUCTURE, ContextPanel;
-    INSERT_COL_RIGHT = StaticKey::<Commands>::new("trame.col.insert_right"), "Insert column right", Some(StaticKey::<Icons>::new("table-column-plus-after")), &[], STRUCTURE, ContextPanel;
-    DELETE_ROWS = StaticKey::<Commands>::new("trame.row.delete"), "Delete rows", Some(StaticKey::<Icons>::new("table-row-remove")), &[], STRUCTURE, ContextPanel;
-    DELETE_COLS = StaticKey::<Commands>::new("trame.col.delete"), "Delete columns", Some(StaticKey::<Icons>::new("table-column-remove")), &[], STRUCTURE, ContextPanel;
-    MERGE = StaticKey::<Commands>::new("trame.merge"), "Merge cells", Some(StaticKey::<Icons>::new("table-merge-cells")), &[], STRUCTURE, ContextPanel;
-    UNMERGE = StaticKey::<Commands>::new("trame.unmerge"), "Unmerge cells", Some(StaticKey::<Icons>::new("table-split-cell")), &[], STRUCTURE, ContextPanel;
-    SORT_RANGE_ASC = StaticKey::<Commands>::new("trame.sort.range_asc"), "Sort range ascending", Some(StaticKey::<Icons>::new("sort-ascending")), &[], SORT, ContextPanel;
-    SORT_RANGE_DESC = StaticKey::<Commands>::new("trame.sort.range_desc"), "Sort range descending", Some(StaticKey::<Icons>::new("sort-descending")), &[], SORT, ContextPanel;
-    SORT_SHEET_ASC = StaticKey::<Commands>::new("trame.sort.sheet_asc"), "Sort sheet by column (asc)", Some(StaticKey::<Icons>::new("sort")), &[], SORT, ContextPanel;
-    SORT_SHEET_DESC = StaticKey::<Commands>::new("trame.sort.sheet_desc"), "Sort sheet by column (desc)", Some(StaticKey::<Icons>::new("sort")), &[], SORT, ContextPanel;
-    SORT_RANGE_MULTI = StaticKey::<Commands>::new("trame.sort.range_multi"), "Sort range...", Some(StaticKey::<Icons>::new("sort-variant")), &[], SORT, ContextPanel;
-    FILTER_COLUMN = StaticKey::<Commands>::new("trame.filter.column"), "Filter by column", Some(StaticKey::<Icons>::new("filter")), &[], FILTER, ContextPanel;
-    CLEAR_FILTER = StaticKey::<Commands>::new("trame.filter.clear"), "Remove filter", Some(StaticKey::<Icons>::new("filter-off")), &[], FILTER, ContextPanel;
-    FIND = StaticKey::<Commands>::new("trame.find.open"), "Find and replace", Some(StaticKey::<Icons>::new("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE, AmbreMenu;
-    REPLACE = StaticKey::<Commands>::new("trame.find.replace"), "Replace", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE, AmbreMenu;
-    COPY = shared::COPY, "Copy", Some(StaticKey::<Icons>::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD, ContextMenu;
-    CUT = shared::CUT, "Cut", Some(StaticKey::<Icons>::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD, ContextMenu;
-    PASTE = shared::PASTE, "Paste", Some(StaticKey::<Icons>::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD, ContextMenu;
-    IMPORT_CSV = StaticKey::<Commands>::new("trame.interop.import_csv"), "Import CSV", Some(StaticKey::<Icons>::new("import")), &[], INTEROP, AmbreMenu;
-    EXPORT_CSV = StaticKey::<Commands>::new("trame.interop.export_csv"), "Export CSV", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
-    IMPORT_XLSX = StaticKey::<Commands>::new("trame.interop.import_xlsx"), "Import Excel workbook", Some(StaticKey::<Icons>::new("import")), &[], INTEROP, AmbreMenu;
-    EXPORT_XLSX = StaticKey::<Commands>::new("trame.interop.export_xlsx"), "Export Excel workbook", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
-    IMPORT_ODS = StaticKey::<Commands>::new("trame.interop.import_ods"), "Import OpenDocument spreadsheet", Some(StaticKey::<Icons>::new("import")), &[], INTEROP, AmbreMenu;
-    EXPORT_ODS = StaticKey::<Commands>::new("trame.interop.export_ods"), "Export OpenDocument spreadsheet", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
-    EXPORT_PDF = StaticKey::<Commands>::new("trame.interop.export_pdf"), "Export PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
-    EXPORT_PDF_SELECTION = StaticKey::<Commands>::new("trame.interop.export_pdf_selection"), "Export selection as PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
-    PAGE_PORTRAIT = StaticKey::<Commands>::new("trame.page.portrait"), "Page setup: portrait", None, &[], PAGE, ContextPanel;
-    PAGE_LANDSCAPE = StaticKey::<Commands>::new("trame.page.landscape"), "Page setup: landscape", None, &[], PAGE, ContextPanel;
-    PAPER_A4 = StaticKey::<Commands>::new("trame.page.paper_a4"), "Page setup: A4 paper", None, &[], PAGE, ContextPanel;
-    PAPER_A3 = StaticKey::<Commands>::new("trame.page.paper_a3"), "Page setup: A3 paper", None, &[], PAGE, ContextPanel;
-    PAPER_LETTER = StaticKey::<Commands>::new("trame.page.paper_letter"), "Page setup: Letter paper", None, &[], PAGE, ContextPanel;
-    PAPER_LEGAL = StaticKey::<Commands>::new("trame.page.paper_legal"), "Page setup: Legal paper", None, &[], PAGE, ContextPanel;
-    MARGINS_NORMAL = StaticKey::<Commands>::new("trame.page.margins_normal"), "Page setup: normal margins", None, &[], PAGE, ContextPanel;
-    MARGINS_NARROW = StaticKey::<Commands>::new("trame.page.margins_narrow"), "Page setup: narrow margins", None, &[], PAGE, ContextPanel;
-    MARGINS_WIDE = StaticKey::<Commands>::new("trame.page.margins_wide"), "Page setup: wide margins", None, &[], PAGE, ContextPanel;
-    SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP, AmbreMenu;
-    SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP, AmbreMenu;
-    FREEZE_ROWS = StaticKey::<Commands>::new("trame.view.freeze_rows"), "Freeze up to this row", None, &[], VIEW, ContextPanel;
-    FREEZE_COLS = StaticKey::<Commands>::new("trame.view.freeze_cols"), "Freeze up to this column", None, &[], VIEW, ContextPanel;
-    UNFREEZE = StaticKey::<Commands>::new("trame.view.unfreeze"), "Unfreeze rows and columns", None, &[], VIEW, ContextPanel;
-    ZOOM_TO_SELECTION = StaticKey::<Commands>::new("trame.view.zoom_to_selection"), "Zoom to selection", None, &[], VIEW, StatusBar;
-    PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL, AmbreMenu;
-    INSERT_FUNCTION = StaticKey::<Commands>::new("trame.insert.function"), "Insert a function", Some(StaticKey::<Icons>::new("function-variant")), &[], INSERT, CreationBar;
+    BOLD = StaticKey::<Commands>::new("trame.format.bold"), "Bold", "Gras", Some(StaticKey::<Icons>::new("format-bold")), &[KeyBinding::primary(KeyChar::B)], FORMAT, ContextPanel;
+    ITALIC = StaticKey::<Commands>::new("trame.format.italic"), "Italic", "Italique", Some(StaticKey::<Icons>::new("format-italic")), &[KeyBinding::primary(KeyChar::I)], FORMAT, ContextPanel;
+    UNDO = StaticKey::<Commands>::new("trame.history.undo"), "Undo", "Annuler", Some(StaticKey::<Icons>::new("undo")), shared::UNDO_CHORDS, HISTORY, AmbreMenu;
+    REDO = StaticKey::<Commands>::new("trame.history.redo"), "Redo", "R\u{e9}tablir", Some(StaticKey::<Icons>::new("redo")), shared::REDO_CHORDS, HISTORY, AmbreMenu;
+    INSERT_ROW_ABOVE = StaticKey::<Commands>::new("trame.row.insert_above"), "Insert row above", "Ins\u{e9}rer une ligne au-dessus", Some(StaticKey::<Icons>::new("table-row-plus-before")), &[], STRUCTURE, ContextPanel;
+    INSERT_ROW_BELOW = StaticKey::<Commands>::new("trame.row.insert_below"), "Insert row below", "Ins\u{e9}rer une ligne en dessous", Some(StaticKey::<Icons>::new("table-row-plus-after")), &[], STRUCTURE, ContextPanel;
+    INSERT_COL_LEFT = StaticKey::<Commands>::new("trame.col.insert_left"), "Insert column left", "Ins\u{e9}rer une colonne \u{e0} gauche", Some(StaticKey::<Icons>::new("table-column-plus-before")), &[], STRUCTURE, ContextPanel;
+    INSERT_COL_RIGHT = StaticKey::<Commands>::new("trame.col.insert_right"), "Insert column right", "Ins\u{e9}rer une colonne \u{e0} droite", Some(StaticKey::<Icons>::new("table-column-plus-after")), &[], STRUCTURE, ContextPanel;
+    DELETE_ROWS = StaticKey::<Commands>::new("trame.row.delete"), "Delete rows", "Supprimer les lignes", Some(StaticKey::<Icons>::new("table-row-remove")), &[], STRUCTURE, ContextPanel;
+    DELETE_COLS = StaticKey::<Commands>::new("trame.col.delete"), "Delete columns", "Supprimer les colonnes", Some(StaticKey::<Icons>::new("table-column-remove")), &[], STRUCTURE, ContextPanel;
+    MERGE = StaticKey::<Commands>::new("trame.merge"), "Merge cells", "Fusionner les cellules", Some(StaticKey::<Icons>::new("table-merge-cells")), &[], STRUCTURE, ContextPanel;
+    UNMERGE = StaticKey::<Commands>::new("trame.unmerge"), "Unmerge cells", "Annuler la fusion", Some(StaticKey::<Icons>::new("table-split-cell")), &[], STRUCTURE, ContextPanel;
+    SORT_RANGE_ASC = StaticKey::<Commands>::new("trame.sort.range_asc"), "Sort range ascending", "Trier la plage par ordre croissant", Some(StaticKey::<Icons>::new("sort-ascending")), &[], SORT, ContextPanel;
+    SORT_RANGE_DESC = StaticKey::<Commands>::new("trame.sort.range_desc"), "Sort range descending", "Trier la plage par ordre d\u{e9}croissant", Some(StaticKey::<Icons>::new("sort-descending")), &[], SORT, ContextPanel;
+    SORT_SHEET_ASC = StaticKey::<Commands>::new("trame.sort.sheet_asc"), "Sort sheet by column (asc)", "Trier la feuille par colonne (croissant)", Some(StaticKey::<Icons>::new("sort")), &[], SORT, ContextPanel;
+    SORT_SHEET_DESC = StaticKey::<Commands>::new("trame.sort.sheet_desc"), "Sort sheet by column (desc)", "Trier la feuille par colonne (d\u{e9}croissant)", Some(StaticKey::<Icons>::new("sort")), &[], SORT, ContextPanel;
+    SORT_RANGE_MULTI = StaticKey::<Commands>::new("trame.sort.range_multi"), "Sort range...", "Trier la plage...", Some(StaticKey::<Icons>::new("sort-variant")), &[], SORT, ContextPanel;
+    FILTER_COLUMN = StaticKey::<Commands>::new("trame.filter.column"), "Filter by column", "Filtrer par colonne", Some(StaticKey::<Icons>::new("filter")), &[], FILTER, ContextPanel;
+    CLEAR_FILTER = StaticKey::<Commands>::new("trame.filter.clear"), "Remove filter", "Supprimer le filtre", Some(StaticKey::<Icons>::new("filter-off")), &[], FILTER, ContextPanel;
+    FIND = StaticKey::<Commands>::new("trame.find.open"), "Find and replace", "Rechercher et remplacer", Some(StaticKey::<Icons>::new("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE, AmbreMenu;
+    REPLACE = StaticKey::<Commands>::new("trame.find.replace"), "Replace", "Remplacer", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE, AmbreMenu;
+    COPY = shared::COPY, "Copy", "Copier", Some(StaticKey::<Icons>::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD, ContextMenu;
+    CUT = shared::CUT, "Cut", "Couper", Some(StaticKey::<Icons>::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD, ContextMenu;
+    PASTE = shared::PASTE, "Paste", "Coller", Some(StaticKey::<Icons>::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD, ContextMenu;
+    IMPORT_CSV = StaticKey::<Commands>::new("trame.interop.import_csv"), "Import CSV", "Importer un CSV", Some(StaticKey::<Icons>::new("import")), &[], INTEROP, AmbreMenu;
+    EXPORT_CSV = StaticKey::<Commands>::new("trame.interop.export_csv"), "Export CSV", "Exporter en CSV", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
+    IMPORT_XLSX = StaticKey::<Commands>::new("trame.interop.import_xlsx"), "Import Excel workbook", "Importer un classeur Excel", Some(StaticKey::<Icons>::new("import")), &[], INTEROP, AmbreMenu;
+    EXPORT_XLSX = StaticKey::<Commands>::new("trame.interop.export_xlsx"), "Export Excel workbook", "Exporter en classeur Excel", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
+    IMPORT_ODS = StaticKey::<Commands>::new("trame.interop.import_ods"), "Import OpenDocument spreadsheet", "Importer un classeur OpenDocument", Some(StaticKey::<Icons>::new("import")), &[], INTEROP, AmbreMenu;
+    EXPORT_ODS = StaticKey::<Commands>::new("trame.interop.export_ods"), "Export OpenDocument spreadsheet", "Exporter en classeur OpenDocument", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
+    EXPORT_PDF = StaticKey::<Commands>::new("trame.interop.export_pdf"), "Export PDF", "Exporter en PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
+    EXPORT_PDF_SELECTION = StaticKey::<Commands>::new("trame.interop.export_pdf_selection"), "Export selection as PDF", "Exporter la s\u{e9}lection en PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP, AmbreMenu;
+    PAGE_PORTRAIT = StaticKey::<Commands>::new("trame.page.portrait"), "Page setup: portrait", "Mise en page\u{a0}: portrait", None, &[], PAGE, ContextPanel;
+    PAGE_LANDSCAPE = StaticKey::<Commands>::new("trame.page.landscape"), "Page setup: landscape", "Mise en page\u{a0}: paysage", None, &[], PAGE, ContextPanel;
+    PAPER_A4 = StaticKey::<Commands>::new("trame.page.paper_a4"), "Page setup: A4 paper", "Mise en page\u{a0}: papier A4", None, &[], PAGE, ContextPanel;
+    PAPER_A3 = StaticKey::<Commands>::new("trame.page.paper_a3"), "Page setup: A3 paper", "Mise en page\u{a0}: papier A3", None, &[], PAGE, ContextPanel;
+    PAPER_LETTER = StaticKey::<Commands>::new("trame.page.paper_letter"), "Page setup: Letter paper", "Mise en page\u{a0}: papier Letter", None, &[], PAGE, ContextPanel;
+    PAPER_LEGAL = StaticKey::<Commands>::new("trame.page.paper_legal"), "Page setup: Legal paper", "Mise en page\u{a0}: papier Legal", None, &[], PAGE, ContextPanel;
+    MARGINS_NORMAL = StaticKey::<Commands>::new("trame.page.margins_normal"), "Page setup: normal margins", "Mise en page\u{a0}: marges normales", None, &[], PAGE, ContextPanel;
+    MARGINS_NARROW = StaticKey::<Commands>::new("trame.page.margins_narrow"), "Page setup: narrow margins", "Mise en page\u{a0}: marges \u{e9}troites", None, &[], PAGE, ContextPanel;
+    MARGINS_WIDE = StaticKey::<Commands>::new("trame.page.margins_wide"), "Page setup: wide margins", "Mise en page\u{a0}: marges larges", None, &[], PAGE, ContextPanel;
+    SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", "Enregistrer dans un fichier (.ambre, non chiffr\u{e9})", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP, AmbreMenu;
+    SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", "Enregistrer dans un fichier chiffr\u{e9} (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP, AmbreMenu;
+    FREEZE_ROWS = StaticKey::<Commands>::new("trame.view.freeze_rows"), "Freeze up to this row", "Figer jusqu'\u{e0} cette ligne", None, &[], VIEW, ContextPanel;
+    FREEZE_COLS = StaticKey::<Commands>::new("trame.view.freeze_cols"), "Freeze up to this column", "Figer jusqu'\u{e0} cette colonne", None, &[], VIEW, ContextPanel;
+    UNFREEZE = StaticKey::<Commands>::new("trame.view.unfreeze"), "Unfreeze rows and columns", "Lib\u{e9}rer les lignes et les colonnes", None, &[], VIEW, ContextPanel;
+    ZOOM_TO_SELECTION = StaticKey::<Commands>::new("trame.view.zoom_to_selection"), "Zoom to selection", "Zoomer sur la s\u{e9}lection", None, &[], VIEW, StatusBar;
+    PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", "Palette de commandes", None, &[KeyBinding::primary(KeyChar::K)], GENERAL, AmbreMenu;
+    INSERT_FUNCTION = StaticKey::<Commands>::new("trame.insert.function"), "Insert a function", "Ins\u{e9}rer une fonction", Some(StaticKey::<Icons>::new("function-variant")), &[], INSERT, CreationBar;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame
@@ -152,7 +136,7 @@ pub fn title(
     id: StaticKey<Commands>,
     locale: &Locale,
 ) -> Option<ambre_core::Validated<ambre_commands::CommandTitle>> {
-    ambre_commands::find(COMMANDS, id).map(|c| (c.title)(locale))
+    ambre_commands::find(COMMANDS, id).map(|c| c.title.pick(locale))
 }
 
 /// The icon handle `id` declares, if it has one. The chrome resolves it to the
@@ -458,7 +442,7 @@ mod tests {
     #[test]
     fn every_command_has_a_label() {
         for cmd in COMMANDS {
-            let label = (cmd.title)(&Locale::En);
+            let label = cmd.title.pick(&Locale::En);
             assert!(!label.as_str().is_empty(), "{:?} has no label", cmd.id);
             assert_eq!(title(cmd.id, &Locale::En), Some(label));
         }

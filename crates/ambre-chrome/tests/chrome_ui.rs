@@ -375,10 +375,13 @@ fn a_release_shows_no_perf_chip() {
 /// (`CHROME-239`).
 #[wasm_bindgen_test]
 async fn the_search_field_runs_the_palette_command() {
-    use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Reach};
+    use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Reach};
     static PALETTE: Command = Command {
         id: StaticKey::<Commands>::new("t.palette.open"),
-        title: |_: &Locale| ambre_core::Validated::new("Command palette"),
+        title: ambre_commands::TitleWords {
+            en: "Command palette",
+            fr: "Command palette",
+        },
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: StaticKey::<Categories>::new("general"),
@@ -871,7 +874,10 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
     let pos = RwSignal::new(None::<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>);
     let item = ambre_commands::Command {
         id: StaticKey::<Commands>::new("test.item"),
-        title: |_| ambre_core::Validated::new("Item"),
+        title: ambre_commands::TitleWords {
+            en: "Item",
+            fr: "Item",
+        },
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
@@ -991,27 +997,25 @@ async fn font_size_select_lists_presets_plus_auto_entry() {
 
 // -- DOM belt: the command palette (CHROME-008) ------------------------------
 
-fn palette_title(
-    l: &ambre_commands::Locale,
-) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    let _ = l;
-    ambre_core::Validated::new("Command palette")
-}
-fn hidden_title(l: &ambre_commands::Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    let _ = l;
-    ambre_core::Validated::new("Recalculate everything")
-}
-fn shown_title(l: &ambre_commands::Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    let _ = l;
-    ambre_core::Validated::new("Merge cells")
-}
+const PALETTE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Command palette",
+    fr: "Command palette",
+};
+const HIDDEN_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Recalculate everything",
+    fr: "Recalculate everything",
+};
+const SHOWN_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Merge cells",
+    fr: "Merge cells",
+};
 
 /// A table whose second command appears in no menu: exactly the case
 /// `CHROME-008` is about.
 const PALETTE_TABLE: &[ambre_commands::Command] = &[
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.palette.open"),
-        title: palette_title,
+        title: PALETTE_TITLE,
         icon: None,
         keybindings: &[ambre_commands::KeyBinding::primary(
             ambre_commands::KeyChar::K,
@@ -1022,7 +1026,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.engine.recalc"),
-        title: hidden_title,
+        title: HIDDEN_TITLE,
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("engine"),
@@ -1031,7 +1035,7 @@ const PALETTE_TABLE: &[ambre_commands::Command] = &[
     },
     ambre_commands::Command {
         id: StaticKey::<Commands>::new("t.merge"),
-        title: shown_title,
+        title: SHOWN_TITLE,
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("structure"),
@@ -1572,13 +1576,13 @@ async fn an_open_modal_unmounted_releases_the_loop() {
 // -- The floating menu (context_menu.rs) -------------------------------------
 
 /// A command of the floating menu's test table, labelled `title`.
-fn ctx_command(
-    id: &'static str,
-    title: fn(&ambre_commands::Locale) -> ambre_core::Validated<ambre_commands::CommandTitle>,
-) -> ambre_commands::Command {
+fn ctx_command(id: &'static str, title: &'static str) -> ambre_commands::Command {
     ambre_commands::Command {
         id: StaticKey::<Commands>::new(id),
-        title,
+        title: ambre_commands::TitleWords {
+            en: title,
+            fr: title,
+        },
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
@@ -1592,28 +1596,12 @@ fn ctx_command(
 fn ctx_entries() -> Vec<MenuEntry> {
     let en = ambre_commands::Locale::En;
     vec![
-        MenuEntry::command(
-            &ctx_command("t.copy", |_| ambre_core::Validated::new("Copy")),
-            &en,
-        ),
-        MenuEntry::command(
-            &ctx_command("t.cut", |_| ambre_core::Validated::new("Cut")),
-            &en,
-        ),
+        MenuEntry::command(&ctx_command("t.copy", "Copy"), &en),
+        MenuEntry::command(&ctx_command("t.cut", "Cut"), &en),
         MenuEntry::separator(),
-        MenuEntry::command(
-            &ctx_command("t.paste", |_| ambre_core::Validated::new("Paste")),
-            &en,
-        ),
-        MenuEntry::command(
-            &ctx_command("t.clear", |_| ambre_core::Validated::new("Clear")),
-            &en,
-        ),
-        MenuEntry::command(
-            &ctx_command("t.delete", |_| ambre_core::Validated::new("Delete")),
-            &en,
-        )
-        .disabled(),
+        MenuEntry::command(&ctx_command("t.paste", "Paste"), &en),
+        MenuEntry::command(&ctx_command("t.clear", "Clear"), &en),
+        MenuEntry::command(&ctx_command("t.delete", "Delete"), &en).disabled(),
     ]
 }
 

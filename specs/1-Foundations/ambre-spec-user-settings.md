@@ -37,6 +37,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-022` | `INV` | The width of the context panel MUST stay on the device, outside the settings document. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` -- the frozen catalogue holds no width | none | verified |
 | `SETTINGS-023` | `INV` | The theme MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-design-tokens.md section 2` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
 | `SETTINGS-024` | `INV` | The interface language MUST be a setting of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
+| `SETTINGS-044` | `INV` | Every command and property title MUST carry its words in each interface language that ships. | this spec section 3, the catalogue | type-level -- `ambre_commands::TitleWords` holds one field per language, so a table that omits one does not compile; `ambre_commands::tests::a_table_names_each_missing_part_of_a_description` -- a blank language is a defect | none | verified |
 | `SETTINGS-025` | `INV` | The side of the context panel MUST be a setting of the account. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
 | `SETTINGS-026` | `INV` | The fold of the context panel MUST be a setting of the account, one value per application. | this spec section 3, the catalogue | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
 | `SETTINGS-027` | `INV` | The number convention of a reader and their own locale MUST be settings of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_client_core::settings::tests::every_released_key_keeps_its_section_and_its_name` | none | verified |
@@ -60,8 +61,10 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SETTINGS-032` | `POST` | A page with a boot hint MUST boot in the theme the hint names. | this spec section 3, the boot | `ambre_app::platform::tests::a_page_boots_in_the_theme_of_the_stored_boot_hint` -- wasm tier; `ambre_app::settings_view::tests::a_page_boots_in_the_theme_of_its_boot_hint` | none | verified |
-| `SETTINGS-033` | `POST` | A page with a boot hint MUST boot in the interface language the hint names. | this spec section 3, the boot | not built | unbuilt -- lands with the `The interface speaks the reader's language` Story (`ambre-roadmap.md` V1). No command title reads the interface language yet. | unimplemented |
+| `SETTINGS-033` | `POST` | A page with a boot hint MUST boot in the interface language the hint names. | this spec section 3, the boot | `ambre_app::platform::tests::a_page_boots_in_the_language_of_the_stored_boot_hint` -- wasm tier; `ambre_app::settings_view::tests::a_page_boots_in_the_language_of_its_boot_hint`; `ambre_chrome::language::tests::a_french_tag_of_any_region_shows_french`; `ambre_chrome::language::tests::a_tag_of_none_takes_the_browser_language` | none | verified |
 | `SETTINGS-034` | `FRAME` | Reading the boot hint MUST NOT wait on the network, on a key or on the local store. | this spec section 3, the boot | structural -- the page reads the hint through the synchronous local storage, before the first frame and before any wait | none | verified |
+| `SETTINGS-042` | `POST` | A pick in the language picker of the avatar menu MUST change the interface language of the page and of the account. | this spec section 3, the catalogue; `ambre-spec-locale.md section 3` | `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the French option writes `fr` | none | verified |
+| `SETTINGS-043` | `POST` | A new interface language MUST redraw every label that reads it, with no reload. | this spec section 3, the boot | `ambre_chrome::language::tests::a_label_read_in_a_reactive_scope_follows_a_new_language` | none | verified |
 
 ### 1.4 Change a setting
 
@@ -88,8 +91,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 40 `verified`, 1 `unimplemented`: no command title reads the interface language
-  yet. The row lands with one Story.
+* **Verification.** 44 `verified`.
 
 ---
 
@@ -204,6 +206,12 @@ empty map, so a later setting of an application adds a declaration and never a s
 A theme at `system` follows the scheme of each device. So two devices of one account can show two
 themes, each the one its system asks for.
 
+**The interface language.** The avatar menu holds a picker beside the theme, with one choice per
+language that ships: English and French (`SETTINGS-042`). A French tag of any region shows French,
+and every other tag shows English. A stored tag of none takes the browser's language. The page
+holds one language, and every label that reads it redraws on a change (`SETTINGS-043`). Each title
+carries its words in every language, on its description (`SETTINGS-044`).
+
 **The width stays on the device.** A width in CSS pixels takes another share of each screen. So
 300 px is a quarter of a laptop and a tenth of a large monitor. The width lives in the local store of the
 device (`SETTINGS-022`).
@@ -260,7 +268,8 @@ metadata `ambre-spec-zero-knowledge.md` accepts (`ZK-055`).
 * `crates/ambre-logic/src/persistence.rs` and `crates/ambre-app/src/persist.rs` -- the kept identifier;
 * `crates/ambre-sync/src/settings.rs` -- the read or the claim at each unlock;
 * `crates/ambre-server/src/routes/settings.rs` and `src/db/settings.rs` -- the pointer and the claim;
-* `crates/ambre-app/src/settings_view.rs` and `src/platform.rs` -- the boot and the hint.
+* `crates/ambre-app/src/settings_view.rs` and `src/platform.rs` -- the boot and the hint;
+* `crates/ambre-chrome/src/language.rs` -- the interface language of the page.
 
 ---
 

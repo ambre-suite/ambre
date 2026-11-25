@@ -12,7 +12,7 @@
 // one undo takes it back (`PROSE-UI-252`).
 // ============================================================================
 
-use ambre_commands::{Locale, Property, Reach};
+use ambre_commands::{Property, Reach};
 use ambre_core::index::Pos;
 use ambre_core::{Commands, Count, Mm, PanelSections, PrintLength, Properties, StaticKey};
 
@@ -82,58 +82,49 @@ pub const MARGINS: StaticKey<Properties> = StaticKey::new("prose.page.margins");
 
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
-    ($($title_fn:ident: $id:expr, $label:literal;)*) => {
-        #[expect(
-            non_snake_case,
-            reason = "each title function takes the name of its property constant"
-        )]
-        mod titles {
-            use super::Locale;
-            $(pub fn $title_fn(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-                ambre_core::Validated::new($label)
-            })*
-        }
+    ($($title_fn:ident: $id:expr, $label:literal, $fr:literal;)*) => {
 
         /// Every property the page's panel edits, described once.
         pub const PROPERTIES: &[Property] = &[
-            $(Property { id: $id, title: titles::$title_fn, icon: None },)*
+            $(Property { id: $id, title: ambre_commands::TitleWords { en: $label, fr: $fr }, icon: None },)*
         ];
     };
 }
 
 properties! {
-    PAPER: PAPER, "Paper";
-    ORIENTATION: ORIENTATION, "Orientation";
-    MARGIN_TOP: MARGIN_TOP, "Top margin";
-    MARGIN_BOTTOM: MARGIN_BOTTOM, "Bottom margin";
-    MARGIN_LEFT: MARGIN_LEFT, "Left margin";
-    MARGIN_RIGHT: MARGIN_RIGHT, "Right margin";
-    MARGINS: MARGINS, "Margins";
-    FONT: FONT, "Font";
-    SIZE: SIZE, "Font size";
-    COLOUR: COLOUR, "Text colour";
-    HIGHLIGHT: HIGHLIGHT, "Highlight";
-    ALIGN: ALIGN, "Alignment";
-    LINE_SPACING: LINE_SPACING, "Line spacing";
-    INDENT_LEFT: INDENT_LEFT, "Left indent";
-    INDENT_FIRST: INDENT_FIRST, "First-line indent";
-    INDENT_OUT: INDENT_OUT, "Decrease indent";
-    INDENT_IN: INDENT_IN, "Increase indent";
-    KIND: KIND, "Paragraph style";
-    BODY_FONT: BODY_FONT, "Body font";
-    HEADING_FONT: HEADING_FONT, "Heading font";
+    PAPER: PAPER, "Paper", "Papier";
+    ORIENTATION: ORIENTATION, "Orientation", "Orientation";
+    MARGIN_TOP: MARGIN_TOP, "Top margin", "Marge haute";
+    MARGIN_BOTTOM: MARGIN_BOTTOM, "Bottom margin", "Marge basse";
+    MARGIN_LEFT: MARGIN_LEFT, "Left margin", "Marge gauche";
+    MARGIN_RIGHT: MARGIN_RIGHT, "Right margin", "Marge droite";
+    MARGINS: MARGINS, "Margins", "Marges";
+    FONT: FONT, "Font", "Police";
+    SIZE: SIZE, "Font size", "Taille de police";
+    COLOUR: COLOUR, "Text colour", "Couleur du texte";
+    HIGHLIGHT: HIGHLIGHT, "Highlight", "Surlignage";
+    ALIGN: ALIGN, "Alignment", "Alignement";
+    LINE_SPACING: LINE_SPACING, "Line spacing", "Interligne";
+    INDENT_LEFT: INDENT_LEFT, "Left indent", "Retrait gauche";
+    INDENT_FIRST: INDENT_FIRST, "First-line indent", "Retrait de premi\u{e8}re ligne";
+    INDENT_OUT: INDENT_OUT, "Decrease indent", "Diminuer le retrait";
+    INDENT_IN: INDENT_IN, "Increase indent", "Augmenter le retrait";
+    KIND: KIND, "Paragraph style", "Style de paragraphe";
+    BODY_FONT: BODY_FONT, "Body font", "Police du corps";
+    HEADING_FONT: HEADING_FONT, "Heading font", "Police des titres";
 }
 
 /// The title of a property no table describes.
-fn unnamed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Property")
-}
+const UNNAMED_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Property",
+    fr: "Propri\u{e9}t\u{e9}",
+};
 
 /// What [`property`] answers for an id no table describes. Every id the
 /// panel names is in the table, which a wasm test holds.
 const UNNAMED: Property = Property {
     id: StaticKey::new("prose.unnamed"),
-    title: unnamed_title,
+    title: UNNAMED_TITLE,
     icon: None,
 };
 
