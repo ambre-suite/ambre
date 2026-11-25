@@ -6,7 +6,7 @@ use ambre_core::Count;
 use str0m::bwe::Bitrate;
 use str0m::media::Rid;
 
-use super::{Candidate, Layer, Meter, Offered, VIDEOS_PER_RECEIVER, choose};
+use super::{Candidate, Layer, Meter, Offered, SILENCE, VIDEOS_PER_RECEIVER, choose};
 
 fn layer(rid: &str) -> Layer {
     Layer(Some(Rid::from(rid)))
@@ -84,4 +84,23 @@ fn the_meter_reads_the_rate_of_its_packets() {
     }
     let kbps = meter.rate().as_f64() / 1000.0;
     assert!((900.0..1100.0).contains(&kbps), "measured {kbps} kbit/s");
+}
+
+/// `CALL-162`: a layer that sends nothing for the silence of the meter has no live rate. One
+/// packet after the silence starts it again from nothing.
+#[test]
+fn a_silent_layer_has_no_live_rate_until_it_sends_again() {
+    let start = Instant::now();
+    let mut meter = Meter::new(start);
+    for n in 0..=100 {
+        meter.count(start + Duration::from_millis(n * 10), Count::new(1250));
+    }
+    let last = start + Duration::from_secs(1);
+    assert!(meter.live_rate(last + SILENCE / 2).is_some());
+    assert_eq!(meter.live_rate(last + SILENCE), None);
+    // The rate of the last window stays for the screen, which a silence does not remove.
+    assert!(!meter.rate().is_zero());
+    let back = last + SILENCE * 3;
+    meter.count(back, Count::new(1250));
+    assert_eq!(meter.live_rate(back).map(|r| r.is_zero()), Some(true));
 }

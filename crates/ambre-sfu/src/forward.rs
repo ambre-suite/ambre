@@ -435,14 +435,24 @@ struct TrackIn {
 }
 
 impl TrackIn {
-    /// The layers of the track, from the lowest measured bitrate up.
-    fn offered(&self) -> Vec<Offered> {
+    /// The layers of the track at `now`, from the lowest measured bitrate up.
+    ///
+    /// A camera layer that sent nothing for the silence of the meter is not offered. The
+    /// choice then moves its receivers to a layer that still sends (`CALL-162`). The screen keeps
+    /// its one layer: a still screen sends nothing for seconds, and its slot must hold.
+    fn offered(&self, now: Instant) -> Vec<Offered> {
         let mut offered: Vec<Offered> = self
             .layers
             .iter()
-            .map(|(layer, meter)| Offered {
-                layer: *layer,
-                rate: meter.rate(),
+            .filter_map(|(layer, meter)| {
+                let rate = match self.role {
+                    Role::Camera => meter.live_rate(now)?,
+                    Role::Audio | Role::Screen | Role::Unused => meter.rate(),
+                };
+                Some(Offered {
+                    layer: *layer,
+                    rate,
+                })
             })
             .collect();
         offered.sort_by(|a, b| a.rate.as_f64().total_cmp(&b.rate.as_f64()));
@@ -905,7 +915,7 @@ impl Sfu {
                     mid: t.mid,
                     role: t.role,
                     started: m.shared.filter(|_| t.role == Role::Screen),
-                    offered: t.offered(),
+                    offered: t.offered(now),
                 })
             })
             .collect();
@@ -1327,7 +1337,11 @@ impl Member {
                 }
                 if let Some(track) = self.tracks_in.iter_mut().find(|t| t.mid == mid) {
                     match track.layers.iter_mut().find(|(l, _)| *l == layer) {
-                        Some((_, meter)) => meter.count(now, Count::of(packet.payload.len())),
+                        Some((_, meter)) => {
+                            // A layer back from a silence is offered again: choose at once.
+                            self.new_layer |= meter.live_rate(now).is_none();
+                            meter.count(now, Count::of(packet.payload.len()));
+                        }
                         None => {
                             let mut meter = Meter::new(now);
                             meter.count(now, Count::of(packet.payload.len()));
