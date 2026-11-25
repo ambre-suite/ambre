@@ -78,6 +78,17 @@ fn glyph_box(slot: &AtlasSlot, density: Scale<Css, Device>) -> GlyphBox {
     }
 }
 
+/// The device pixel edge nearest `at`, in view pixels.
+///
+/// The sampler reads a bitmap drawn between two device pixels half from each
+/// texel. Every stem and bar of the glyph then spreads over two pixels. The
+/// bitmap is made at the device resolution (`CANVAS-033`), so a corner on
+/// the grid puts each texel on one pixel (`CANVAS-098`).
+fn on_device_grid(at: Px<View>, density: Scale<Css, Device>) -> Px<View> {
+    let per_view = density.get() as f32;
+    Px::<View>::new((at.get() * per_view).round() / per_view)
+}
+
 /// The two batches a placed glyph lands in.
 ///
 /// A `tint` of `Some` names the alpha atlas, drawn in that colour. `None` names
@@ -170,9 +181,11 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     }
 
     // Bitmap top-left in screen space. The top bearing points up, so subtract.
+    // The corner lands on a device pixel edge, so each texel covers one
+    // device pixel and the linear sampler blends no two texels (`CANVAS-098`).
     let (x0, y0) = (
-        Px::<View>::new(origin.x as f32) + bl,
-        Px::<View>::new(origin.y as f32) - bt,
+        on_device_grid(Px::<View>::new(origin.x as f32) + bl, at.density),
+        on_device_grid(Px::<View>::new(origin.y as f32) - bt, at.density),
     );
     let (x1, y1) = (x0 + sw, y0 + sh);
     let Some(clip) = at.clip else {
@@ -892,6 +905,71 @@ mod tests {
                 height: Px::<View>::new(30.0),
             }
         );
+    }
+
+    /// The glyph quads a placement hands over, in the order it hands them.
+    #[derive(Default)]
+    struct Placed {
+        upright: Vec<GlyphQuad>,
+        rotated: usize,
+    }
+
+    impl GlyphSink for Placed {
+        fn glyph(&mut self, quad: GlyphQuad, _tint: Option<Color>) {
+            self.upright.push(quad);
+        }
+
+        fn glyph_corners(
+            &mut self,
+            _corners: [ambre_core::Point<Px<View>>; 4],
+            _slot: &AtlasSlot,
+            _tint: Option<Color>,
+        ) {
+            self.rotated += 1;
+        }
+    }
+
+    /// An upright glyph bitmap lands on whole device pixels, whatever the
+    /// pen position and the density (`CANVAS-098`). Drawn between two pixels,
+    /// the linear sampler would spread each stem over both.
+    #[test]
+    fn an_upright_glyph_lands_on_whole_device_pixels() {
+        let on_grid = |v: Px<View>, density: f64| {
+            let device = f64::from(v.get()) * density;
+            (device - device.round()).abs() < 1e-3
+        };
+        for density in [1.0, 1.25, 1.5, 2.0] {
+            for origin in [(10.3, 20.7), (169.5, 163.25), (0.1, 0.9), (333.33, 47.6)] {
+                let mut placed = Placed::default();
+                let at = GlyphPlacement {
+                    origin: Point::new(origin.0, origin.1),
+                    linear: None,
+                    density: ratio(density),
+                    clip: None,
+                    color: Color::BLACK,
+                };
+                emit_glyph(&mut placed, &slot(1, 11, 9, 11), &at);
+                assert_eq!(placed.rotated, 0, "an upright run draws no rotated quad");
+                let [quad] = placed.upright[..] else {
+                    panic!("one quad for one glyph, got {}", placed.upright.len());
+                };
+                for (edge, name) in [
+                    (quad.x, "left"),
+                    (quad.y, "top"),
+                    (quad.x + quad.width, "right"),
+                    (quad.y + quad.height, "bottom"),
+                ] {
+                    assert!(
+                        on_grid(edge, density),
+                        "{name} edge {edge:?} at density {density} from {origin:?}"
+                    );
+                }
+                // The snap moves the bitmap by half a device pixel at most.
+                let pen_x = origin.0 + 1.0 / density;
+                let moved = (f64::from(quad.x.get()) - pen_x).abs() * density;
+                assert!(moved <= 0.5 + 1e-3, "moved {moved} device px");
+            }
+        }
     }
 
     /// A glyph made at the raster cap is drawn over the box of the size
