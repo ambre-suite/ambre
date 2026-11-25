@@ -1924,6 +1924,7 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState:
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_fresh() | ret | bool	generic	whether the provisional runs read what the view shows now
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Key.held | field | String	free-text	the text held behind a split, document content that Debug prints the length of alone
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::opens_menu() | ret | bool	generic	whether a slash typed at a spot opens the menu
+ambre-prose | src/view/slash.rs | crate::view::slash | SlashItem.label | field | &'static str	free-text	the label the slash menu shows for an item, which a query filters on
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.query | field | String	free-text	what the user typed after the slash; Debug prints its length alone
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.query | field | String	free-text	what the user typed after the slash, as the menu shows it; Debug prints its length alone
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState::visible() | ret | bool	generic	whether the slash menu is open, which it is while it has an anchor
@@ -4988,6 +4989,10 @@ ambre-prose | src/doc.rs | crate::doc | write_whole_page_format() | ret | bool	g
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::title() | ret | &'static str	free-text	the header a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Paper::label() | ret | &'static str	free-text	the name of a paper a person reads
 ambre-prose | src/view/panel.rs | crate::view::panel | Margins::label() | ret | &'static str	free-text	the name of a margin preset a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | BAR_KINDS | const | [(crate::message::ParagraphKind,&str);5]	free-text	each paragraph kind of the bar's list, beside the label a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | KINDS | const | [(crate::message::ParagraphKind,&str);5]	free-text	each paragraph kind of the paragraph style section, beside the label a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | LINE_SPACINGS | const | [(Option<crate::events::LineHeight>,&str);5]	free-text	each line spacing the paragraph section offers, beside the label a person reads
+ambre-prose | src/view/panel.rs | crate::view::panel | LISTS | const | [(crate::events::ListStyle,&str);3]	free-text	each list marker the paragraph section offers, beside the label a person reads
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | reach() | ret | String	generic	the codec of a property reach on the data-reach attribute, as Reach::marker writes it
 ambre-chrome | src/kit.rs | crate::kit | unreached_controls() | ret | Vec<String>	foreign-api	the accessible names the DOM holds for controls with no data-reach, which a test prints
 ambre-logic | src/dispatch.rs | crate::dispatch | LogicState::murmure_space_signed() | ret | bool	generic	predicate result
@@ -5031,7 +5036,6 @@ ambre-chrome | src/status.rs | crate::status | Build::shows_diagnostics() | ret 
 ambre-commands | src/lib.rs | crate | NOTHING_SELECTED | const | &str	free-text	the subtitle a person reads over an empty selection
 ambre-commands | src/lib.rs | crate | TitleWords.en | field | &'static str	free-text	the English words of a display label, in a const table
 ambre-commands | src/lib.rs | crate | TitleWords.fr | field | &'static str	free-text	the French words of a display label, in a const table
-ambre-commands | src/lib.rs | crate | shown() | ret | &'static str	free-text	the words of a display label in the interface language, which a view draws
 ambre-prose | src/count.rs | crate::count | words_in(text) | param | &str	free-text	the text a person wrote, counted in words
 ambre-prose | src/view/panel.rs | crate::view::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel
 ambre-toile | src/ui/panel.rs | crate::ui::panel | PanelKind::subtitle() | ret | String	free-text	the count a person reads under the title of the panel

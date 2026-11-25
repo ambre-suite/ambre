@@ -147,8 +147,8 @@ impl PanelKind {
     #[must_use]
     pub fn title(self) -> &'static str {
         match self {
-            Self::Page => ambre_commands::tr!("Document", "Document"),
-            Self::Text => ambre_commands::tr!("Selection", "S\u{e9}lection"),
+            Self::Page => "Document",
+            Self::Text => "Selection",
         }
     }
 
@@ -274,121 +274,58 @@ pub enum TextWrite {
 
 /// The line spacings the paragraph section offers. `None` is the
 /// document's own.
-pub const LINE_SPACINGS: [(
-    Option<crate::events::LineHeight>,
-    ambre_commands::TitleWords,
-); 5] = {
+pub const LINE_SPACINGS: [(Option<crate::events::LineHeight>, &str); 5] = {
     use crate::events::{LineHeight, LineSpacingMultiple};
     [
-        (
-            None,
-            ambre_commands::TitleWords {
-                en: "Default",
-                fr: "Par d\u{e9}faut",
-            },
-        ),
-        (
-            Some(LineHeight::Multiple(LineSpacingMultiple::SINGLE)),
-            ambre_commands::TitleWords { en: "1", fr: "1" },
-        ),
+        (None, "Default"),
+        (Some(LineHeight::Multiple(LineSpacingMultiple::SINGLE)), "1"),
         (
             Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_FIFTEEN)),
-            ambre_commands::TitleWords {
-                en: "1.15",
-                fr: "1,15",
-            },
+            "1.15",
         ),
         (
             Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_HALF)),
-            ambre_commands::TitleWords {
-                en: "1.5",
-                fr: "1,5",
-            },
+            "1.5",
         ),
-        (
-            Some(LineHeight::Multiple(LineSpacingMultiple::DOUBLE)),
-            ambre_commands::TitleWords { en: "2", fr: "2" },
-        ),
+        (Some(LineHeight::Multiple(LineSpacingMultiple::DOUBLE)), "2"),
     ]
 };
 
 /// The paragraph kinds the paragraph style section offers, in the mockup's
 /// order, with their labels.
-pub const KINDS: [(crate::message::ParagraphKind, ambre_commands::TitleWords); 5] = [
-    (
-        crate::message::ParagraphKind::Body,
-        ambre_commands::TitleWords {
-            en: "Body",
-            fr: "Corps",
-        },
-    ),
+pub const KINDS: [(crate::message::ParagraphKind, &str); 5] = [
+    (crate::message::ParagraphKind::Body, "Body"),
     (
         crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H1),
-        ambre_commands::TitleWords {
-            en: "Heading 1",
-            fr: "Titre 1",
-        },
+        "Heading 1",
     ),
     (
         crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H2),
-        ambre_commands::TitleWords {
-            en: "Heading 2",
-            fr: "Titre 2",
-        },
+        "Heading 2",
     ),
-    (
-        crate::message::ParagraphKind::Quote,
-        ambre_commands::TitleWords {
-            en: "Quote",
-            fr: "Citation",
-        },
-    ),
+    (crate::message::ParagraphKind::Quote, "Quote"),
     (
         crate::message::ParagraphKind::List(crate::events::ListStyle::Bullet),
-        ambre_commands::TitleWords {
-            en: "List",
-            fr: "Liste",
-        },
+        "List",
     ),
 ];
 
 /// The paragraph kinds the floating bar's list offers, with their labels.
-pub const BAR_KINDS: [(crate::message::ParagraphKind, ambre_commands::TitleWords); 5] = [
-    (
-        crate::message::ParagraphKind::Body,
-        ambre_commands::TitleWords {
-            en: "Body",
-            fr: "Corps",
-        },
-    ),
+pub const BAR_KINDS: [(crate::message::ParagraphKind, &str); 5] = [
+    (crate::message::ParagraphKind::Body, "Body"),
     (
         crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H1),
-        ambre_commands::TitleWords {
-            en: "Heading 1",
-            fr: "Titre 1",
-        },
+        "Heading 1",
     ),
     (
         crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H2),
-        ambre_commands::TitleWords {
-            en: "Heading 2",
-            fr: "Titre 2",
-        },
+        "Heading 2",
     ),
     (
         crate::message::ParagraphKind::Heading(crate::message::HeadingLevel::H3),
-        ambre_commands::TitleWords {
-            en: "Heading 3",
-            fr: "Titre 3",
-        },
+        "Heading 3",
     ),
-    (
-        crate::message::ParagraphKind::Quote,
-        ambre_commands::TitleWords {
-            en: "Quote",
-            fr: "Citation",
-        },
-    ),
+    (crate::message::ParagraphKind::Quote, "Quote"),
 ];
 
 /// The kind a chip of [`KINDS`] shows for a reading: every list reads as
@@ -406,27 +343,15 @@ pub fn kind_chip(
 }
 
 /// The list markers the paragraph section offers.
-pub const LISTS: [(crate::events::ListStyle, ambre_commands::TitleWords); 3] = [
-    (
-        crate::events::ListStyle::Bullet,
-        ambre_commands::TitleWords {
-            en: "Bulleted list",
-            fr: "Liste \u{e0} puces",
-        },
-    ),
+pub const LISTS: [(crate::events::ListStyle, &str); 3] = [
+    (crate::events::ListStyle::Bullet, "Bulleted list"),
     (
         crate::events::ListStyle::Ordered(crate::message::OrderedStyle::Decimal),
-        ambre_commands::TitleWords {
-            en: "Numbered list",
-            fr: "Liste num\u{e9}rot\u{e9}e",
-        },
+        "Numbered list",
     ),
     (
         crate::events::ListStyle::Todo(crate::message::TodoMark::Open),
-        ambre_commands::TitleWords {
-            en: "Checklist",
-            fr: "Liste de t\u{e2}ches",
-        },
+        "Checklist",
     ),
 ];
 
@@ -466,7 +391,7 @@ impl Paper {
             Self::A5 => "A5",
             Self::Letter => "Letter",
             Self::Legal => "Legal",
-            Self::Other => ambre_commands::tr!("Custom", "Personnalis\u{e9}"),
+            Self::Other => "Custom",
         }
     }
 
@@ -524,10 +449,10 @@ impl Margins {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            Self::Normal => ambre_commands::tr!("Normal", "Normales"),
-            Self::Narrow => ambre_commands::tr!("Narrow", "\u{c9}troites"),
-            Self::Wide => ambre_commands::tr!("Wide", "Larges"),
-            Self::Custom => ambre_commands::tr!("Custom...", "Personnalis\u{e9}es..."),
+            Self::Normal => "Normal",
+            Self::Narrow => "Narrow",
+            Self::Wide => "Wide",
+            Self::Custom => "Custom...",
         }
     }
 

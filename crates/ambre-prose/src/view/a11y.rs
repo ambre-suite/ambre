@@ -32,25 +32,15 @@ impl ProseUiState {
             return None;
         }
         let kind = match laid {
-            Some(BlockType::Heading) => ambre_commands::tr!("Heading", "Titre"),
-            Some(BlockType::ListItem) => {
-                ambre_commands::tr!("List item", "\u{c9}l\u{e9}ment de liste")
-            }
-            Some(BlockType::CodeBlock) => ambre_commands::tr!("Code", "Code"),
-            Some(BlockType::Image) => ambre_commands::tr!("Image", "Image"),
-            Some(BlockType::Toc) => {
-                ambre_commands::tr!("Table of contents", "Table des mati\u{e8}res")
-            }
-            Some(BlockType::Table | BlockType::TableRow | BlockType::TableCell) => {
-                ambre_commands::tr!("Table cell", "Cellule de tableau")
-            }
-            Some(BlockType::PageBreak | BlockType::HRule) => {
-                ambre_commands::tr!("Separator", "S\u{e9}parateur")
-            }
-            Some(BlockType::Paragraph) | None if in_cell => {
-                ambre_commands::tr!("Table cell", "Cellule de tableau")
-            }
-            Some(BlockType::Paragraph) | None => ambre_commands::tr!("Paragraph", "Paragraphe"),
+            Some(BlockType::Heading) => "Heading",
+            Some(BlockType::ListItem) => "List item",
+            Some(BlockType::CodeBlock) => "Code",
+            Some(BlockType::Image) => "Image",
+            Some(BlockType::Toc) => "Table of contents",
+            Some(BlockType::Table | BlockType::TableRow | BlockType::TableCell) => "Table cell",
+            Some(BlockType::PageBreak | BlockType::HRule) => "Separator",
+            Some(BlockType::Paragraph) | None if in_cell => "Table cell",
+            Some(BlockType::Paragraph) | None => "Paragraph",
         };
         let text = text.unwrap_or_default();
         let text = text.trim();

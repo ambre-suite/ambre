@@ -1996,10 +1996,7 @@ async fn the_colour_triggers_of_the_board_bar_take_their_names_from_the_registry
             .query_selector(&format!("[data-reach=\"{marker}\"] button"))
             .unwrap()
             .expect("the bar shows the trigger");
-        let want = property(id)
-            .title
-            .pick(&ambre_commands::Locale::En)
-            .into_string();
+        let want = property(id).title.pick(&ambre_commands::Locale::En).into_string();
         assert_eq!(
             trigger.get_attribute("aria-label"),
             Some(want.clone()),

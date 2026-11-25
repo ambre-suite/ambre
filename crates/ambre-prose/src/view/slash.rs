@@ -65,94 +65,58 @@ pub fn inserted(id: ambre_core::StaticKey<ambre_core::Commands>) -> Option<Slash
 /// One item of the menu.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SlashItem {
-    pub label: ambre_commands::TitleWords,
+    pub label: &'static str,
     pub command: SlashCommand,
 }
 
 /// The twelve items, in the order the menu lists them.
 pub const ITEMS: [SlashItem; 12] = [
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Text",
-            fr: "Texte",
-        },
+        label: "Text",
         command: SlashCommand::Paragraph,
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Heading 1",
-            fr: "Titre 1",
-        },
+        label: "Heading 1",
         command: SlashCommand::Heading(HeadingLevel::H1),
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Heading 2",
-            fr: "Titre 2",
-        },
+        label: "Heading 2",
         command: SlashCommand::Heading(HeadingLevel::H2),
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Heading 3",
-            fr: "Titre 3",
-        },
+        label: "Heading 3",
         command: SlashCommand::Heading(HeadingLevel::H3),
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Bullet list",
-            fr: "Liste \u{e0} puces",
-        },
+        label: "Bullet list",
         command: SlashCommand::List(ListStyle::Bullet),
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Numbered list",
-            fr: "Liste num\u{e9}rot\u{e9}e",
-        },
+        label: "Numbered list",
         command: SlashCommand::List(ListStyle::Ordered(OrderedStyle::Decimal)),
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Task list",
-            fr: "Liste de t\u{e2}ches",
-        },
+        label: "Task list",
         command: SlashCommand::List(ListStyle::Todo(crate::events::TodoMark::Open)),
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Table",
-            fr: "Tableau",
-        },
+        label: "Table",
         command: SlashCommand::Table,
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Code",
-            fr: "Code",
-        },
+        label: "Code",
         command: SlashCommand::Code,
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Separator",
-            fr: "S\u{e9}parateur",
-        },
+        label: "Separator",
         command: SlashCommand::Rule,
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Page break",
-            fr: "Saut de page",
-        },
+        label: "Page break",
         command: SlashCommand::PageBreak,
     },
     SlashItem {
-        label: ambre_commands::TitleWords {
-            en: "Table of contents",
-            fr: "Table des mati\u{e8}res",
-        },
+        label: "Table of contents",
         command: SlashCommand::Toc,
     },
 ];
@@ -202,11 +166,7 @@ pub fn filter(query: &str) -> IdxVec<SlashChoice, SlashItem> {
     let query = query.to_lowercase();
     ITEMS
         .into_iter()
-        .filter(|item| {
-            ambre_commands::shown(&item.label)
-                .to_lowercase()
-                .contains(&query)
-        })
+        .filter(|item| item.label.to_lowercase().contains(&query))
         .collect()
 }
 
@@ -283,10 +243,7 @@ impl ProseUiState {
         SlashMenuState {
             anchor: self.under(menu.origin),
             query: menu.query.clone(),
-            items: filter(&menu.query)
-                .iter()
-                .map(|item| ambre_commands::shown(&item.label))
-                .collect(),
+            items: filter(&menu.query).iter().map(|item| item.label).collect(),
             selected: menu.selected,
         }
     }
@@ -332,41 +289,5 @@ impl ProseUiState {
         let (page, piece) = self.fragment_at(block, Px::<Doc>::new(y0))?;
         let bottom = Point::new(Px::<Doc>::new(x), Px::<Doc>::new(y1));
         Some(self.to_screen(block, page, piece, bottom))
-    }
-}
-
-#[cfg(test)]
-mod language_tests {
-    use super::{ITEMS, filter};
-    use ambre_commands::{Locale, show_locale};
-
-    /// `SETTINGS-044`: a word of the Prose chrome shows in the interface
-    /// language of the page, and the slash menu finds an item by it.
-    #[test]
-    fn the_slash_menu_reads_and_finds_its_items_in_the_interface_language() {
-        show_locale(Locale::Fr);
-        let shown: Vec<&str> = ITEMS
-            .iter()
-            .map(|item| ambre_commands::shown(&item.label))
-            .collect();
-        assert!(shown.contains(&"Titre 1"), "{shown:?}");
-        assert!(
-            filter("puces")
-                .iter()
-                .any(|item| item.label.en == "Bullet list")
-        );
-        let notice = crate::view::annotate::LostReply::Deleted.notice();
-        assert!(notice.starts_with("Un collaborateur"), "{notice}");
-        show_locale(Locale::En);
-        assert!(
-            filter("bullet")
-                .iter()
-                .any(|item| item.label.en == "Bullet list")
-        );
-        assert!(
-            crate::view::annotate::LostReply::Deleted
-                .notice()
-                .starts_with("A collaborator")
-        );
     }
 }

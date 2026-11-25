@@ -39,45 +39,6 @@ impl Locale {
     pub const ALL: [Self; 2] = [Self::En, Self::Fr];
 }
 
-thread_local! {
-    // The interface language the page shows. The UI thread alone draws
-    // labels, so the cell is the thread's own. `ambre_chrome` wakes the
-    // reactive views on a change (`SETTINGS-042`).
-    static SHOWN: std::cell::Cell<Locale> = std::cell::Cell::new(Locale::default());
-}
-
-/// The interface language of the page, read with no reactive tracking.
-#[must_use]
-pub fn shown_locale() -> Locale {
-    SHOWN.with(std::cell::Cell::get)
-}
-
-/// Make `locale` the interface language of the page. The caller wakes
-/// what reads it.
-pub fn show_locale(locale: Locale) {
-    SHOWN.with(|shown| shown.set(locale));
-}
-
-/// The words of `words` in the interface language of the page, read once
-/// where a view draws them. A view reads every word it shows through
-/// [`tr!`], never as a literal of one language.
-#[must_use]
-pub fn shown(words: &TitleWords) -> &'static str {
-    match shown_locale() {
-        Locale::En => words.en,
-        Locale::Fr => words.fr,
-    }
-}
-
-/// The words of a label in English then in French, read in the interface
-/// language of the page where the view draws them.
-#[macro_export]
-macro_rules! tr {
-    ($en:literal, $fr:literal) => {
-        $crate::shown(&$crate::TitleWords { en: $en, fr: $fr })
-    };
-}
-
 /// The words of one label in every language that ships, as data. One
 /// shared [`TitleWords::pick`] reads every label of the workspace: a
 /// function per label cost Main about 50 bytes each (`ambre-spec-budgets.md`

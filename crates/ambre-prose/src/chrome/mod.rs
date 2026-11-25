@@ -322,7 +322,7 @@ fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView 
                 <input
                     type="text"
                     class="ambre-prose-thread-input"
-                    placeholder=ambre_commands::tr!("Reply", "R\u{e9}pondre")
+                    placeholder="Reply"
                     prop:value=move || signals.drafts.with(|drafts| {
                         drafts.get(&comment_id).cloned().unwrap_or_default()
                     })
@@ -343,7 +343,7 @@ fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView 
                         }
                     }
                 />
-                <button class="ambre-prose-thread-send" on:click=move |_| post()>{ambre_commands::tr!("Send", "Envoyer")}</button>
+                <button class="ambre-prose-thread-send" on:click=move |_| post()>"Send"</button>
                 <button
                     class="ambre-prose-thread-resolve"
                     on:click=move |_| {
@@ -352,7 +352,7 @@ fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView 
                         send(AnnotationIntent::Resolve { comment_id });
                     }
                 >
-                    ambre_commands::tr!("Resolve", "R\u{e9}soudre")
+                    "Resolve"
                 </button>
             </div>
         </div>
@@ -367,15 +367,9 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
         let origin = signals.canvas_origin.get();
         signals.hovered.get().map(|hovered| {
             let suggestion_id = hovered.suggestion_id;
-            let (accept, reject) = match hovered.kind {
-                SuggestionKind::Insertion => (
-                    ambre_commands::tr!("Accept the insertion", "Accepter l'insertion"),
-                    ambre_commands::tr!("Reject the insertion", "Rejeter l'insertion"),
-                ),
-                SuggestionKind::Deletion => (
-                    ambre_commands::tr!("Accept the deletion", "Accepter la suppression"),
-                    ambre_commands::tr!("Reject the deletion", "Rejeter la suppression"),
-                ),
+            let what = match hovered.kind {
+                SuggestionKind::Insertion => "insertion",
+                SuggestionKind::Deletion => "deletion",
             };
             let left = format!("{}px", hovered.rect.x0.on_page(origin.x).get());
             let top = format!(
@@ -395,21 +389,21 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
                 >
                     <button
                         class="ambre-prose-suggestion-accept"
-                        aria-label=accept
+                        aria-label=format!("Accept the {what}")
                         on:click=move |_| signals
                             .intent
                             .set(Some(AnnotationIntent::Accept { suggestion_id }))
                     >
-                        ambre_commands::tr!("Accept", "Accepter")
+                        "Accept"
                     </button>
                     <button
                         class="ambre-prose-suggestion-reject"
-                        aria-label=reject
+                        aria-label=format!("Reject the {what}")
                         on:click=move |_| signals
                             .intent
                             .set(Some(AnnotationIntent::Reject { suggestion_id }))
                     >
-                        ambre_commands::tr!("Reject", "Rejeter")
+                        "Reject"
                     </button>
                 </div>
             }
@@ -430,11 +424,11 @@ pub fn ProseSpellingPopover(signals: ProseSignals) -> impl IntoView {
             let top = format!("{}px", open.rect.y1.on_page(origin.y).get() + 4.0);
             let choices = match open.suggestions {
                 Offered::Waiting => view! {
-                    <span class="ambre-prose-spelling-waiting">{ambre_commands::tr!("Looking up", "Recherche en cours")}</span>
+                    <span class="ambre-prose-spelling-waiting">"Looking up"</span>
                 }
                 .into_any(),
                 Offered::Ready(found) if found.is_empty() => view! {
-                    <span class="ambre-prose-spelling-none">{ambre_commands::tr!("No suggestion", "Aucune suggestion")}</span>
+                    <span class="ambre-prose-spelling-none">"No suggestion"</span>
                 }
                 .into_any(),
                 Offered::Ready(found) => found
@@ -467,7 +461,7 @@ pub fn ProseSpellingPopover(signals: ProseSignals) -> impl IntoView {
                     style:top=top
                     style:z-index="61"
                     role="group"
-                    aria-label=ambre_commands::tr!("Spelling", "Orthographe")
+                    aria-label="Spelling"
                 >
                     {choices}
                     <button
@@ -476,7 +470,7 @@ pub fn ProseSpellingPopover(signals: ProseSignals) -> impl IntoView {
                             .intent
                             .set(Some(AnnotationIntent::Ignore { block_id, range }))
                     >
-                        ambre_commands::tr!("Ignore", "Ignorer")
+                        "Ignore"
                     </button>
                 </div>
             }
@@ -548,7 +542,7 @@ fn bar_kind_list(
     use crate::view::panel::{BAR_KINDS, KIND, TextWrite};
     let choices = BAR_KINDS
         .iter()
-        .map(|(_, label)| ambre_chrome::ChoiceView::text(ambre_commands::shown(label)))
+        .map(|(_, label)| ambre_chrome::ChoiceView::text(*label))
         .collect::<Vec<_>>();
     let selected = match kind {
         ambre_commands::Reading::Uniform(Some(kind)) => BAR_KINDS
@@ -564,11 +558,11 @@ fn bar_kind_list(
     });
     view! {
         <ambre_chrome::Select
-            label=ambre_commands::tr!("Paragraph style", "Style de paragraphe")
+            label="Paragraph style"
             choices=choices
             selected=Signal::stored(selected)
             on_pick=pick
-            placeholder=ambre_commands::tr!("Heading", "Titre")
+            placeholder="Heading"
             reach=ambre_commands::Reach::Property(KIND)
         />
     }
@@ -612,18 +606,12 @@ fn bar_prompt(
         };
         let (placeholder, start) = match prompt {
             BarPrompt::Link => (
-                ambre_commands::tr!(
-                    "Paste or type an address",
-                    "Collez ou saisissez une adresse"
-                ),
+                "Paste or type an address",
                 link.as_ref()
                     .map(|l| l.as_str().to_owned())
                     .unwrap_or_default(),
             ),
-            BarPrompt::Comment => (
-                ambre_commands::tr!("Write a comment", "\u{c9}crivez un commentaire"),
-                String::new(),
-            ),
+            BarPrompt::Comment => ("Write a comment", String::new()),
         };
         let field = NodeRef::<leptos::html::Input>::new();
         Effect::new(move |_| {
@@ -787,7 +775,7 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
                 style:top=top
                 style:z-index="62"
                 role="listbox"
-                aria-label=ambre_commands::tr!("Insert", "Ins\u{e9}rer")
+                aria-label="Insert"
             >
                 {items.collect_view()}
             </ul>
@@ -832,21 +820,9 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
         let height = format!("{}px", RULER_HEIGHT.get());
         let handles = ruler.visible.as_bool().then(|| {
             [
-                (
-                    RulerHandle::IndentFirst,
-                    ambre_commands::tr!("First-line indent", "Retrait de premi\u{e8}re ligne"),
-                    "first",
-                ),
-                (
-                    RulerHandle::IndentLeft,
-                    ambre_commands::tr!("Left indent", "Retrait gauche"),
-                    "left",
-                ),
-                (
-                    RulerHandle::IndentRight,
-                    ambre_commands::tr!("Right indent", "Retrait droit"),
-                    "right",
-                ),
+                (RulerHandle::IndentFirst, "First-line indent", "first"),
+                (RulerHandle::IndentLeft, "Left indent", "left"),
+                (RulerHandle::IndentRight, "Right indent", "right"),
             ]
             .map(|(handle, label, side)| {
                 let x = move || {
@@ -906,7 +882,7 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
                 style:height=height
                 style:z-index="59"
                 role="group"
-                aria-label=ambre_commands::tr!("Ruler", "R\u{e8}gle")
+                aria-label="Ruler"
             >
                 {handles}
             </div>

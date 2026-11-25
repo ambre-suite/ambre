@@ -5,34 +5,37 @@
 //! view of a label reads it through [`language`], which a reactive scope
 //! tracks, so a change redraws each label that read it.
 
+use std::cell::Cell;
+
 use ambre_client_core::DocumentLocale;
 use ambre_commands::Locale;
 use leptos::prelude::{ArcTrigger, Notify, Track};
 
 thread_local! {
-    // The UI thread alone draws labels. `ambre_commands` holds the language
-    // itself, so a view the host compiles reads it too. A trigger beside it
-    // lets a reactive scope track it, and costs Main less than a signal of
-    // `Locale`. A signal of a new type compiles its own copy of the reactive
-    // code. The `Arc` trigger needs no reactive owner, so an event handler
-    // reads it as a view does.
-    static CHANGED: ArcTrigger = ArcTrigger::new();
+    // The UI thread alone draws labels. A trigger beside a cell costs Main
+    // less than a signal of `Locale`. A signal of a new type compiles its
+    // own copy of the reactive code. The `Arc` trigger needs no reactive
+    // owner, so an event handler reads it as a view does.
+    static LANGUAGE: (Cell<Locale>, ArcTrigger) = (Cell::new(Locale::default()), ArcTrigger::new());
 }
 
 /// The interface language of the page. Inside a reactive scope, the scope
 /// tracks it and runs again on a change.
 #[must_use]
 pub fn language() -> Locale {
-    CHANGED.with(Track::track);
-    ambre_commands::shown_locale()
+    LANGUAGE.with(|(locale, changed)| {
+        changed.track();
+        locale.get()
+    })
 }
 
 /// Make `locale` the interface language of the page.
 pub fn set_language(locale: Locale) {
-    if ambre_commands::shown_locale() != locale {
-        ambre_commands::show_locale(locale);
-        CHANGED.with(Notify::notify);
-    }
+    LANGUAGE.with(|(shown, changed)| {
+        if shown.replace(locale) != locale {
+            changed.notify();
+        }
+    });
 }
 
 /// The language the page shows for a stored tag. A tag of none takes the
