@@ -64,7 +64,8 @@ thread_local! {
     static SCREEN: Cell<Subject> = const { Cell::new(Subject::None) };
     /// The layout and the width of the last stage, which size the pages the header turns.
     static SHAPE: ArcRwSignal<(Layout, Width)> = ArcRwSignal::new((Layout::Band, Width::Wider));
-    /// What the call bubble covers of the page, as it last measured itself (`MURMURE-698`).
+    /// What the call bubble covers of the page, as it last measured itself (the Murmure calls
+    /// spec, section 3).
     static COVER: Cell<Cover> = const { Cell::new(Cover::NONE) };
     /// Whether the bubble shows its mini video, which a press on its faces sets.
     static MINI: ArcRwSignal<Mini> = ArcRwSignal::new(Mini::Folded);
@@ -87,12 +88,13 @@ pub(crate) enum MiniShows {
 /// another aspect then leaves no part of the box open on the canvas below.
 const MINI_BACKDROP: ambre_draw::Color = ambre_draw::Color::from_rgb8(0x10, 0x10, 0x12);
 
-/// The bubble publishes what it covers of the page (`MURMURE-698`).
+/// The bubble publishes what it covers of the page (the Murmure calls spec, section 3).
 pub(crate) fn publish_cover(cover: Cover) {
     COVER.with(|c| c.set(cover));
 }
 
-/// What the call bubble covers of the page, as it last published it (`MURMURE-698`).
+/// What the call bubble covers of the page, as it last published it (the Murmure calls spec,
+/// section 3).
 pub(crate) fn cover() -> Cover {
     COVER.with(Cell::get)
 }
@@ -108,7 +110,8 @@ pub(crate) fn mini_shows() -> ArcRwSignal<MiniShows> {
 }
 
 /// The picture of the mini video of the bubble, in whichever application the page shows
-/// (`MURMURE-699`). The render runtime draws it, never an element over the canvas (`CALL-015`).
+/// (the Murmure calls spec, section 3). The render runtime draws it, never an element over the
+/// canvas (`CALL-015`).
 /// It draws a received screen first, then the camera of the member who spoke last. `None` while
 /// the bubble is folded or hidden, or while neither video arrives.
 fn mini_picture() -> Option<Picture> {
@@ -157,7 +160,7 @@ pub(crate) fn mini_repaints() -> bool {
 }
 
 /// Paints the mini video of the bubble over the overlay of any application: its backdrop, then
-/// the current picture of its slot (`MURMURE-699`, `CALL-015`).
+/// the current picture of its slot (`CALL-015`).
 pub(crate) fn paint_mini(surface: &mut ambre_canvas::WgpuSurface<'_>) {
     let Some(picture) = MINI_DRAWN.with(Cell::get) else {
         return;
