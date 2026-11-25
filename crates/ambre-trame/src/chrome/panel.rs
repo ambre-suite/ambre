@@ -77,7 +77,7 @@ fn label(id: StaticKey<ambre_core::Properties>) -> String {
     panel::PROPERTIES
         .iter()
         .find(|p| p.id == id)
-        .map(|p| (p.title)(&ambre_chrome::commands::Locale::En).into_string())
+        .map(|p| p.title.pick(&ambre_chrome::language()).into_string())
         .unwrap_or_default()
 }
 
@@ -93,7 +93,7 @@ fn command_choices(ids: &[StaticKey<Commands>], labels: &[&str]) -> Vec<ChoiceVi
 /// The icon choice of the command `id`. Its tooltip names the command as the
 /// registry describes it (`CHROME-186`).
 fn icon_choice(id: StaticKey<Commands>, icon: icondata::Icon) -> ChoiceView {
-    let name = registry::title(id, &ambre_chrome::commands::Locale::En)
+    let name = registry::title(id, &ambre_chrome::language())
         .map(ambre_core::Validated::into_string)
         .unwrap_or_default();
     ChoiceView::icon(name, icon).reaching(Reach::Command(id))

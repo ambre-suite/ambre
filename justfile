@@ -47,7 +47,7 @@ lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-sync --lib --tests
     # Each converter module as `scripts/converter_build.py` builds it: one
     # family's engine and the exports, with no loader. No line above turns an
     # engine on for wasm, so these read the exports (`ARCH-079`), and each
@@ -461,11 +461,12 @@ test-wasm:
     # The smoke of the phone page of the Sync worker's crypto. The crate's own
     # tests run on the host.
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-crypto --test phone_bench
-    # The metered read of a `fetch` body runs on a browser stream alone
-    # (`SYNC-278`), and the worker hands its log to the browser console and
-    # profile (`SYNC-305`). The Web Lock that orders the renewals of the kept
-    # session runs in a browser alone (`SRV-330`). The crate's other tests run on the host.
-    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-sync --test metered_fetch --test worker_log --test renewal_lock
+    # Every test target of the Sync worker. The metered read of a `fetch` body
+    # runs on a browser stream alone (`SYNC-278`), and the worker hands its log
+    # to the browser console and profile (`SYNC-305`). The Web Lock that orders
+    # the renewals of the kept session runs in a browser alone (`SRV-330`). A
+    # test over the native mock transport, `proptest` or `tracing` is host-only.
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-sync
     # Threaded: the converter respawn test spawns real workers from a Logic
     # worker (`ARCH-108`). The Logic thread runs on a shared memory in the
     # product too.
@@ -938,15 +939,18 @@ selfhost-down:
 
 # The chart of `deploy/chart/`, rendered under three sets of values and held to
 # its rules: no root, no capability, no secret in a value, the SFU on the
-# network of its node, the store images of the compose file, and the release
-# workflow that pins each image by digest (`scripts/chart.py`). Needs Helm.
+# network of its node, the store images of the compose file, the flow table of
+# the NetworkPolicies, and the release workflow that pins each image by digest
+# (`scripts/chart.py`). Needs Helm.
 chart-check:
     python3 scripts/chart.py check
 
 # `SRV-309`, `CALL-141`: the chart on a local kind cluster, from the images that
 # `just selfhost-up` built, then the browser tier through its web server on
 # port 443 of the host. The media of a call must reach the address of the node.
-# The cluster is deleted on exit, and its state printed first on a failure.
+# Between the two, two probe pods find each store and the relay refused
+# (`SRV-352`). The cluster is deleted on exit, and its state printed first on a
+# failure.
 chart-test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -959,8 +963,34 @@ chart-test:
     helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
     for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
     curl -skf -o /dev/null https://localhost/api/auth/config
+    python3 scripts/chart.py probe kubectl $kube
     node=$(kubectl $kube get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
     for t in prose::tests::the_self_hosted_stack_serves_two_members_one_document murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp; do sleep 61; BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost SELFHOST_MEDIA_HOST="$node" cargo test -p ambre-belt -- --ignored --exact "$t"; done
+
+# `SRV-356`: the chart test of a release, on a kind cluster of its own. It
+# verifies the provenance of each image of LIST by its digest, against the tag
+# REF and the commit SHA, then pulls it, then installs the chart and waits for
+# the relay to answer through the web server. The released client signs in by no
+# bare name (`ZK-045`), so the browser tier stays on `just chart-test`.
+chart-test-release LIST REF SHA:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python3 scripts/image_provenance.py pull "{{LIST}}" --source-ref "{{REF}}" --source-digest "{{SHA}}"
+    kube="--context kind-ambre-chart"
+    kind delete cluster --name ambre-chart
+    kind create cluster --name ambre-chart --config deploy/chart/test/kind.yaml --wait 180s
+    trap 'status=$?; [ $status -eq 0 ] || { kubectl $kube get pods -o wide; kubectl $kube describe pods | tail -n 80; }; kind delete cluster --name ambre-chart; exit $status' EXIT
+    kind load docker-image --name ambre-chart ambre-relay:local ambre-sfu:local ambre-web:local ambre-init:local
+    sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
+    helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
+    for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
+    curl -skf -o /dev/null https://localhost/api/auth/config
+
+# `SRV-354`, `SRV-355`, `SRV-356`: each job that pushes an image attests its
+# digest and alone holds the signing token, and the chart test of a release
+# verifies each image before it pulls one (`scripts/image_provenance.py`).
+image-provenance:
+    python3 scripts/image_provenance.py check
 
 # The dev container (`.devcontainer/README.md`): the toolchain, the relay and
 # the client in one container, PostgreSQL, Redis and Garage beside it from the

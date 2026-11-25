@@ -215,6 +215,7 @@ fn walk(
         &mut surface,
         camera,
         Scene {
+            grid: ambre_toile::ui::grid::GridShown::Shown,
             viewport,
             palette: Theme::Light.palette(),
             images: &HashMap::default(),
@@ -236,6 +237,8 @@ fn board_paint() {
     let viewport = DisplayViewport {
         version: ambre_core::Seq::ZERO,
         grid_unit: Px::<Board>::new(20.0),
+        snap: ambre_toile::message::GridSnap::Free,
+        ground: ambre_toile::message::BoardGround::Theme,
         reactions: Default::default(),
         pins: Vec::new(),
         viewport: Default::default(),

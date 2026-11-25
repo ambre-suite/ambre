@@ -239,6 +239,7 @@ mod tests {
         assert_eq!(renewal.fired(due, second), Due::Renew);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-183`: the worker reads the lifetime the relay announced with the
     /// pair. It renews that pair once, on its own clock, the margin before
     /// the expiry. A pair a renewal stored arms the next renewal, and an

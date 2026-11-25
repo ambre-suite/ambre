@@ -205,6 +205,35 @@ fn ShellHeader(
         };
         toasts.info(label);
     };
+    // The interface language, beside the theme (`SETTINGS-024`). A pick
+    // redraws every label at once, then follows the account.
+    let languages: Vec<ambre_chrome::ChoiceView> = ambre_chrome::commands::Locale::ALL
+        .into_iter()
+        .map(|locale| ambre_chrome::ChoiceView::text(ambre_chrome::endonym(locale).into_string()))
+        .collect();
+    let language_shown = Signal::derive(|| {
+        let shown = ambre_chrome::language();
+        ambre_chrome::commands::Locale::ALL
+            .iter()
+            .position(|locale| *locale == shown)
+            .map(ambre_core::index::Pos::<ambre_chrome::ChoiceRow>::from_usize)
+    });
+    let pick_language = Callback::new(move |p: ambre_core::index::Pos<ambre_chrome::ChoiceRow>| {
+        let Some(locale) = p
+            .to_index()
+            .and_then(|index| ambre_chrome::commands::Locale::ALL.get(index).copied())
+        else {
+            return;
+        };
+        ambre_chrome::set_language(locale);
+        to_logic.with_value(|outbox| {
+            outbox.send(LogicCommand::ChangeSetting {
+                change: ambre_client_core::SettingChange::InterfaceLanguage(
+                    ambre_chrome::stored_tag(locale),
+                ),
+            });
+        });
+    });
     view! {
         <HeaderTitle docs=docs current_doc=current_doc palette=palette table=table on_command=on_command about_open=about_open disabled=disabled />
         <SyncBadge status=chrome_status.into() />
@@ -249,6 +278,16 @@ fn ShellHeader(
                         view! { <Icon icon=icon /><span>{label}</span> }
                     }}
                 </button>
+                // The list of the picker opens inside the menu, so a press on
+                // it must not reach the menu, which closes on any click.
+                <div class="ambre-menu-language" on:click=|ev: leptos::ev::MouseEvent| ev.stop_propagation()>
+                    <ambre_chrome::Select
+                        label="Language"
+                        choices=languages.clone()
+                        selected=language_shown
+                        on_pick=pick_language
+                    />
+                </div>
                 // The settings of the person each page declares, such as
                 // the pointer of the board (`CHROME-156`).
                 <HomedRows table=table region=ambre_chrome::commands::Home::AvatarMenu on_command=on_command />
@@ -493,6 +532,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_style_model,
         toile_restyle,
         toile_place,
+        toile_board,
         toile_float_bar,
         toile_quick_style,
         shell_cover,
@@ -912,6 +952,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_command,
             restyle: toile_restyle,
             place: toile_place,
+            board: toile_board,
             deck: toile_deck,
             stats: sel_stats_toile,
         })
@@ -1047,6 +1088,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             stats=sel_stats_toile
                             perf=perf_snap
                             zoom=board_zoom
+                            board=toile_board
                             on_command=on_command
                         />
                     }
@@ -1525,7 +1567,7 @@ mod tests {
             .append_child(&container)
             .expect("appended");
         let target: web_sys::HtmlElement = container.clone().dyn_into().expect("an element");
-        leptos::mount::mount_to(target, move || {
+        StoredValue::new_local(leptos::mount::mount_to(target, move || {
             view! {
                 <leptos_router::components::Router>
                     <HeaderTitle
@@ -1538,8 +1580,7 @@ mod tests {
                     />
                 </leptos_router::components::Router>
             }
-        })
-        .forget();
+        }));
         let query = |selector: &str| container.query_selector(selector).expect("a selector");
         let click = |selector: &str| {
             query(selector)
@@ -1654,13 +1695,13 @@ mod tests {
         let theme_sig = RwSignal::new(ambre_canvas::Theme::Light);
         let share_open = RwSignal::new(ambre_chrome::Openness::Closed);
         let current_doc = RwSignal::new(Some(Id::<Document>::mint()));
-        let (to_logic, _from_shell) =
+        let (to_logic, from_shell) =
             ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
                 ambre_bus::conduit::ChannelSlots,
             >::of::<8>());
         let to_logic = crate::outbox::ShellOutbox::new(to_logic);
         let ran = RwSignal::new(None::<StaticKey<Commands>>);
-        leptos::mount::mount_to(target, move || {
+        StoredValue::new_local(leptos::mount::mount_to(target, move || {
             view! {
                 <leptos_router::components::Router>
                     <header class="ambre-header">
@@ -1683,8 +1724,7 @@ mod tests {
                     </header>
                 </leptos_router::components::Router>
             }
-        })
-        .forget();
+        }));
         leptos::task::tick().await;
         let header = container
             .query_selector(".ambre-header")
@@ -1796,6 +1836,33 @@ mod tests {
                 .is_none(),
             "a pick closes the avatar menu"
         );
+
+        // The language sits beside the theme. A pick redraws the labels at
+        // once and writes the setting of the account (`SETTINGS-042`).
+        ambre_chrome::set_language(ambre_chrome::commands::Locale::En);
+        press(".ambre-account-menu .ambre-header-menu-button");
+        leptos::task::tick().await;
+        press(".ambre-menu-language .ambre-select-trigger");
+        leptos::task::tick().await;
+        let options = container
+            .query_selector_all(".ambre-menu-language .ambre-select-option")
+            .expect("a selector");
+        assert_eq!(options.length(), 2, "English and French");
+        options
+            .item(1)
+            .and_then(|o| o.dyn_into::<web_sys::HtmlElement>().ok())
+            .expect("the French option")
+            .click();
+        leptos::task::tick().await;
+        assert_eq!(ambre_chrome::language(), ambre_chrome::commands::Locale::Fr);
+        let written = std::iter::from_fn(|| from_shell.try_recv().ok()).find_map(|cmd| match cmd {
+            LogicCommand::ChangeSetting {
+                change: ambre_client_core::SettingChange::InterfaceLanguage(tag),
+            } => Some(tag),
+            _ => None,
+        });
+        assert_eq!(written.as_ref().and_then(|t| t.as_str()), Some("fr"));
+        ambre_chrome::set_language(ambre_chrome::commands::Locale::En);
         current_doc.set(None);
         leptos::task::tick().await;
         assert!(
@@ -1839,24 +1906,26 @@ mod tests {
         let current_doc = RwSignal::new(None);
         let palette = palette_command(DocType::Trame);
         let on_command = Callback::new(|_| {});
-        leptos::mount::mount_to(inner.body().expect("a body"), move || {
-            view! {
-                <leptos_router::components::Router>
-                    <header class="ambre-header">
-                        <HeaderTitle
-                            docs=docs
-                            current_doc=current_doc
-                            palette=palette
-                            table=trame_chrome::COMMANDS
-                            on_command=on_command
-                            about_open=RwSignal::new(ambre_chrome::Openness::Closed)
-                        />
-                        {palette.map(|command| view! { <ambre_chrome::CommandSearch command=command on_command=on_command /> })}
-                    </header>
-                </leptos_router::components::Router>
-            }
-        })
-        .forget();
+        StoredValue::new_local(leptos::mount::mount_to(
+            inner.body().expect("a body"),
+            move || {
+                view! {
+                    <leptos_router::components::Router>
+                        <header class="ambre-header">
+                            <HeaderTitle
+                                docs=docs
+                                current_doc=current_doc
+                                palette=palette
+                                table=trame_chrome::COMMANDS
+                                on_command=on_command
+                                about_open=RwSignal::new(ambre_chrome::Openness::Closed)
+                            />
+                            {palette.map(|command| view! { <ambre_chrome::CommandSearch command=command on_command=on_command /> })}
+                        </header>
+                    </leptos_router::components::Router>
+                }
+            },
+        ));
         let _ = frame.offset_width();
         inner
             .query_selector(".ambre-brand .ambre-header-menu-button")

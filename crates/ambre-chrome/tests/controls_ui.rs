@@ -10,7 +10,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Locale, Property, Reading};
+use ambre_chrome::commands::{Command, Home, KeyBinding, KeyChar, Property, Reading};
 use ambre_chrome::{
     Choice, ChoiceRow, ChoiceView, ColorPopover, CommandButton, ContextPanel, DockSide,
     FONT_FAMILIES, Field, Fold, FontPicker, IconButton, LengthField, PanelPrefs, PanelSection,
@@ -31,7 +31,10 @@ const PAGE: StaticKey<PanelSections> = StaticKey::<PanelSections>::new("t.page")
 
 static BOLD: Command = Command {
     id: StaticKey::<Commands>::new("t.format.bold"),
-    title: |_: &Locale| ambre_core::Validated::new("Bold"),
+    title: ambre_commands::TitleWords {
+        en: "Bold",
+        fr: "Bold",
+    },
     icon: None,
     keybindings: &[KeyBinding::primary(KeyChar::B)],
     category: StaticKey::<Categories>::new("format"),
@@ -41,29 +44,44 @@ static BOLD: Command = Command {
 
 static HAND: Command = Command {
     id: StaticKey::<Commands>::new("t.tool.hand"),
-    title: |_: &Locale| ambre_core::Validated::new("Hand"),
+    title: ambre_commands::TitleWords {
+        en: "Hand",
+        fr: "Hand",
+    },
     icon: None,
     keybindings: &[KeyBinding::primary(KeyChar::H)],
     category: StaticKey::<Categories>::new("tool"),
     home: Home::CreationBar,
-    description: Some(|_: &Locale| ambre_core::Validated::new("Drag to move the view")),
+    description: Some(ambre_commands::TitleWords {
+        en: "Drag to move the view",
+        fr: "Drag to move the view",
+    }),
 };
 
 static ITALIC: Property = Property {
     id: StaticKey::<Properties>::new("t.italic"),
-    title: |_: &Locale| ambre_core::Validated::new("Italic"),
+    title: ambre_commands::TitleWords {
+        en: "Italic",
+        fr: "Italic",
+    },
     icon: None,
 };
 
 static MARGIN: Property = Property {
     id: StaticKey::<Properties>::new("t.margin"),
-    title: |_: &Locale| ambre_core::Validated::new("Margin"),
+    title: ambre_commands::TitleWords {
+        en: "Margin",
+        fr: "Margin",
+    },
     icon: None,
 };
 
 static PAPER: Property = Property {
     id: StaticKey::<Properties>::new("t.paper"),
-    title: |_: &Locale| ambre_core::Validated::new("Paper"),
+    title: ambre_commands::TitleWords {
+        en: "Paper",
+        fr: "Paper",
+    },
     icon: None,
 };
 
@@ -93,7 +111,10 @@ where
     let container = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&container).unwrap();
     let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-    mount_to(target, f).forget();
+    // The mount lives as long as the owner of the test, and leaves with the
+    // signals it reads. A forgotten mount kept effects that could run in the
+    // next test and read disposed signals.
+    StoredValue::new_local(mount_to(target, f));
     container
 }
 

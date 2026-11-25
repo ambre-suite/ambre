@@ -3,6 +3,7 @@
 //! Provides a type-safe wrapper around a 128-bit UUID v7 with serde support,
 //! generation, and conversion to/from string.
 
+use serde::de::{Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid as ExternalUuid;
@@ -13,7 +14,7 @@ use crate::error::UuidError;
 ///
 /// Stored as a `[u8; 16]` in big-endian order (as per RFC 4122).
 /// The internal representation is opaque; use `as_bytes()` or `to_string()` for exposure.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct Uuid([u8; 16]);
 
 impl Uuid {
@@ -73,6 +74,33 @@ impl Uuid {
     }
 }
 
+/// Reads the 16 bytes as the derive of `[u8; 16]` reads them: a tuple of
+/// 16 elements, in any format. serde unrolls that read into 16 calls, about
+/// 1 KB of the Sync worker. A loop over the elements reads the same bytes
+/// (`ambre-spec-budgets.md` section 5).
+impl<'de> Deserialize<'de> for Uuid {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_tuple(16, UuidVisitor)
+    }
+}
+
+/// The visitor of [`Uuid`]'s tuple of bytes.
+struct UuidVisitor;
+
+impl<'de> Visitor<'de> for UuidVisitor {
+    type Value = Uuid;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("an array of length 16")
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Uuid, A::Error> {
+        let mut bytes = [0; 16];
+        crate::fixed_bytes::read_tuple(&mut seq, &mut bytes, &self)?;
+        Ok(Uuid(bytes))
+    }
+}
+
 impl Default for Uuid {
     fn default() -> Self {
         Self::new()
@@ -124,6 +152,34 @@ mod tests {
         let s = "12345678-1234-5678-1234-567812345678";
         let uuid = Uuid::parse_str(s).unwrap();
         assert_eq!(uuid.to_hyphenated(), s);
+    }
+
+    proptest::proptest! {
+        /// The tuple read reads the bytes the derive of `[u8; 16]` reads,
+        /// and refuses what it refuses, in postcard and in JSON.
+        #[test]
+        fn the_tuple_read_reads_as_the_array_derive(
+            bytes in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..24),
+            json in proptest::collection::vec(0_u16..300, 0..20),
+        ) {
+            proptest::prop_assert_eq!(
+                postcard::from_bytes::<Uuid>(&bytes).ok().map(|uuid| uuid.0),
+                postcard::from_bytes::<[u8; 16]>(&bytes).ok()
+            );
+            let text = serde_json::to_string(&json).unwrap();
+            proptest::prop_assert_eq!(
+                serde_json::from_str::<Uuid>(&text).ok().map(|uuid| uuid.0),
+                serde_json::from_str::<[u8; 16]>(&text).ok()
+            );
+        }
+
+        /// A uuid writes and reads back the bytes of the array.
+        #[test]
+        fn a_uuid_travels_as_its_array(bytes in proptest::prelude::any::<[u8; 16]>()) {
+            let wire = postcard::to_allocvec(&Uuid(bytes)).unwrap();
+            proptest::prop_assert_eq!(&wire, &postcard::to_allocvec(&bytes).unwrap());
+            proptest::prop_assert_eq!(postcard::from_bytes::<Uuid>(&wire).unwrap(), Uuid(bytes));
+        }
     }
 
     #[test]

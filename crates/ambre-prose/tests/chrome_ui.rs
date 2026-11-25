@@ -43,7 +43,10 @@ where
     let container = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&container).unwrap();
     let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-    mount_to(target, f).forget();
+    // The mount lives as long as the owner of the test, and leaves with the
+    // signals it reads. A forgotten mount kept effects that could run in the
+    // next test and read disposed signals.
+    StoredValue::new_local(mount_to(target, f));
     container
 }
 
@@ -463,7 +466,7 @@ async fn the_spelling_popover_lists_the_corrections_and_hands_back_a_pick() {
 /// text to the view.
 #[wasm_bindgen_test]
 async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
-    use ambre_prose::view::panel::{PanelKind, TextWrite};
+    use ambre_prose::view::panel::{PanelKind, TextValue};
     use ambre_prose::view::toolbar::BarPrompt;
     let signals = ProseSignals::new();
     signals.canvas_origin.set(origin());
@@ -495,7 +498,7 @@ async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
         let named = match entry {
             ambre_chrome::commands::Reach::Command(id) => {
                 ambre_commands::find(ambre_prose::commands::COMMANDS, *id)
-                    .map(|c| (c.title)(&ambre_commands::Locale::En).into_string())
+                    .map(|c| c.title.pick(&ambre_commands::Locale::En).into_string())
                     .is_some_and(|label| *found == label)
             }
             _ => false,
@@ -518,8 +521,8 @@ async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
     };
     option("Heading 1").click();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Kind(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Kind(
             ambre_prose::message::ParagraphKind::Heading(ambre_prose::message::HeadingLevel::H1)
         ))
     );
@@ -557,8 +560,8 @@ async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
     field.set_value("https://example.org");
     field.dispatch_event(&event).unwrap();
     assert_eq!(
-        signals.text_write.get_untracked(),
-        Some(TextWrite::Link(Some(ambre_core::LinkUrl::new(
+        signals.text_write.get_untracked().map(|w| w.value),
+        Some(TextValue::Link(Some(ambre_core::LinkUrl::new(
             "https://example.org".to_owned()
         ))))
     );

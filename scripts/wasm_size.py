@@ -55,9 +55,10 @@ BUDGET = 4_000_000
 # 10,000 bytes. Sync sat over its ceiling for two days with no gate to say so,
 # since the brotli budget holds a wide margin. A figure rises only through a
 # story row that names the new figure and the cut tried first (`ARCH-095`).
-# Sync read 1,328,477 under `just size` on 2026-11-24, after four cuts and the
-# merges after them. It holds 1,350,000, the figure of the W10 raise, with
-# 1.6 % of room: 2 % above the measure would round up to 1,360,000.
+# Sync read 1,325,809 under `just size` on 2026-11-25, after six cuts, and
+# 1,339,608 with the phantom thread merged (`ambre-spec-budgets.md` section 5).
+# It holds 1,350,000, the figure of the W10 raise, with 10,392 bytes of room
+# after that merge.
 CEILINGS = {
     "Main": 10_860_000,
     "Sync": 1_350_000,

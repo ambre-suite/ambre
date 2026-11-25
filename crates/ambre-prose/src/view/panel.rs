@@ -12,7 +12,8 @@
 // one undo takes it back (`PROSE-UI-252`).
 // ============================================================================
 
-use ambre_commands::{Locale, Property, Reach};
+use ambre_commands::{Property, Reach};
+use ambre_core::index::Pos;
 use ambre_core::{Commands, Count, Mm, PanelSections, PrintLength, Properties, StaticKey};
 
 use crate::commands;
@@ -61,6 +62,8 @@ pub const INDENT_IN: StaticKey<Properties> = StaticKey::new("prose.paragraph.ind
 pub const KIND: StaticKey<Properties> = StaticKey::new("prose.paragraph.kind");
 /// The body font of the document.
 pub const BODY_FONT: StaticKey<Properties> = StaticKey::new("prose.defaults.body_font");
+/// The font of every heading of the document.
+pub const HEADING_FONT: StaticKey<Properties> = StaticKey::new("prose.defaults.heading_font");
 
 /// The paper of the page.
 pub const PAPER: StaticKey<Properties> = StaticKey::new("prose.page.paper");
@@ -79,57 +82,49 @@ pub const MARGINS: StaticKey<Properties> = StaticKey::new("prose.page.margins");
 
 /// Describe one property per line: its id, its title function and its label.
 macro_rules! properties {
-    ($($title_fn:ident: $id:expr, $label:literal;)*) => {
-        #[expect(
-            non_snake_case,
-            reason = "each title function takes the name of its property constant"
-        )]
-        mod titles {
-            use super::Locale;
-            $(pub fn $title_fn(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-                ambre_core::Validated::new($label)
-            })*
-        }
+    ($($title_fn:ident: $id:expr, $label:literal, $fr:literal;)*) => {
 
         /// Every property the page's panel edits, described once.
         pub const PROPERTIES: &[Property] = &[
-            $(Property { id: $id, title: titles::$title_fn, icon: None },)*
+            $(Property { id: $id, title: ambre_commands::TitleWords { en: $label, fr: $fr }, icon: None },)*
         ];
     };
 }
 
 properties! {
-    PAPER: PAPER, "Paper";
-    ORIENTATION: ORIENTATION, "Orientation";
-    MARGIN_TOP: MARGIN_TOP, "Top margin";
-    MARGIN_BOTTOM: MARGIN_BOTTOM, "Bottom margin";
-    MARGIN_LEFT: MARGIN_LEFT, "Left margin";
-    MARGIN_RIGHT: MARGIN_RIGHT, "Right margin";
-    MARGINS: MARGINS, "Margins";
-    FONT: FONT, "Font";
-    SIZE: SIZE, "Font size";
-    COLOUR: COLOUR, "Text colour";
-    HIGHLIGHT: HIGHLIGHT, "Highlight";
-    ALIGN: ALIGN, "Alignment";
-    LINE_SPACING: LINE_SPACING, "Line spacing";
-    INDENT_LEFT: INDENT_LEFT, "Left indent";
-    INDENT_FIRST: INDENT_FIRST, "First-line indent";
-    INDENT_OUT: INDENT_OUT, "Decrease indent";
-    INDENT_IN: INDENT_IN, "Increase indent";
-    KIND: KIND, "Paragraph style";
-    BODY_FONT: BODY_FONT, "Body font";
+    PAPER: PAPER, "Paper", "Papier";
+    ORIENTATION: ORIENTATION, "Orientation", "Orientation";
+    MARGIN_TOP: MARGIN_TOP, "Top margin", "Marge haute";
+    MARGIN_BOTTOM: MARGIN_BOTTOM, "Bottom margin", "Marge basse";
+    MARGIN_LEFT: MARGIN_LEFT, "Left margin", "Marge gauche";
+    MARGIN_RIGHT: MARGIN_RIGHT, "Right margin", "Marge droite";
+    MARGINS: MARGINS, "Margins", "Marges";
+    FONT: FONT, "Font", "Police";
+    SIZE: SIZE, "Font size", "Taille de police";
+    COLOUR: COLOUR, "Text colour", "Couleur du texte";
+    HIGHLIGHT: HIGHLIGHT, "Highlight", "Surlignage";
+    ALIGN: ALIGN, "Alignment", "Alignement";
+    LINE_SPACING: LINE_SPACING, "Line spacing", "Interligne";
+    INDENT_LEFT: INDENT_LEFT, "Left indent", "Retrait gauche";
+    INDENT_FIRST: INDENT_FIRST, "First-line indent", "Retrait de premi\u{e8}re ligne";
+    INDENT_OUT: INDENT_OUT, "Decrease indent", "Diminuer le retrait";
+    INDENT_IN: INDENT_IN, "Increase indent", "Augmenter le retrait";
+    KIND: KIND, "Paragraph style", "Style de paragraphe";
+    BODY_FONT: BODY_FONT, "Body font", "Police du corps";
+    HEADING_FONT: HEADING_FONT, "Heading font", "Police des titres";
 }
 
 /// The title of a property no table describes.
-fn unnamed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
-    ambre_core::Validated::new("Property")
-}
+const UNNAMED_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+    en: "Property",
+    fr: "Propri\u{e9}t\u{e9}",
+};
 
 /// What [`property`] answers for an id no table describes. Every id the
 /// panel names is in the table, which a wasm test holds.
 const UNNAMED: Property = Property {
     id: StaticKey::new("prose.unnamed"),
-    title: unnamed_title,
+    title: UNNAMED_TITLE,
     icon: None,
 };
 
@@ -253,13 +248,37 @@ ambre_core::define_flag! {
     }
 }
 
+/// The selection the context panel showed when a control was picked: its
+/// two ends, in flow order.
+///
+/// The view publishes it every frame, and a pick copies it into its write.
+/// A caret that moves before the outbox frees then moves no write
+/// (`PROSE-UI-281`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PickedSelection {
+    /// The end that comes first in the flow.
+    pub anchor: (crate::events::BlockId, Pos<crate::message::DocChar>),
+    /// The end that comes last in the flow.
+    pub focus: (crate::events::BlockId, Pos<crate::message::DocChar>),
+}
+
 /// What a control of the text, paragraph or default styles sections asks
 /// for, until the view turns it into one command (`PROSE-UI-098`).
 ///
-/// The panel holds no selection: the view adds the one it holds, so a
-/// write always reaches the selection the panel shows.
+/// The write carries the selection the panel showed at the pick. The view
+/// writes over that selection, never over the one it holds when the outbox
+/// frees (`PROSE-UI-281`).
 #[derive(Clone, Debug, PartialEq)]
-pub enum TextWrite {
+pub struct TextWrite {
+    /// What the control asks for.
+    pub value: TextValue,
+    /// The selection at the pick, or `None` when the panel showed none.
+    pub selection: Option<PickedSelection>,
+}
+
+/// The value a control of the context panel writes.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TextValue {
     /// A font, or `None` for the block's own.
     Font(Option<ambre_core::FontFamily>),
     /// A size, or `None` for the block's own.
@@ -277,8 +296,8 @@ pub enum TextWrite {
     /// One step in or out for every block of the selection: a list item
     /// changes level, another block moves its left indent.
     Indent(crate::message::IndentStep),
-    /// The body font of the document. It needs no selection.
-    DefaultFont(ambre_core::FontFamily),
+    /// A default font of the document. It needs no selection.
+    DefaultFont(crate::message::DefaultFont),
 }
 
 /// The line spacings the paragraph section offers. `None` is the

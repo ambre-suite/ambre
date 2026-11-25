@@ -4813,10 +4813,22 @@ body {
     font-weight: 400;
 }
 
+/* The faces are a button: a press opens the mini video (`MURMURE-699`). */
 .murmure-float-faces {
     display: inline-flex;
-    margin-left: auto;
-    padding-left: var(--space-2);
+    align-items: center;
+    padding: 0 0 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-full);
+    background: none;
+    cursor: pointer;
+}
+
+/* The box of the mini video. The render runtime draws the picture on the
+   canvas below it, so the box shows on the bubble from the phone width up
+   alone, where the bubble floats (`CALL-015`). */
+.murmure-float-mini {
+    display: none;
 }
 
 .murmure-float-face {
@@ -4918,6 +4930,59 @@ body {
 
     .murmure-float-wide {
         display: flex;
+    }
+
+    .murmure-float-faces {
+        align-self: flex-start;
+    }
+
+    /* An open bubble paints no background of its own: each row paints its
+       own, and the box of the mini video between them paints nothing over a
+       picture. The canvas then shows through the box (`CALL-015`). */
+    .murmure-call-float[data-mini] {
+        gap: 0;
+        padding: 0;
+        overflow: hidden;
+        background: transparent;
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-grip,
+    .murmure-call-float[data-mini] > .murmure-float-faces,
+    .murmure-call-float[data-mini] > .murmure-float-controls {
+        align-self: stretch;
+        background: var(--surface);
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-grip {
+        padding: var(--space-3) var(--space-3) var(--space-2);
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-faces {
+        padding: 0 var(--space-3) var(--space-2) calc(2 * var(--space-3));
+        border-radius: 0;
+    }
+
+    .murmure-call-float[data-mini] > .murmure-float-controls {
+        padding: var(--space-2) var(--space-3) var(--space-3);
+    }
+
+    /* The ring of the faces stays inside their row, off the box below. */
+    .murmure-float-faces:focus-visible {
+        outline: var(--focus-width) solid var(--accent);
+        outline-offset: calc(-1 * var(--focus-width));
+    }
+
+    .murmure-float-mini {
+        display: grid;
+        place-items: center;
+        aspect-ratio: 16 / 9;
+        background: var(--surface-2);
+        color: var(--text-dim);
+        font-size: var(--font-xs);
+    }
+
+    .murmure-call-float[data-mini="video"] .murmure-float-mini {
+        background: transparent;
     }
 }
 

@@ -12,8 +12,10 @@ use super::{
     AUDIO_CHUNK_SIZE, CONFIG_BYTE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer,
     DEPARTURE_SLOTS, Departures, HEADER_LEN, JoinClaim, KeyHandoff, MAX_RATCHETS,
     OPENERS_PER_SENDER, ReceiveKeys, ReplayWindow, SWITCH_DELAY, SenderKey, SignedJoin, TAG_LEN,
-    VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key, wrap_sender_key,
+    VIDEO_OVERHEAD, WRAP_DOMAIN, WRAP_PLAIN_LEN, WrapBinding, WrappedSenderKey, unwrap_sender_key,
+    wrap_key, wrap_sender_key,
 };
+use crate::CryptoError;
 
 fn kid(sender: u64, generation: u64) -> KeyIdentifier {
     KeyIdentifier {
@@ -1409,4 +1411,105 @@ fn the_departures_keep_the_newest_indexes() {
     assert!(departures.names_any(&[Seq::new(2), Seq::new(99)]));
     assert!(departures.names_any(&[Seq::new(slots + 1)]));
     assert!(!departures.names_any(&[]));
+}
+
+/// `CALL-157`: the deadline of a fresh key closes the epochs below that key alone. A removal
+/// that names the epoch of the fresh key, set inside the delay, still closes that epoch at its
+/// own time.
+#[test]
+fn a_fresh_key_deadline_keeps_a_later_removal_pending() {
+    let old = SenderKey::generate();
+    let fresh = SenderKey::generate();
+    let fresh_epoch = Seq::<KeyGeneration>::ZERO.next_epoch().map_or(0, Seq::get);
+    let mut roger = receiver(1, 0, &old);
+    let arrival = Instant::<PageLoad>::new(1_000.0);
+    roger.insert(Seq::new(1), Seq::new(fresh_epoch), fresh.clone(), arrival);
+    let removal = arrival.after(TimeSpan::new(1.0));
+    roger.close(Seq::new(1), Seq::new(fresh_epoch), SWITCH_DELAY, removal);
+    let delay = SWITCH_DELAY.to_fractional();
+    let deadline = arrival.after(delay);
+    let mut eve_old = sealer(&old, 1, 0);
+    let mut alice = sealer(&fresh, 1, fresh_epoch);
+    assert!(
+        roger
+            .open_audio(seal(&mut eve_old, b"past the deadline"), deadline)
+            .is_err()
+    );
+    assert!(
+        roger
+            .open_audio(seal(&mut alice, b"before the close"), deadline)
+            .is_ok()
+    );
+    assert!(
+        roger
+            .open_audio(seal(&mut alice, b"forged"), removal.after(delay))
+            .is_err(),
+        "the deadline of the fresh key dropped the close of the removal"
+    );
+}
+
+/// `CALL-157`: a wrap carries departures that fill every slot, and the receiver reads each
+/// one back.
+#[test]
+fn a_wrap_carries_departures_that_fill_every_slot() {
+    let alice = CallExchangeKey::generate();
+    let bob = CallExchangeKey::generate();
+    let mut departures = Departures::default();
+    let slots = u64::try_from(DEPARTURE_SLOTS).unwrap_or(0);
+    for index in 1..=slots {
+        departures.depart(Seq::new(index));
+    }
+    let wrapped = wrap_sender_key(
+        &alice,
+        &bob.public(),
+        binding(1, 2),
+        Seq::ZERO,
+        &departures,
+        Seq::ZERO,
+        &SenderKey::generate(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let opened = unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &wrapped)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(opened.departures, departures);
+    assert!(opened.departures.names_any(&[Seq::new(1)]));
+    assert!(opened.departures.names_any(&[Seq::new(slots)]));
+}
+
+/// A wrap from `alice` to `bob` of the plaintext that a count byte of `count` starts the
+/// departures of. Every slot holds the index 1.
+fn wrap_with_count(alice: &CallExchangeKey, bob: &CallExchangeKey, count: u8) -> WrappedSenderKey {
+    let mut plain = Vec::with_capacity(WRAP_PLAIN_LEN);
+    plain.extend_from_slice(&0u64.to_be_bytes());
+    plain.extend_from_slice(&[7; 32]);
+    plain.push(count);
+    for _ in 0..DEPARTURE_SLOTS {
+        plain.extend_from_slice(&1u64.to_be_bytes());
+    }
+    plain.extend_from_slice(&0u64.to_be_bytes());
+    let shared =
+        crate::ecdh::shared_secret(&alice.0, &bob.public()).unwrap_or_else(|e| panic!("{e}"));
+    let kek = wrap_key(&shared, binding(1, 2), &alice.public(), &bob.public());
+    let (nonce, ciphertext) = crate::aead::seal(&plain, &ambre_core::Aad::of(WRAP_DOMAIN), &kek)
+        .unwrap_or_else(|e| panic!("{e}"));
+    WrappedSenderKey { nonce, ciphertext }
+}
+
+/// `CALL-163`: a wrap that opens under the key of its recipient, with a count of departures
+/// past the slots, is refused. The same wrap with a count of every slot opens.
+#[test]
+fn a_wrap_with_a_count_of_departures_past_the_slots_is_refused() {
+    let alice = CallExchangeKey::generate();
+    let bob = CallExchangeKey::generate();
+    let slots = u8::try_from(DEPARTURE_SLOTS).unwrap_or(0);
+    for count in [slots + 1, u8::MAX] {
+        let wrapped = wrap_with_count(&alice, &bob, count);
+        assert_eq!(
+            unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &wrapped).map(|o| o.generation),
+            Err(CryptoError::InvalidKeyLength),
+            "a count of {count}"
+        );
+    }
+    let full = wrap_with_count(&alice, &bob, slots);
+    assert!(unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &full).is_ok());
 }

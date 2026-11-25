@@ -28,9 +28,13 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-280` | `OBS` | A grid dot MUST keep its screen size at every zoom. | this spec section 3; `features/ambre-spec-toile-board-rendering.md section 3` | `ambre_toile::ui::grid::tests::a_grid_dot_keeps_its_size_at_every_zoom` -- five zooms, and no transform pushed | none | verified |
 | `TOILE-UI-424` | `OBS` | The default grid MUST be one discreet dot at each crossing of the grid step, drawn on the warm ground of the board. | this spec section 3; `features/ambre-spec-toile-board-rendering.md section 3` | `ambre_toile::ui::grid::tests::the_default_grid_is_dots_at_the_crossings_on_the_ground` -- one dot per crossing a step apart, no line, a dot colour apart from the ground, and the ground the chrome's sunken surface in both themes | none | verified |
 | `TOILE-UI-281` | `INV` | The rectangle the UI hands over for culling MUST carry a zoom the Logic thread can divide by. | this spec section 2 | `ambre_toile::message::tests::any_zoom_culls_a_finite_rect` | none | verified |
-| `TOILE-UI-025` | `INV` | While the board asks for snapping, every committed geometry MUST sit on a multiple of the grid step. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Snap to the board grid` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-UI-025` | `INV` | While the board snaps and the user shows the grid, a drag MUST commit the corner of the moved box on a crossing of the drawn grid. | this spec section 3; section 2 | `ambre_toile::ui::tool::tests::a_drag_on_a_snapping_board_lands_the_box_on_the_grid` -- the preview and the commit land the corner on the step of 40 the grid draws at 1x; `ambre_toile::ui::grid::tests::the_snap_step_is_the_drawn_step` -- the snap step is the drawn step at five zooms, and none on a free board or a hidden grid | none | verified |
 | `TOILE-UI-030` | `INV` | The minimap MUST NOT write to the document: dragging its rectangle moves the camera alone. | this spec section 5 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TOILE-UI-421` | `INV` | Snapping MUST move a world point to the nearest multiple of the grid step on each axis. | this spec section 3; `TOILE-UI-025` | `ambre_toile::ui::grid::tests::snap_quantizes_to_step` -- on a step of 20, (23, -31) lands on (20, -40) and (31, 9) on (40, 0) | none | verified |
+| `TOILE-UI-425` | `INV` | While the board snaps, a resize MUST commit each edge of the box on the drawn grid, at least one step wide and high. | this spec section 3; `TOILE-UI-025` | `ambre_toile::ui::tool::tests::a_resize_on_a_snapping_board_lands_its_edges_on_the_grid` -- the four edges on the step, the preview equal to the commit, and a hidden grid landing free; `ambre_toile::ui::grid::tests::a_snapped_geometry_sits_on_the_step` -- an edge that collapses keeps one step | none | verified |
+| `TOILE-UI-427` | `INV` | The snap and the background MUST each be one register of the board: a write is one undo item, and two peers converge on one value. | this spec section 2; `ambre-spec-toile-schema.md section 3` | `ambre_toile::logic::state::groups::tests::the_board_snap_is_one_undoable_register_that_converges` -- a write of the value held makes no delta, one undo takes a write back, and concurrent writes converge; `ambre_toile::logic::state::groups::tests::the_board_ground_is_one_undoable_register_that_converges` -- the same for the background | none | verified |
+| `TOILE-UI-429` | `OBS` | The board section of the panel MUST show the snap and the background of the board, and a press MUST write the value it shows. | this spec section 3; `CHROME-163` | `ambre_toile::tests::chrome_ui::the_grid_toggle_and_the_snap_show_their_state_and_act` -- wasm tier, the snap toggle and the seven grounds read the board and each press writes one edit | none | verified |
+| `TOILE-UI-430` | `OBS` | A board MUST lie on the ground its register holds: the theme's by default, or a tint drawn alike in both themes, under dots a shade off it. | this spec section 3; section 2 | `ambre_toile::ui::grid::tests::a_tint_draws_alike_in_both_themes_with_dots_off_it` -- the theme's ground in both themes, each tint alike in both, darker dots on a light tint and lighter on a dark one; `ambre_toile::ui::render::tests::a_hidden_grid_paints_the_ground_and_no_dot` -- a tinted board paints its tint first; `ambre_toile::logic::state::groups::tests::the_board_ground_is_one_undoable_register_that_converges` -- the scaffold's grey and a clear colour read as the theme's ground | none | verified |
 
 ### 1.2 Drag the board around
 
@@ -88,23 +92,42 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-297` | `FRAME` | A resize MUST NOT move the camera: the same world point stays under the screen centre, at the same scale. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_resize_keeps_the_camera_and_asks_for_the_new_canvas` -- the centre and the zoom read the same | none | verified |
 | `TOILE-UI-298` | `FAIL` | A canvas that reports no extent MUST be treated as the smallest one, never as a camera that cannot be inverted. | this spec section 2; `TOILE-UI-002` | `ambre_toile::ui::view::view_tests::a_resize_keeps_the_camera_and_asks_for_the_new_canvas` -- a zero resize and a negative size are the one-pixel canvas, and the camera inverts | none | verified |
 
+### 1.8 Nudge on the grid, and hide it
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-UI-426` | `POST` | On a snapping board, an arrow MUST move the selection to the next grid line on its axis, and `Shift` with an arrow by one unit. | this spec section 3; `TOILE-UI-025` | `ambre_toile::ui::view::view_tests::a_nudge_on_a_snapping_board_reaches_the_next_grid_line` -- through the key handler, against a real Logic state; `ambre_toile::ui::grid::tests::a_snapped_geometry_sits_on_the_step` -- from a line and from between two lines, on both axes | none | verified |
+| `TOILE-UI-428` | `FRAME` | The grid toggle of the status bar MUST write nothing; a hidden grid MUST paint the bare ground and hold back the snap for that user alone. | this spec section 3; `CHROME-149` | `ambre_toile::ui::view::view_tests::each_command_keeps_the_rules_of_its_home` -- the toggle is homed in the status bar and writes nothing; `ambre_toile::ui::render::tests::a_hidden_grid_paints_the_ground_and_no_dot`; `ambre_toile::ui::view::view_tests::a_nudge_on_a_snapping_board_reaches_the_next_grid_line` -- a hidden grid nudges free; `ambre_toile::tests::chrome_ui::the_grid_toggle_and_the_snap_show_their_state_and_act` -- wasm tier, the toggle shows its state and runs its command | none | verified |
+
 * **Budget.** the pan and zoom latency under 15 ms, a row of `ambre-spec-budgets.md section 2`. It
   is held by construction rather than by a bench: the camera is applied locally and the cull request
   that follows it is asynchronous (`TOILE-UI-020`).
 * **Boundary.** none: the camera is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses to the Logic thread is a rectangle to cull
   against, never document data (`TOILE-UI-001`).
-* **Verification.** 35 `verified`, 2 `unimplemented`. The pure functions of the camera hold the
+* **Verification.** 42 `verified`, 1 `unimplemented`. The pure functions of the camera hold the
   geometry. View tests drive the wheel in each mode, the finger, the edge pan and the resize, then
   read the cull request each handler queues. The grid is painted into a recording surface on the
-  board's own unit. The two `unimplemented` rows are snapping and the minimap.
+  board's own unit.
+
+  The select gestures run against a snapping board, and the wasm tier presses the two toggles. The
+  one `unimplemented` row is the minimap.
 
 ---
 
 ## 2. MODEL
 
 **Containers.** None. The camera persists nothing. The board's grid unit and its snapping flag are
-declared in `ambre-spec-toile-schema.md section 3`, under the `board` register.
+declared in `ambre-spec-toile-schema.md section 3`, under the `board` register. Each frame carries
+both, and `ToileCommand::EditBoard` writes the flag, one undo item (`TOILE-UI-427`).
+
+**What the board lies on** is the `bg_color` register. The scaffold writes a dark grey that no build
+ever drew. That grey reads as the ground of the theme, and so do a clear colour and a value of
+another kind. A write back to the theme's ground stores the scaffold's grey, and the scaffold itself keeps
+its bytes (`TOILE-265`, `TOILE-UI-430`).
+
+**Whether the grid shows** is view state of one user, held on the view and never written. A hidden
+grid holds back the snap, so no gesture lands on dots the user cannot see (`TOILE-UI-428`).
 
 **The camera** (`ambre-toile`):
 
@@ -176,6 +199,15 @@ request carries a kind token the reply echoes, so a pending fit spends only its 
 | a move, a resize, a marquee or a stroke held past the edge of the canvas | pans towards that edge, faster the deeper, and the gesture follows (`TOILE-UI-380`) |
 | the zoom control and the View menu | zoom in, zoom out, 100 %, fit the board, fit the selection (`features/ambre-spec-toile-menus.md`) |
 | a canvas resize | keeps the centre and the zoom, and re-culls (`TOILE-UI-296`, `TOILE-UI-297`) |
+| a drag, a resize or an arrow on a snapping board | lands on the grid the board draws (`TOILE-UI-025`, `TOILE-UI-425`, `TOILE-UI-426`) |
+| the grid toggle of the status bar | shows or hides the grid for this user alone (`TOILE-UI-428`) |
+| the snap toggle of the board section of the panel | asks every peer's gestures to land on the grid (`TOILE-UI-429`) |
+
+**How a gesture lands.** The snap step is the step the grid draws at the current zoom. The dots a
+user sees are thus the points a gesture lands on. A drag lands the top-left corner of the moved box,
+and the boxes of a selection keep their offsets to each other. A resize lands its four edges. An
+arrow moves the corner to the next line on its axis; `Shift` keeps the fine step of one unit, off
+the grid.
 
 **How a wheel event is classified,** strongest signal first: a line or page unit is a classic wheel, so a
 mouse. A non-zero horizontal component is a two-axis glide, so a trackpad. A large vertical delta with no
@@ -192,9 +224,12 @@ in screen space, so a dot keeps its size at every zoom
 
 **The default look.** The board lies on the sunken surface of the chrome. The grid is one dot of a
 pixel and a half at each crossing, a shade off the ground (`TOILE-UI-424`). Between two crossings
-the ground shows, so the grid reads as a texture, not a ruling. The background a board stores and
-the setting that picks lines or no grid land with the
-`Snap to the board grid` Story (`ambre-roadmap.md` E6). Until then every board shows this look.
+the ground shows, so the grid reads as a texture, not a ruling. The grid is dots alone: no board
+stores lines, and a user who wants none hides the grid.
+
+**The background.** The board section of the panel offers the ground of the theme, then six light
+tints. A tint is document state, so every peer sees it, and it draws alike in both themes. Its dots
+take a shade off it: darker on a light tint, lighter on a dark one (`TOILE-UI-430`).
 
 ---
 
@@ -208,16 +243,18 @@ the setting that picks lines or no grid land with the
 | An ambiguous glide leaves the guess unchanged | classifying every event, with no latch | the classifier runs per event, so flipping on a weak signal makes the board alternate between panning and zooming inside one gesture |
 | The grid step is a multiple of the board unit | a step derived only from the pixel spacing | the grid is magnetic, so a step that is not a multiple of the unit snaps content off the unit it was authored on |
 | A fit refuses an empty rectangle | clamping the extent to a minimum | it invents a rectangle the caller did not ask for. Fitting a zero-area rectangle is a division by zero, and its two plausible answers -- maximum zoom, or no move -- differ, so refusing states which one |
+| The grid is dots alone | a register that picks lines, dots or no grid | the grid toggle of the status bar already gives each user no grid, and a second look costs a paint path and main wasm for a choice nobody asked of a board |
+| The background offers six light tints | the full colour picker | a dark or saturated board fights the content on it and the dots of the grid; a short list of light grounds keeps every board legible in both themes |
 | The minimap stays a camera, not a document property | a synchronized overview, as a board register | the minimap is a way of looking and two users navigate independently, so sharing the rectangle makes them fight over one camera |
 
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Snapping is a function nothing calls** (`TOILE-UI-025`). The quantizer and the step selection are written
-  and host-tested, and the board carries a snapping flag written once at creation. No gesture reads either:
-  the quantizer has no caller in the workspace, and a drag emits the raw pointer position. So the grid is
-  drawn and is not magnetic.
+* **A drawing tool does not snap.** A shape drawn, a sticky placed or a connector routed lands where the
+  pointer ends, on a snapping board too. No row asks for it yet.
+* **The grid toggle does not survive a reload**, as the pointer mode does not: the view holds it in
+  memory.
 * **The minimap** (`TOILE-UI-030`): the design is a second small camera painted last, fed by the union of the
   board's content. That extent is the one the Logic thread already answers for a whole-board fit, and a drag
   on its rectangle moves the main camera. No field carries it and nothing paints it.

@@ -61,9 +61,10 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-259` | `POST` | An alignment, line spacing or indent control MUST write its property on every block the selection covers, and one undo MUST take it back. | this spec section 3; `CHROME-173` | `ambre_prose::logic::selection::tests::a_paragraph_property_over_two_blocks_is_one_undo_item`; `ambre_prose::tests::chrome_panel::with_a_selection_the_panel_shows_each_text_and_paragraph_control` -- wasm tier, the alignment and the left indent each hand one paragraph write | none | verified |
 | `PROSE-UI-260` | `POST` | A list control MUST turn every paragraph of the selection into a list item, and the body control MUST turn each back, its text kept. | this spec section 3; `features/ambre-spec-prose-lists.md` | `ambre_prose::logic::selection::tests::a_selection_becomes_a_list_and_back` -- each direction is one undo item; `ambre_prose::tests::chrome_panel::with_a_selection_the_panel_shows_each_text_and_paragraph_control` -- wasm tier, the numbered list hands its kind to the view | none | verified |
 | `PROSE-UI-264` | `FAIL` | A paragraph style the tree cannot hold where one block of the selection sits MUST refuse the whole command, and MUST write nothing. | this spec section 3; `PROSE-095` | `ambre_prose::logic::selection::tests::a_heading_inside_a_list_item_refuses_the_whole_command` | none | verified |
-| `PROSE-UI-265` | `POST` | Each write of the context panel MUST reach the document as one command over the selection the view holds. | this spec section 3; `PROSE-UI-098`; `CHROME-173` | `ambre_prose::input_tests::each_panel_write_is_one_command_over_the_selection_and_one_undo_item` -- each of the eight writes, and one undo restores the document | none | verified |
+| `PROSE-UI-265` | `POST` | Each write of the context panel MUST reach the document as one command over the selection of its pick. | this spec section 3; `PROSE-UI-098`; `CHROME-173` | `ambre_prose::input_tests::each_panel_write_is_one_command_over_the_selection_and_one_undo_item` -- each of the eight writes, and one undo restores the document | none | verified |
+| `PROSE-UI-281` | `POST` | A write of the context panel MUST reach the selection shown when its control was picked, even when the caret moves before the write is sent. | this spec section 3; `PROSE-UI-265`; `BUS-016` | `ambre_prose::input_tests::a_panel_write_waiting_on_the_outbox_keeps_the_selection_of_its_pick` -- a full outbox holds the write, the caret moves, and the write still lands on the block picked; `ambre_prose::tests::chrome_panel::with_a_selection_the_panel_shows_each_text_and_paragraph_control` -- wasm tier, a pick carries the selection the view published | none | verified |
 | `PROSE-UI-261` | `POST` | With no text selected, the context panel MUST show the body font of the document, and a pick MUST write it, one undo taking it back. | `ambre-spec-prose-schema.md section 3`; `CHROME-163` | `ambre_prose::logic::selection::tests::the_body_font_is_written_and_reaches_every_run` -- the layout carries the font the panel reads; `ambre_prose::tests::chrome_panel::with_no_selection_the_panel_shows_the_default_fonts` -- wasm tier | none | verified |
-| `PROSE-UI-266` | `POST` | With no text selected, the context panel MUST show the heading font of the document, a pick MUST write it, and every heading MUST be set in it. | `ambre-spec-prose-schema.md section 3`; `PROSE-UI-261` | not built | unbuilt -- lands with the `The heading font of a Prose document` Story (`ambre-roadmap.md` MVP). The font needs a key of `meta/defaults`, which moves the frozen shape (`SCHEMA-018`) | unimplemented |
+| `PROSE-UI-266` | `POST` | With no text selected, the context panel MUST show the heading font of the document, a pick MUST write it, and every heading MUST be set in it. | `ambre-spec-prose-schema.md section 3`; `PROSE-UI-261` | `ambre_prose::logic::selection::tests::the_heading_font_reaches_every_heading_and_no_body_run` -- each of the six levels takes the font and the shaper sets the heading in it, a body run keeps the body font, an `ff` mark still wins, the Body font entry deletes the key, and one undo takes each write back; `ambre_prose::tests::chrome_panel::the_heading_font_picker_names_the_body_font_and_hands_each_pick` -- wasm tier, the picker names the Body font while the key is absent and hands each pick to the view | none | verified |
 | `PROSE-UI-191` | `POST` | Superscript, subscript and clearing the formatting MUST each reach a control of the context panel. | `ambre-spec-prose-schema.md section 3`; `CHROME-164` | `ambre_prose::tests::chrome_panel::superscript_subscript_and_clearing_reach_a_control_of_the_panel` -- wasm tier, the three controls show over a selection and each hands its id to the view; `ambre_prose::logic::marks::tests::superscript_from_the_panel_applies_and_reads_back_on`; `ambre_prose::logic::marks::tests::clearing_a_selection_over_two_blocks_is_one_undo_item` | none | verified |
 | `PROSE-UI-252` | `POST` | A page control of the context panel MUST write the format, the orientation or a margin of the document, and one undo MUST take that write back. | `ambre-spec-prose-schema.md section 3`; `CHROME-163`; `CHROME-203` | `ambre_prose::tests::chrome_panel::a_page_control_hands_the_whole_format_to_the_view` -- wasm tier, a margin stepper and the orientation each hand the whole format, one field changed; `ambre_prose::logic::bands::tests::a_page_write_sets_the_whole_format_and_one_undo_takes_it_back` -- the command writes the format, the layout is measured on it, one undo restores the page | none | verified |
 | `PROSE-UI-254` | `POST` | Clearing the formatting MUST remove every formatting mark over the whole selection, and one undo MUST take it back, whatever the number of blocks. | `ambre-spec-prose-schema.md section 3`; `PROSE-UI-191` | `ambre_prose::logic::marks::tests::clearing_a_selection_over_two_blocks_is_one_undo_item` -- bold and italic over two blocks clear in one command, and one undo puts both back | none | verified |
@@ -83,10 +84,10 @@ status values are normative in `ambre-spec-template.md`.
   recomposition and no layout pass (`ambre-spec-ui.md section 4`).
 * **Boundary.** none: the bar reads view state and emits commands. It holds no key, opens no
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
-* **Verification.** 35 `verified`, 1 `unimplemented`. Every row runs on the host against the view
-  state and the Logic thread, with no browser. The wasm tier adds the bar and the panel elements:
-  their controls, their order and the value each hands to the view. The colours and sizes the panel
-  writes do not reach the glyphs yet, which `PROSE-UI-210` records.
+* **Verification.** 37 `verified`. Every row runs on the host against the view state and the Logic
+  thread, with no browser. The wasm tier adds the bar and the panel elements: their controls, their
+  order and the value each hands to the view. The glyphs take the size, the font, the colour and the
+  highlight the panel writes (`PROSE-UI-210`, `PROSE-UI-280`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -171,11 +172,15 @@ keyboard chord invokes. That id resolves to one command of the plane
 | the paragraph style list, the heading, quote, body and list chips | `SetSelectionKind`, on every paragraph, heading and list item the selection covers |
 | the two indent steps of the panel | `IndentSelection`: a list item changes level, another block moves 36 pt of left indent (`PROSE-UI-267`) |
 | the comment control | opens the comment field; Enter sends `AddComment` over the part of the selection in its first block |
-| the body font, with no selection | `SetDefaultFont` |
+| the body font and the heading font, with no selection | `SetDefaultFont`, naming the font; the Body font entry of the heading picker sends no family, which deletes the key |
 
 Each of these commands writes every block it reaches, then commits once, so one undo takes the
-gesture back (`CHROME-173`). The view adds the selection it holds to what a panel control asks
-for: the panel holds no selection of its own (`PROSE-UI-265`).
+gesture back (`CHROME-173`). The panel holds no selection of its own (`PROSE-UI-265`).
+
+**A write keeps the selection of its pick.** The view publishes its selection every frame. A pick
+copies it into the write, which waits in its signal while the outbox is busy. The view then
+writes over that copy, never over the selection it holds when the outbox frees. A caret that
+moved meanwhile neither drops the write nor moves it (`PROSE-UI-281`).
 
 **The reading.** `ReadMarks` answers with `SelectionValues` beside the mark states. It reads the
 font, the size, the colour and the highlight. It reads the alignment, the line spacing, the two
@@ -236,9 +241,9 @@ respecified here (`ambre-spec-chrome.md`).
 * **No control opens a suggestion.** The comment control opens a thread
   (`PROSE-UI-262`); a suggestion is still started by the mode alone
   (`features/ambre-spec-prose-track-changes.md section 6`).
-* **A size, font or colour mark does not reach the glyphs yet** (`PROSE-UI-210`,
-  `features/ambre-spec-prose-page-rendering.md`). The panel writes and reads each one; the
-  shaper draws bold, italic, underline and strike-through alone.
+* **A remote edit does not move a waiting write.** The view moves its caret through a remote
+  edit, but a write that waits on the outbox keeps the offsets of its pick. No rule says
+  whether such a write follows the text it was picked on.
 * **The anchor has no rule when the selection leaves the window.** A selection scrolled off screen
   keeps an anchor with no pixels under it. Nothing says whether the bar hides, sticks to the
   edge or follows the anchor out of view.

@@ -98,3 +98,25 @@ s3:
   publicEndpoint: ""
   bucket: ambre
   region: us-east-1
+
+# The network of the pods (`SRV-351`, `deploy/chart/README.md`). Each pod
+# off the network of its node accepts and opens only the flows of the table
+# of `ambre-spec-server.md` section 3. A cluster whose network plugin
+# enforces no NetworkPolicy isolates nothing.
+networkPolicy:
+  # The resolver of the cluster, as NetworkPolicy peers. The default names the
+  # CoreDNS of `kube-system`; a node-local cache needs its own address here.
+  dns:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  # The scrapers of the metrics port of the relay, as NetworkPolicy peers
+  # (`SRV-257`). Empty: no pod reaches it.
+  metricsFrom: []
+  # The egress rules of the relay to the stores outside the cluster, each
+  # with its peers and its ports. A store turned off needs one, and the
+  # chart renders nothing without it.
+  externalStores: []

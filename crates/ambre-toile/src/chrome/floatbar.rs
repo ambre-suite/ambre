@@ -39,7 +39,10 @@ use crate::ui::style::StyleModel;
 /// The name a colour trigger shows in its tooltip: the label the property
 /// registry declares, as the context panel shows it (`CHROME-186`).
 fn property_title(id: StaticKey<ambre_core::Properties>) -> String {
-    (panel::property(id).title)(&ambre_chrome::commands::Locale::En).into_string()
+    panel::property(id)
+        .title
+        .pick(&ambre_chrome::language())
+        .into_string()
 }
 
 /// The floating selection toolbar. `bar` is the per-frame published placement +

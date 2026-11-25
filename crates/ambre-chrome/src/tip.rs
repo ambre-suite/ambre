@@ -19,7 +19,7 @@
 use std::cell::Cell;
 use std::time::Duration;
 
-use ambre_commands::{Command, CommandDescription, CommandTitle, KeyBinding, Locale, Reach};
+use ambre_commands::{Command, CommandDescription, CommandTitle, KeyBinding, Reach};
 use ambre_core::{Seq, SeqKind, Validated};
 use leptos::wasm_bindgen::JsCast;
 
@@ -45,15 +45,15 @@ pub struct CommandTip {
 }
 
 impl CommandTip {
-    /// The tooltip `command` describes. One language ships today, so the
-    /// tooltip reads the English words, as every label of the chrome does.
+    /// The tooltip `command` describes, in the interface language of the
+    /// page (`SETTINGS-033`).
     #[must_use]
     pub fn of(command: &Command) -> Self {
-        let locale = Locale::En;
+        let locale = crate::language();
         Self {
-            title: (command.title)(&locale),
+            title: command.title.pick(&locale),
             chord: command.chord(),
-            description: command.description.map(|describe| describe(&locale)),
+            description: command.description.map(|words| words.describe(&locale)),
             reach: Reach::Command(command.id),
         }
     }
@@ -265,22 +265,24 @@ mod tests {
     use ambre_commands::{Home, KeyChar};
     use ambre_core::{Categories, Commands, StaticKey};
 
-    fn hand_title(_: &Locale) -> Validated<CommandTitle> {
-        Validated::new("Hand")
-    }
+    const HAND_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+        en: "Hand",
+        fr: "Hand",
+    };
 
-    fn hand_description(_: &Locale) -> Validated<CommandDescription> {
-        Validated::new("Drag to move the view")
-    }
+    const HAND_DESCRIPTION: ambre_commands::TitleWords = ambre_commands::TitleWords {
+        en: "Drag to move the view",
+        fr: "Drag to move the view",
+    };
 
     const HAND: Command = Command {
         id: StaticKey::<Commands>::new("t.tool.hand"),
-        title: hand_title,
+        title: HAND_TITLE,
         icon: None,
         keybindings: &[KeyBinding::primary(KeyChar::H)],
         category: StaticKey::<Categories>::new("tool"),
         home: Home::CreationBar,
-        description: Some(hand_description),
+        description: Some(HAND_DESCRIPTION),
     };
 
     #[test]

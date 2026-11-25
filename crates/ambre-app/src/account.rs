@@ -173,15 +173,12 @@ impl ReclaimLine {
 /// address now reaches. It stays for the whole session: a toast would leave
 /// before a person reads it.
 pub fn reclaim_notice(keys: KeysSignals) -> impl IntoView {
-    // No setting supplies the reader's language yet (`ambre-spec-commands.md`
-    // section 6). Every view of the launcher shows English.
-    let locale = Locale::En;
     move || match keys.address.get() {
         AddressStanding::Held => ().into_any(),
         AddressStanding::Reclaimed => view! {
             <section class="ambre-address-reclaimed" role="alert">
-                <h2>{ReclaimLine::Title.text(locale)}</h2>
-                <p>{ReclaimLine::Meaning.text(locale)}</p>
+                <h2>{move || ReclaimLine::Title.text(ambre_chrome::language())}</h2>
+                <p>{move || ReclaimLine::Meaning.text(ambre_chrome::language())}</p>
             </section>
         }
         .into_any(),
@@ -466,7 +463,10 @@ mod tests {
         let container = document().create_element("div").unwrap();
         document().body().unwrap().append_child(&container).unwrap();
         let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-        mount_to(target, f).forget();
+        // The mount lives as long as the owner of the test, and leaves with the
+        // signals it reads. A forgotten mount kept effects that could run in the
+        // next test and read disposed signals.
+        StoredValue::new_local(mount_to(target, f));
         container
     }
 

@@ -15,6 +15,8 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 blake2 = { workspace = true }
+# The frame of a socket message keeps its bytes under a cheaper writer.
+proptest = { workspace = true }
 # The JSON of the messages of the socket of the SFU (`signaling.rs`).
 serde_json = { workspace = true }
 
