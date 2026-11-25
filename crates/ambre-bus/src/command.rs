@@ -337,20 +337,24 @@ pub enum SyncCommand {
     ///
     /// `named` lists the documents the sealed `meta` names, which the Logic
     /// thread read. The census refuses a relay listing that leaves one out,
-    /// and an empty `named` (`SYNC-320`).
+    /// and an empty `named` (`SYNC-320`). `threads` lists the threads those
+    /// documents name. A listing that leaves one out passes only under an
+    /// owner's erasure of it (`SYNC-321`, `SYNC-322`).
     LeaveChannel {
         channel_id: Id<Channel>,
         named: Vec<Id<Document>>,
+        threads: Vec<Id<Document>>,
     },
     /// Revoke `user_id` from the channel whose `meta` is `document_id`, as
-    /// [`RestCommand::RevokeFromDocument`] does, with the documents the
-    /// sealed `meta` names, as [`SyncCommand::LeaveChannel`] carries them
-    /// (`SYNC-320`). Answered under `id` as that request is.
+    /// [`RestCommand::RevokeFromDocument`] does. It carries what
+    /// [`SyncCommand::LeaveChannel`] carries (`SYNC-320`). Answered under
+    /// `id` as that request is.
     RevokeFromChannel {
         id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         named: Vec<Id<Document>>,
+        threads: Vec<Id<Document>>,
     },
     /// Open or create the direct message of this user and `members`, in one
     /// request. It carries one channel key wrapped for each member alone, and

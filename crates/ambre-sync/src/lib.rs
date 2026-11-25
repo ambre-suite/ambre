@@ -192,6 +192,7 @@ mod converter;
 mod cursors;
 mod docfile;
 mod documents;
+mod erasure;
 mod error;
 mod finalize;
 mod fold;
@@ -2431,21 +2432,29 @@ impl SyncState {
                 documents,
             } => self.handle_watch_channel(channel_id, (meta, meta_last), &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
-            SyncCommand::LeaveChannel { channel_id, named } => {
-                self.handle_leave_channel(channel_id, named);
+            SyncCommand::LeaveChannel {
+                channel_id,
+                named,
+                threads,
+            } => {
+                self.handle_leave_channel(channel_id, named, threads);
             }
             SyncCommand::RevokeFromChannel {
                 id,
                 document_id,
                 user_id,
                 named,
+                threads,
             } => self.begin_removal(
                 crate::census::Removal::Revoke {
                     id,
                     document_id,
                     user_id,
                 },
-                Some(named),
+                Some(crate::census::Named {
+                    documents: named,
+                    threads,
+                }),
             ),
             SyncCommand::CreateDirectMessage {
                 channel_id,
