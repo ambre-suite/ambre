@@ -1032,7 +1032,7 @@ impl ProseState {
                 focus,
                 step,
             } => self.indent_selection(anchor, focus, step),
-            ProseCommand::SetDefaultFont { family } => self.set_default_font(&family),
+            ProseCommand::SetDefaultFont { font } => self.set_default_font(font),
             ProseCommand::FindStart { query } => self.find_start(query),
             ProseCommand::FindNext => self.find_step(StepDirection::Forward),
             ProseCommand::FindPrev => self.find_step(StepDirection::Backward),

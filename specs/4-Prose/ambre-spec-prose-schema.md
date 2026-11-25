@@ -67,13 +67,14 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-095` | `INV` | A converged document MUST hold only the parentages section 4 declares. | this spec section 4 | `ambre_prose::logic::convergence_tests::a_converged_document_holds_only_the_parentages_the_format_declares`; `ambre_prose::logic::blocks::tests::a_table_row_is_refused_at_the_root`; `::a_block_moved_under_its_own_descendant_is_refused`; `::an_insert_after_a_table_row_does_not_land_a_paragraph_under_the_table`; `::a_move_after_a_table_row_does_not_land_a_paragraph_under_the_table` | none | verified |
 | `PROSE-028` | `INV` | A Prose document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_prose::schema::tests::a_new_document_carries_the_current_version`; `ambre_prose::logic::tests::a_fresh_document_holds_one_paragraph_and_a_version` | none | verified |
 | `PROSE-097` | `INV` | A document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | `ambre_prose::schema::tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_prose::logic::tests::a_document_a_newer_client_wrote_leaves_this_one_untouched` | none | verified |
+| `PROSE-146` | `INV` | The step from version 1 to version 2 MUST NOT change the style any block of the document resolves to. | this spec section 7; `PROSE-UI-266` | `ambre_prose::schema::tests::a_version_1_document_opens_with_every_block_resolved_as_before` -- the styled document a version 1 build wrote, frozen in `fixtures/frozen/prose/`, opens at version 2 and resolves each run as the same generator does under version 2, every heading in the body font; `ambre_prose::logic::schema_shape::version_2_adds_the_optional_heading_font_and_moves_no_other_line` -- the frozen v2 shape is the v1 shape and one line, and a fresh document leaves the key absent | none | verified |
 
 * **Budget.** none: a format has no operation to budget. What opening, shaping and paginating a
   document costs is a row of `ambre-spec-budgets.md`, cited by the document that owns it.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 28 `verified`. The bump obligation splits in two. A key or a type moving is red
+* **Verification.** 29 `verified`. The bump obligation splits in two. A key or a type moving is red
   against the frozen shape, which a CI gate holds append-only. A meaning moving under an unchanged
   key is red against the frozen reading (`SCHEMA-017`). The four convergence rows each run a
   two-peer test.
@@ -130,7 +131,7 @@ the container, `--` where no feature does.
 |---|---|---|---|---|---|---|
 | `meta` | Map | `schema_version`, `title`, `created_at`, `updated_at`, `locale`, `pageless`, `different_first_page` | `u32`, String, `u64` and `u64` as Unix milliseconds, a BCP 47 tag, `bool`, `bool` | the key | -- (foundation; this spec section 7) | built |
 | `meta/page` | Map | `orientation`, `width_mm`, `height_mm`, `margin_top_mm`, `margin_bottom_mm`, `margin_left_mm`, `margin_right_mm` | `"portrait"` or `"landscape"` (`PROSE-032`), and `f32` for the six | the key | pagination | built |
-| `meta/defaults` | Map | `font_family`, `font_size_pt`, `line_height` | the picker's label, resolved through `registered_face`; `f32` points; `f32` multiple | the key | inline-styles | built |
+| `meta/defaults` | Map | `font_family`, `font_size_pt`, `line_height`, `heading_font_family` | the picker's label, resolved through `registered_face`; `f32` points; `f32` multiple; the picker's label, absent when the headings follow the body font | the key | inline-styles | built |
 | `meta/header`, `meta/footer` | Map | `enabled`, `block_id`, `align` | `bool`, String, String | the key | headers-footers | built |
 | `meta/header_first`, `meta/footer_first` | Map | `block_id` | String | the key | headers-footers | built |
 | `meta/line_numbers` | Map | `enabled`, `start`, `step`, `restart_each_page` | `bool`, `u32`, `u32`, `bool` | the key | -- (deferred; section 5) | design |
@@ -265,6 +266,9 @@ Only where a schema decision needs a reason. 40 words each.
 * **`meta`.** `schema_version` is declared here and by nothing else in this application: no key, no
   command and no rule required it before `PROSE-028`. `pageless` and `line_numbers` are deferred
   designs whose register is named so the version rule already covers them.
+* **`meta/defaults.heading_font_family`.** Optional on purpose. Absent, each heading takes the body
+  font, which is the version 1 rule. So a migrated document moves no heading, and a version 1
+  reader of a version 2 delta drops the heading font alone (`PROSE-146`).
 * **`blocks`.** One tree holds paragraphs, list items, table rows and cells alike. One lifecycle
   serves every block, and the nesting table is the only structural rule. Depth is read from the
   ancestor chain, never stored.
@@ -314,7 +318,7 @@ Only where a schema decision needs a reason. 40 words each.
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `PROSE-028` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaTooNew`) | architecture section 2.D |
-| Migration | the chain lives in `ambre-prose`; the foundation owns the protocol, never the semantics. Version 1 is the first layout, so the chain is empty | architecture section 2.D |
+| Migration | the chain lives in `ambre-prose`; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The step from 1 to 2 rewrites the register alone, because an absent heading font is the version 1 rule (`PROSE-146`) | architecture section 2.D |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | a map key no build knows is ignored on read, so a forward-written key is dropped rather than refused; the `ref` mark is the exception, a postcard record that tolerates none, and `PROSE-028` is what stops a stale build reading it | architecture section 2.D |
 | Size, ids | a body key is the tag, a separator and a `TreeID`; a document of 300 blocks carries 300 root containers keyed that way | this spec section 2 |

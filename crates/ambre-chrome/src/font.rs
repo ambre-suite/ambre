@@ -78,15 +78,23 @@ fn place_of(current: Option<&FontFamily>) -> Option<Pos<ChoiceRow>> {
 /// entry and the button show their family in its own face. `current` is the
 /// active family (`None` = "Default"); `on_pick` receives the chosen family
 /// (`None` for the "Default" reset). A family the picker does not offer
-/// shows its own name, with no entry selected.
+/// shows its own name, with no entry selected. `default_label` renames the
+/// entry that names no family, where the caller's default has a name.
 #[component]
 pub fn FontPicker(
     current: Signal<Option<FontFamily>>,
     on_pick: Callback<Option<FontFamily>>,
+    #[prop(default = None)] default_label: Option<&'static str>,
 ) -> impl IntoView {
     let choices = FONT_FAMILIES
         .iter()
-        .map(|choice| ChoiceView::text(choice.label()).in_face(choice.css))
+        .map(|choice| {
+            let label = match (&choice.family, default_label) {
+                (None, Some(label)) => label,
+                _ => choice.label(),
+            };
+            ChoiceView::text(label).in_face(choice.css)
+        })
         .collect();
     let selected = Signal::derive(move || place_of(current.get().as_ref()));
     let unlisted = Signal::derive(move || {

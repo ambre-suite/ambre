@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5189 rows: 4796 shipped, of which 14 loose. 393 unbuilt.**
+**5190 rows: 4798 shipped, of which 14 loose. 392 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1785 | 583 | 1003 | 846 | 565 | 4782 |
+| `verified` | 1785 | 583 | 1003 | 848 | 565 | 4784 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
-| `unimplemented` | 144 | 42 | 20 | 21 | 166 | 393 |
+| `unimplemented` | 144 | 42 | 20 | 20 | 166 | 392 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -143,7 +143,7 @@
 | `ambre-spec-toile-vector-paths.md` | 14 | 13 | 13 |  | 1 |
 | `ambre-spec-toile-viewport.md` | 43 | 42 | 42 |  | 1 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 16 |  |  |
-| `ambre-spec-prose-schema.md` | 28 | 28 | 28 |  |  |
+| `ambre-spec-prose-schema.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-prose-clipboard.md` | 30 | 29 | 29 |  | 1 |
 | `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |
@@ -166,7 +166,7 @@
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 47 | 47 | 47 |  |  |
 | `ambre-spec-prose-text-editing.md` | 45 | 45 | 45 |  |  |
-| `ambre-spec-prose-toolbar.md` | 36 | 35 | 35 |  | 1 |
+| `ambre-spec-prose-toolbar.md` | 36 | 36 | 36 |  |  |
 | `ambre-spec-prose-track-changes.md` | 45 | 43 | 43 |  | 2 |
 | `ambre-spec-prose-undo.md` | 6 | 6 | 6 |  |  |
 | `ambre-spec-prose-viewport.md` | 24 | 24 | 24 |  |  |
@@ -285,7 +285,7 @@
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123,125,127..128,136..143 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039,103..104 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076,228..230,257 |
-| `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..028,030..032,085..097,118..122,144..145 |
+| `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..028,030..032,085..097,118..122,144..146 |
 | `ambre-spec-prose-selection.md` | PROSE-UI-008..009,031..039,070..072,151..171,186..187,233 |
 | `ambre-spec-prose-slash-command.md` | PROSE-UI-058..062,087..095,174..175,193..196 |
 | `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112,333..335; PROSE-UI-247..248 |
