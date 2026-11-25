@@ -325,8 +325,6 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
   account, and the boot still reads the reader's locale from the browser's local storage.
 * **No control returns the theme to `system`.** The theme switch has two values. A third entry of
   the avatar menu, or a long press, is the owner's to rule (`ambre-spec-design-tokens.md`).
-* **Nothing translates the interface yet.** The setting stores a language, and no command title
-  reads it (`ambre-spec-locale.md section 6`).
 * **The context panel is not specified here.** Its side, its width and its fold are named in the
   catalogue. The rows that read them are written with the panel itself.
 
