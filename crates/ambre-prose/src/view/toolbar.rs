@@ -158,7 +158,7 @@ impl ProseUiState {
     /// of the creation bar resolves at the caret, with no selection.
     #[must_use]
     pub fn format(&self, id: StaticKey<Commands>) -> Option<ProseCommand> {
-        if let Some(item) = crate::commands::inserted(id) {
+        if let Some(item) = crate::view::slash::inserted(id) {
             // A command of the creation bar lands after the block the caret
             // sits in, as the slash menu's item does (`CHROME-180`).
             return Some(item.resolve(self.cursor.as_ref()?.block_id));

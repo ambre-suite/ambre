@@ -84,7 +84,7 @@ impl CommandHandler for ProseHandler {
         // leaves its id; the view drains it (`CHROME-214`).
         // A command of the creation bar that inserts a block lands there
         // too, and the view resolves it at the caret (`CHROME-180`).
-        if formats_selection(id) || crate::commands::inserted(id).is_some() {
+        if formats_selection(id) || crate::view::slash::inserted(id).is_some() {
             self.format.set(Some(id));
             return Vec::new();
         }

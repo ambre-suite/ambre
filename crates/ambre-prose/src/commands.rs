@@ -107,20 +107,6 @@ pub const INSERT_TABLE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.
 pub const INSERT_SEPARATOR: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.insert.separator");
 
-/// The item of the slash menu a command of the creation bar inserts, or
-/// `None` for a command that inserts no block. The bar and the menu then
-/// insert one object the same way (`PROSE-UI-062`).
-#[must_use]
-pub fn inserted(id: StaticKey<Commands>) -> Option<crate::view::slash::SlashCommand> {
-    use crate::view::slash::SlashCommand;
-    match id {
-        INSERT_TEXT => Some(SlashCommand::Paragraph),
-        INSERT_TABLE => Some(SlashCommand::Table),
-        INSERT_SEPARATOR => Some(SlashCommand::Rule),
-        _ => None,
-    }
-}
-
 /// Take the document out as a PDF of the pages the screen shows
 /// (`PROSE-IO-033`).
 pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_pdf");
