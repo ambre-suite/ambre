@@ -401,6 +401,92 @@ mod tests {
         assert_eq!(text.trim(), "Make this bold", "{text}");
     }
 
+    /// `PROSE-UI-280`: a highlight picked in the panel over a selected word
+    /// reaches the screen. The pixels left of the caret, which sits at the
+    /// end of the word, turn green once the selection collapses.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn a_highlight_picked_in_the_panel_reaches_the_screen() {
+        let page = Page::new_document("prose").await;
+        write(&page, "Make this green").await;
+        wait_counted(&page, "15 with spaces").await;
+        let mut keys = vec![json!({ "type": "keyDown", "value": SHIFT })];
+        for _ in 0..5 {
+            keys.push(json!({ "type": "keyDown", "value": LEFT }));
+            keys.push(json!({ "type": "keyUp", "value": LEFT }));
+        }
+        keys.push(json!({ "type": "keyUp", "value": SHIFT }));
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": keys }]))
+            .await;
+        wait_pressed(&page, "Bold", "false").await;
+        // The panel shows the text section once the selection reaches it.
+        page.browser
+            .wait_for(
+                "the panel's highlight control",
+                "const b = document.querySelector( \
+                   '.ambre-color button[aria-label=\"Highlight\"]'); \
+                 if (b) { b.click(); } return !!b;",
+                STEP,
+            )
+            .await;
+        page.browser
+            .wait_for(
+                "the highlight swatches",
+                "const b = document.querySelector( \
+                   '.ambre-color-popover button[aria-label=\"#92d050\"]'); \
+                 if (b) { b.click(); } return !!b;",
+                STEP,
+            )
+            .await;
+        // The write reads the selection when it leaves, so the selection
+        // stays until the panel reads the new highlight back.
+        page.browser
+            .wait_for(
+                "the highlight read back",
+                "const s = document.querySelector( \
+                   '.ambre-color button[aria-label=\"Highlight\"] .swatch-strip'); \
+                 return !!s && s.style.backgroundColor === 'rgb(146, 208, 80)';",
+                STEP,
+            )
+            .await;
+        press(&page, &[END]).await;
+        // The caret bar, through the input pipe the host places on it
+        // (`CHROME-007`), in canvas pixels.
+        let (ox, oy) = page.canvas_origin().await;
+        let bar = page
+            .browser
+            .script(
+                "const r = document.querySelector('textarea.ambre-input').getBoundingClientRect(); \
+                 return [r.left, r.top + r.height / 2];",
+                json!([]),
+            )
+            .await;
+        let (x, y) = (
+            bar[0].as_f64().unwrap_or(0.0) - ox,
+            bar[1].as_f64().unwrap_or(0.0) - oy,
+        );
+        let green = |[r, g, b]: [u8; 3]| g > 180 && r < 190 && b < 130;
+        let deadline = std::time::Instant::now() + STEP;
+        loop {
+            let mut seen = Vec::new();
+            for step in 1..=12 {
+                seen.push(page.color_at((x - 3.0 * f64::from(step), y)).await);
+            }
+            if seen.iter().filter(|&&c| green(c)).count() >= 3 {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "no green left of the caret at ({x}, {y}): {seen:?}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
     /// `CHROME-023`: the arrow keys walk the caret from paragraph to
     /// paragraph, and the live region names each one the caret enters, by its
     /// text. `Ctrl+Home` and a left arrow then place the keys typed after
