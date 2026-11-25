@@ -48,7 +48,7 @@ pub enum ShellAction<C> {
         channel: ambre_core::id::Id<ambre_core::id::Channel>,
     },
     /// Perform this verb on the call of the page. The palette reaches it as the icons of the
-    /// call controls do, and the page holds the call (`MURMURE-731`).
+    /// call controls do, and the page holds the call (the Murmure calls spec).
     Call(CallVerb),
 }
 

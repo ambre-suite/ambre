@@ -115,8 +115,9 @@ pub(super) fn CallBar(
     }
 }
 
-/// Performs `verb` on the call of the page: the press of its icon, or its command from the
-/// palette (`MURMURE-731`). A verb that sets a state already set does nothing.
+/// Performs `verb` on the call of the page. The press of its icon runs it, and so does its
+/// command from the palette (the Murmure calls spec, section 3, the call controls). A verb that
+/// sets a state already set does nothing.
 pub(super) fn run(verb: CallVerb, relay: MurmureRelay) {
     use ambre_murmure::ui::call_videos::Fill;
     match verb {
@@ -196,7 +197,7 @@ pub(super) fn run(verb: CallVerb, relay: MurmureRelay) {
 }
 
 /// One icon of the call: its tooltip names the command of `verb`, and its press performs `verb`
-/// (`MURMURE-730`, `MURMURE-731`). A toggle passes the verb of its state, so its tooltip names
+/// (the Murmure calls spec). A toggle passes the verb of its state, so its tooltip names
 /// what a press does now (`CHROME-254`). One component serves every icon, so the page compiles
 /// one view of an icon of the call.
 #[component]

@@ -153,7 +153,7 @@ The user opens a list of the panel and picks a choice, with the pointer or the k
   chrome operation. A cover a surface publishes is read by a fit, which is a zoom cost.
 * **Boundary.** none: a region holds commands, and a command reaches the Logic thread as every
   command does. Nothing here opens a socket or holds a key.
-* **Verification.** 91 `verified`, 7 `unimplemented`, and the type holds the home of each command.
+* **Verification.** 92 `verified`, 7 `unimplemented`, and the type holds the home of each command.
   Host tests run each table through the one sink of every region, on a real Logic state. Wasm tests
   hold the palette and the sheet tabs. A scan of the shell stylesheet holds the hover reveals. The
   rest waits on the regions, which no application lays out.
