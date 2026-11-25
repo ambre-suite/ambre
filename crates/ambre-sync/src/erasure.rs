@@ -6,8 +6,10 @@
 //! field that names no document of the channel fails each removal.
 //!
 //! An owner of the channel signs an erasure of that name, and the relay keeps
-//! it. A census passes a hidden thread only under such an erasure, whose
-//! signature it checks against the owners the log of the `meta` holds. The
+//! it. A direct message has no owner, so each of its present writers may
+//! sign one (`SYNC-327`). A census passes a hidden thread only under such an
+//! erasure, whose signature it checks against the keys the log of the
+//! `meta` holds. The
 //! relay alone thus never clears a thread. A document the `meta` names takes
 //! no erasure: only a thread does.
 
@@ -120,15 +122,17 @@ fn hidden_error() -> http::HttpError {
 /// `SYNC-323`).
 ///
 /// The owners come from the log of the `meta`, walked from the footing of
-/// its open. A thread an owner's erasure covers passes. When one is left
-/// and this user is an owner, this user signs an erasure of each one left,
-/// and the relay records it. The relay refuses an erasure of a document the
-/// channel groups, so a removal still fails on a thread the relay hides.
+/// its open. A log with no owner, as a direct message holds, gives the
+/// erasure to each present writer instead (`SYNC-327`). A thread such a
+/// key's erasure covers passes. When one is left and this user holds such a
+/// key, this user signs an erasure of each one left, and the relay records
+/// it. The relay refuses an erasure of a document the channel groups, so a
+/// removal still fails on a thread the relay hides.
 ///
 /// # Errors
 /// [`ambre_core::LocalFailure::ChannelDocumentHidden`] when a thread is left
-/// and this user is no owner, or the log does not stand on the footing. The
-/// error of each request otherwise.
+/// and this user holds no such key, or the log does not stand on the
+/// footing. The error of each request otherwise.
 pub(crate) async fn erase_hidden<H: ShareHttp>(
     http: &H,
     p: ErasureParams,
@@ -142,7 +146,7 @@ pub(crate) async fn erase_hidden<H: ShareHttp>(
         .walk(&members.log, &p.rule)
         .map_err(|_| hidden_error())?
         .log()
-        .owner_keys();
+        .erasure_keys();
     let erasures_url = root.route(format!("/channels/{}/erasures", p.channel_id));
     let listed: ErasuresResponse = http.get_json(&erasures_url).await?;
     let left = unerased(p.channel_id, &p.hidden, &listed.erasures, &owners);
