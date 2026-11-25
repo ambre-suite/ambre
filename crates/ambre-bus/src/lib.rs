@@ -51,8 +51,8 @@ pub use activity::{
 // The channel types of the service plane, which the Sync worker reads.
 pub use app::murmure::{
     Authored, ChannelActivity, ChannelDocument, ChannelMeta, ChannelName, ChannelPlace,
-    ChannelTopic, ContentHash, DirectMember, DirectPeers, DocumentActivity, Emoji, MediaType,
-    MemberChannel, Mentions, Messages, Octets, SealedChannelKey, Unread,
+    ChannelTopic, ContentHash, DirectMember, DirectPeers, DocumentActivity, Emoji, LinkReceipt,
+    MediaType, MemberChannel, Mentions, Messages, Octets, SealedChannelKey, Unread,
 };
 // The grid coordinates Trame and Prose share.
 /// The head of a membership log, which a [`KeptLog`] holds.

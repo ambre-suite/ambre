@@ -61,6 +61,10 @@ ambre_core::crdt_names! {
         /// of each root of its locked segment, keyed by `Id<Message>`
         /// (`MURMURE-484`).
         Threads = "threads",
+        /// The `receipts` root of an amendments document: the relay's link
+        /// receipt of each thread its `threads` root records, keyed by
+        /// `Id<Message>` (`MURMURE-737`).
+        Receipts = "receipts",
         /// The `messages` list of a segment, one [`MessageKey`] map per
         /// message.
         Messages = "messages",
@@ -181,6 +185,9 @@ ambre_core::crdt_names! {
         /// The thread document of a root message, absent while it has no
         /// reply (`MURMURE-107`).
         Thread = "thread",
+        /// The relay's link receipt of the `thread` field, in hex, written
+        /// in the delta that sets that field (`MURMURE-737`).
+        Receipt = "thread_receipt",
         /// The thread document a reply also sent to the channel came from
         /// (`MURMURE-109`).
         AlsoInThread = "also_in_thread",

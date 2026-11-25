@@ -244,6 +244,7 @@ impl ChannelState {
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
+        receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
     ) -> Result<ThreadLinked, MurmureError> {
         let replaced = self.thread_id(root).filter(|own| *own != thread);
         if replaced.is_some() {
@@ -252,7 +253,7 @@ impl ChannelState {
         }
         let own = self.threads.contains_key(&root);
         let open = own || self.ask_thread(thread, segment, root);
-        let root = self.name_thread(segment, root, thread)?;
+        let root = self.name_thread(segment, root, thread, receipt)?;
         Ok(ThreadLinked {
             root,
             open: super::LinkedOpening::from_bool(open),
@@ -276,16 +277,18 @@ impl ChannelState {
     }
 
     /// Write `thread` into the `thread` field of `root`, and nothing else of
-    /// it (`MURMURE-110`). `None` when the field is set already. A locked
-    /// segment takes no delta, so its amendments record it instead.
+    /// it but the relay's `receipt`, in the same delta (`MURMURE-110`,
+    /// `MURMURE-737`). `None` when the field is set already. A locked segment
+    /// takes no delta, so its amendments record it instead.
     fn name_thread(
         &mut self,
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
+        receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
     ) -> Result<Option<Sent>, MurmureError> {
         if self.amendable(segment) {
-            return self.record_thread(segment, root, thread);
+            return self.record_thread(segment, root, thread, receipt);
         }
         let Some(held) = self.held_mut(segment.document_id()) else {
             return Ok(None);
@@ -298,6 +301,9 @@ impl ChannelState {
             return Ok(None);
         }
         map.insert(MessageKey::Thread, thread.to_string())?;
+        if let Some(receipt) = receipt {
+            map.insert(MessageKey::Receipt, receipt.to_hex())?;
+        }
         let delta = session.export_json(doc)?;
         Ok(Some(self.changed(segment, delta)))
     }
@@ -311,6 +317,7 @@ impl ChannelState {
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
+        receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
     ) -> Result<Option<Sent>, MurmureError> {
         let held = self
             .doc(segment.document_id())
@@ -329,6 +336,9 @@ impl ChannelState {
             return Ok(None);
         }
         threads.insert(&key, thread.to_string())?;
+        if let Some(receipt) = receipt {
+            crate::logic::schema::root_map(doc, Root::Receipts).insert(&key, receipt.to_hex())?;
+        }
         let delta = session.export_json(doc)?;
         let mut sent = self.changed(segment, delta);
         sent.document = document;
@@ -776,6 +786,27 @@ fn header_root(doc: &LoroDoc) -> (Option<Id<Segment>>, Option<Id<Message>>) {
 pub(super) struct Scanned {
     segment: loro::VersionVector,
     amendments: Option<loro::VersionVector>,
+}
+
+/// The link receipt each root of the segment `doc` holds beside the thread
+/// its `thread` field names (`MURMURE-739`).
+pub(crate) fn named_receipts(doc: &LoroDoc) -> Vec<ambre_bus::LinkReceipt> {
+    let mut named = Vec::new();
+    crate::logic::schema::root_list(doc, Root::Messages).for_each(|item| {
+        let Some(map) = crate::logic::schema::fields_of(item) else {
+            return;
+        };
+        let (Some(thread), Some(signature)) = (
+            schema::string(&map, MessageKey::Thread)
+                .and_then(|s| Id::<Document>::parse_str(&s).ok()),
+            schema::string(&map, MessageKey::Receipt)
+                .and_then(|s| ambre_core::FixedBytes::<ambre_core::Signature>::from_hex(&s).ok()),
+        ) else {
+            return;
+        };
+        named.push(ambre_bus::LinkReceipt { thread, signature });
+    });
+    named
 }
 
 /// The thread each root of the segment `doc` names in its `thread` field.

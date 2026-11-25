@@ -502,6 +502,7 @@ fn fold_into(
 ) -> Result<(), MurmureError> {
     let root = crate::logic::schema::root_map(amendments, Root::Amendments);
     let threads = crate::logic::schema::root_map(amendments, Root::Threads);
+    let receipts = crate::logic::schema::root_map(amendments, Root::Receipts);
     let list = crate::logic::schema::root_list(segment, Root::Messages);
     for index in 0..list.len() {
         let Some(message) = list.get(index).and_then(crate::logic::schema::fields_of) else {
@@ -510,11 +511,15 @@ fn fold_into(
         let Some(id) = schema::string(&message, MessageKey::Id) else {
             continue;
         };
-        // A deleted root keeps its thread readable (`MURMURE-484`).
+        // A deleted root keeps its thread readable (`MURMURE-484`), and the
+        // link receipt beside it (`MURMURE-740`).
         if schema::string(&message, MessageKey::Thread).is_none()
             && let Some(thread) = schema::string_value(threads.get(&id))
         {
             message.insert(MessageKey::Thread, thread)?;
+            if let Some(receipt) = schema::string_value(receipts.get(&id)) {
+                message.insert(MessageKey::Receipt, receipt)?;
+            }
         }
         if schema::flag(&message, MessageKey::Deleted) {
             continue;

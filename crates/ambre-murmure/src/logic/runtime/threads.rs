@@ -51,12 +51,14 @@ impl<D> Runtime<D> {
     /// The relay linked `thread` to `root` (`SRV-213`). The root names it,
     /// and it opens: this client's own for its session, or the winner's for
     /// its bytes. What waited on a lost one waits on the winner (`SRV-214`).
+    /// The root keeps the relay's `receipt` of the link (`MURMURE-737`).
     pub fn thread_linked(
         &mut self,
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
+        receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
     ) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
@@ -72,11 +74,12 @@ impl<D> Runtime<D> {
                     channel_id,
                     segment,
                     root,
+                    receipt,
                 },
             );
             return self.ask(super::channels::open_in_channel(meta_id, thread));
         }
-        let linked = match channel.thread_linked(segment, root, thread) {
+        let linked = match channel.thread_linked(segment, root, thread, receipt) {
             Ok(linked) => linked,
             Err(error) => {
                 return tracing::warn!("Logic: thread of {root} not linked: {error}");
@@ -108,6 +111,7 @@ impl<D> Runtime<D> {
             channel_id,
             segment,
             root,
+            receipt,
         }) = self.unnamed_roots.remove(&thread)
         else {
             return;
@@ -115,7 +119,7 @@ impl<D> Runtime<D> {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
-        match channel.thread_linked(segment, root, thread) {
+        match channel.thread_linked(segment, root, thread, receipt) {
             Ok(linked) => {
                 if let Some(named) = linked.root {
                     self.send_named(channel_id, named);
@@ -319,6 +323,8 @@ pub(crate) struct UnnamedRoot {
     channel_id: Id<Channel>,
     segment: Id<Segment>,
     root: Id<Message>,
+    /// The relay's receipt of the link, which the root takes with its name.
+    receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
 }
 
 /// The mentions the watched threads of `channel_id` counted.

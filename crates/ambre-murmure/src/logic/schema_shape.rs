@@ -57,6 +57,10 @@ const STEPS: &str = include_str!("../../schema/migrations.txt");
 pub(crate) const SCENARIO_CALL: Id<ambre_core::id::Call> =
     Id::<ambre_core::id::Call>::from_bytes([0xCA; 16]);
 
+/// The link receipt the relay answers for each thread of the scenario.
+pub(crate) const SCENARIO_RECEIPT: ambre_core::FixedBytes<ambre_core::Signature> =
+    FixedBytes::from_array([0x7e; 64]);
+
 /// The segment a list index collapses to.
 pub(crate) const ANY: &str = "*";
 
@@ -91,9 +95,10 @@ pub(crate) fn entry() -> Vec<u8> {
 /// The maps keyed by an identifier, whose keys are values and not schema.
 /// The PeerID registry each document carries is one of them
 /// (`ambre-spec-op-authorship.md section 3`).
-pub(crate) const KEYED_BY_ID: [&str; 12] = [
+pub(crate) const KEYED_BY_ID: [&str; 13] = [
     "amendments:amendments",
     "amendments:peers",
+    "amendments:receipts",
     "amendments:threads",
     "meta:peers",
     "segment:messages/*/call_end",
@@ -319,7 +324,9 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
             Payload::<PeerEntryBytes>::new(entry()),
         )
         .expect("adopt");
-    state.thread_linked(segment, root, thread).expect("link");
+    state
+        .thread_linked(segment, root, thread, Some(SCENARIO_RECEIPT))
+        .expect("link");
     let reply = MessageDraft {
         text: "a reply".to_owned(),
         mentions: Vec::new(),
@@ -429,7 +436,9 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
     else {
         panic!("a locked root with no thread creates one");
     };
-    state.thread_linked(segment, root, thread).expect("record");
+    state
+        .thread_linked(segment, root, thread, Some(SCENARIO_RECEIPT))
+        .expect("record");
     // A fold writes the segment's header and the `meta` entry
     // (`MURMURE-075`, `MURMURE-076`).
     let amendments = state.amendments_id(segment).expect("amended");

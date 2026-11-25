@@ -782,7 +782,7 @@ fn a_removal_reads_the_thread_the_amendments_of_a_segment_record() {
         .expect("adopt");
     let linked = a
         .alice
-        .thread_linked(a.segment, root, thread)
+        .thread_linked(a.segment, root, thread, None)
         .expect("link");
     assert_eq!(
         linked.root.map(|sent| sent.document),

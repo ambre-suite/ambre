@@ -626,7 +626,13 @@ enum SyncEvent {
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
-        result: Result<Id<Document>, http::HttpError>,
+        result: Result<
+            (
+                Id<Document>,
+                Option<ambre_core::FixedBytes<ambre_core::Signature>>,
+            ),
+            http::HttpError,
+        >,
     },
     /// The answer to a finalize lease request
     /// (`SyncCommand::TakeFinalizeLease`).
@@ -2436,8 +2442,14 @@ impl SyncState {
                 channel_id,
                 named,
                 threads,
+                receipts,
             } => {
-                self.handle_leave_channel(channel_id, named, threads);
+                let named = crate::census::Named {
+                    documents: named,
+                    threads,
+                    receipts,
+                };
+                self.handle_leave_channel(channel_id, named);
             }
             SyncCommand::RevokeFromChannel {
                 id,
@@ -2445,6 +2457,7 @@ impl SyncState {
                 user_id,
                 named,
                 threads,
+                receipts,
             } => self.begin_removal(
                 crate::census::Removal::Revoke {
                     id,
@@ -2454,6 +2467,7 @@ impl SyncState {
                 Some(crate::census::Named {
                     documents: named,
                     threads,
+                    receipts,
                 }),
             ),
             SyncCommand::CreateDirectMessage {

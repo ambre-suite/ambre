@@ -452,7 +452,7 @@ impl World {
         }
         let linked = self.members[peer]
             .state
-            .thread_linked(segment, root, winner)
+            .thread_linked(segment, root, winner, None)
             .expect("link");
         if let Some(named) = linked.root {
             self.publish(peer, named.document, named.delta);

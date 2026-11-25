@@ -33,7 +33,7 @@ use crate::http;
 use crate::key_vouch::{AnchoredLog, Footing};
 use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
 use crate::{LogicSink, SyncEvent};
-use ambre_core::{FixedBytes, RefusalCode};
+use ambre_core::{FixedBytes, RefusalCode, Signature};
 
 use crate::error::{Part, SyncError};
 
@@ -1461,14 +1461,14 @@ pub(crate) struct ThreadParams {
 
 /// Create the thread document of a root under the key of `meta`, then
 /// register it for the root (`SRV-213`). Returns the document the relay
-/// holds for the root.
+/// holds for the root, with the relay's receipt of that link (`SRV-390`).
 ///
 /// A registration that lost its race deletes the document it created
 /// (`SYNC-169`). A failed request deletes nothing, as for amendments.
 pub(crate) async fn thread_task<H: ShareHttp>(
     http: &H,
     p: ThreadParams,
-) -> Result<Id<Document>, http::HttpError> {
+) -> Result<(Id<Document>, Option<FixedBytes<Signature>>), http::HttpError> {
     let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
@@ -1497,7 +1497,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
             );
         }
     }
-    Ok(linked.thread)
+    Ok((linked.thread, linked.receipt))
 }
 
 /// Inputs for [`settle_task`].
@@ -3968,8 +3968,15 @@ mod tests {
             "document_id": mine.to_string(), "doc_type": "murmure",
         });
         let answer = |held: Id<Document>, created: bool| serde_json::json!({ "thread": held.to_string(), "created": created });
-        let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
-        assert_eq!(thread_task(&http, params).await, Ok(mine));
+        let receipt = FixedBytes::<Signature>::from_array([7; 64]);
+        let mut first = answer(mine, true);
+        first["receipt"] = serde_json::to_value(receipt).unwrap();
+        let http = FakeHttp::new(vec![Ok(created.clone()), Ok(first)]);
+        assert_eq!(
+            thread_task(&http, params).await,
+            Ok((mine, Some(receipt))),
+            "the relay's receipt passes through"
+        );
         {
             let calls = http.calls();
             let [Call::Post(create, body), Call::Post(link, linked)] = calls.as_slice() else {
@@ -3988,7 +3995,10 @@ mod tests {
             Ok(answer(winner, false)),
             Ok(serde_json::Value::Null),
         ]);
-        assert_eq!(thread_task(&http, thread_params(mine)).await, Ok(winner));
+        assert_eq!(
+            thread_task(&http, thread_params(mine)).await,
+            Ok((winner, None))
+        );
         {
             let calls = http.calls();
             let Some(Call::Delete(url, _)) = calls.last() else {
@@ -6459,6 +6469,7 @@ mod tests {
             channel_id,
             meta,
             hidden: vec![phantom],
+            receipts: Vec::new(),
             footing: footing_of(meta, &log),
             rule: LogRule::document(),
             author,
@@ -6571,6 +6582,7 @@ mod tests {
             channel_id,
             meta,
             hidden,
+            receipts: Vec::new(),
             footing: footing_of(meta, &log),
             rule: LogRule::document(),
             author: author(),
@@ -6597,6 +6609,74 @@ mod tests {
             http.calls().last(),
             Some(Call::Post(url, _)) if url.ends_with("/erasures")
         ));
+    }
+
+    /// `SYNC-370`, `SYNC-371`: a hidden thread under a receipt the pinned
+    /// link key signed over this channel and that thread was linked by the
+    /// relay. The census fails before any request, under a held erasure of
+    /// the owner too. A receipt over another channel, of another thread, or
+    /// by another key proves nothing, and the owner erases as before.
+    #[tokio::test]
+    async fn a_thread_under_a_link_receipt_takes_no_erasure() {
+        use crate::erasure::{ErasureEntry, ErasureParams, erase_hidden, sign_erasure};
+        use ambre_protocol::thread_erasure::link_transcript;
+        let (owner_xk, _) = keypair(1);
+        let meta = Id::<Document>::mint();
+        let channel_id = Id::<Channel>::mint();
+        let thread = Id::<Document>::mint();
+        let (log, own) = log_inviting(meta, &author(), &owner_xk, &[]);
+        let members = serde_json::json!({ "members": [own], "log": log });
+        let receipt = |key: &SigningKey, channel, linked, named| ambre_bus::LinkReceipt {
+            thread: named,
+            signature: FixedBytes::from_array(
+                ed25519_dalek::Signer::sign(key, link_transcript(channel, linked).as_bytes())
+                    .to_bytes(),
+            ),
+        };
+        let relay = SigningKey::from_bytes(&[0x4c; 32]);
+        let params = |receipts| ErasureParams {
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            channel_id,
+            meta,
+            hidden: vec![thread],
+            receipts,
+            footing: footing_of(meta, &log),
+            rule: LogRule::document(),
+            author: author(),
+        };
+        let held = serde_json::json!({ "erasures": [ErasureEntry {
+            thread,
+            signer: author().public(),
+            signature: sign_erasure(&author(), channel_id, thread),
+        }] });
+        let valid = receipt(&relay, channel_id, thread, thread);
+        for listed in [held, serde_json::json!({ "erasures": [] })] {
+            let http = FakeHttp::new(vec![Ok(members.clone()), Ok(listed)]);
+            assert!(matches!(
+                erase_hidden(&http, params(vec![valid])).await,
+                Err(http::HttpError::Local(LocalFailure::ChannelDocumentHidden))
+            ));
+            assert!(http.calls().is_empty(), "no erasure is read or posted");
+        }
+
+        let other = Id::<Document>::mint();
+        let proving_nothing = [
+            receipt(&relay, Id::<Channel>::mint(), thread, thread),
+            receipt(&relay, channel_id, other, thread),
+            receipt(&relay, channel_id, thread, other),
+            receipt(&author().signing_key, channel_id, thread, thread),
+        ];
+        for receipt in proving_nothing {
+            let erased = serde_json::json!({ "thread": thread.to_string() });
+            let none = serde_json::json!({ "erasures": [] });
+            let http = FakeHttp::new(vec![Ok(members.clone()), Ok(none), Ok(erased)]);
+            assert!(erase_hidden(&http, params(vec![receipt])).await.is_ok());
+            assert!(matches!(
+                http.calls().last(),
+                Some(Call::Post(url, _)) if url.ends_with("/erasures")
+            ));
+        }
     }
 
     /// `SYNC-327`: a direct message leaves no owner, so each present writer
@@ -6654,6 +6734,7 @@ mod tests {
                 channel_id,
                 meta,
                 hidden: vec![phantom],
+                receipts: Vec::new(),
                 footing: footing_of(meta, log),
                 rule: LogRule::document(),
                 author,

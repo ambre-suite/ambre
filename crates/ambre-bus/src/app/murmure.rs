@@ -22,6 +22,15 @@ pub struct ChannelDocument {
     pub kind: ChannelDocumentKind,
 }
 
+/// The relay's receipt of a thread link, as a root or an amendments document
+/// of the channel holds it (`MURMURE-737`). A census refuses to erase a
+/// thread whose receipt verifies (`SYNC-370`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkReceipt {
+    pub thread: Id<Document>,
+    pub signature: ambre_core::FixedBytes<ambre_core::Signature>,
+}
+
 /// Whether one document of a channel holds something past the caller's
 /// read cursor. The relay answers a yes or no, never a count (`SRV-110`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
