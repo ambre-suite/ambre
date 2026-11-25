@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5237 rows: 4847 shipped, of which 14 loose. 390 unbuilt.**
+**5239 rows: 4849 shipped, of which 14 loose. 390 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1826 | 583 | 1003 | 851 | 570 | 4833 |
+| `verified` | 1827 | 583 | 1003 | 851 | 571 | 4835 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 143 | 42 | 20 | 20 | 165 | 390 |
@@ -76,7 +76,7 @@
 | `ambre-spec-sequencer.md` | 90 | 90 | 90 |  |  |
 | `ambre-spec-server.md` | 147 | 140 | 139 | 1 | 7 |
 | `ambre-spec-session.md` | 54 | 54 | 54 |  |  |
-| `ambre-spec-shell.md` | 101 | 97 | 97 |  | 4 |
+| `ambre-spec-shell.md` | 102 | 98 | 98 |  | 4 |
 | `ambre-spec-sync.md` | 91 | 90 | 90 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
@@ -187,7 +187,7 @@
 | `ambre-spec-murmure-notifications.md` | 19 | 8 | 8 |  | 11 |
 | `ambre-spec-murmure-phone-measures.md` | 9 | 9 | 9 |  |  |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
-| `ambre-spec-murmure-search.md` | 18 | 7 | 7 |  | 11 |
+| `ambre-spec-murmure-search.md` | 19 | 8 | 8 |  | 11 |
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-murmure-sidebar.md` | 22 | 5 | 5 |  | 17 |
 | `ambre-spec-murmure-spaces.md` | 41 | 36 | 36 |  | 5 |
@@ -254,7 +254,7 @@
 | `ambre-spec-murmure-pins.md` | MURMURE-338..347 |
 | `ambre-spec-murmure-reactions.md` | MURMURE-091..097 |
 | `ambre-spec-murmure-schema.md` | MURMURE-001..020,157,437,566,582 |
-| `ambre-spec-murmure-search.md` | MURMURE-147..151,313..316,318..322,336..337,478,496 |
+| `ambre-spec-murmure-search.md` | MURMURE-147..151,313..316,318..322,336..337,478,496,736 |
 | `ambre-spec-murmure-segments.md` | MURMURE-062..077,153,222,238..239,263,435..436,481..483 |
 | `ambre-spec-murmure-sidebar.md` | MURMURE-275..289,298,720..725 |
 | `ambre-spec-murmure-spaces.md` | MURMURE-031..045,234..237,247..250,254,258,301..304,317,466,479..480,487,583..585,635,671..673 |
@@ -304,7 +304,7 @@
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307,335..336,347,349,353,359,363 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318,339,346,348,351..352,354..358,360..362 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303,319..333,337..338,340..345 |
-| `ambre-spec-shell.md` | CHROME-148..198,207..256 |
+| `ambre-spec-shell.md` | CHROME-148..198,207..257 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271,275,277..278,281,292..296,305,318 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |

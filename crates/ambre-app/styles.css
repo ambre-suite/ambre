@@ -1178,18 +1178,27 @@ body {
     background: var(--bg);
 }
 
-/* The search box of the command bar, its results under it. */
-.murmure-search {
+/* The search box of the command bar, its results under it (MURMURE-736).
+   The box closes the bar on its right end. The results hang from the bar,
+   never from the box: the box moves along the bar, and a list anchored on it
+   crossed the left edge of the window at 1440 px. The bar wraps on a phone:
+   wider than the window, it let the open field scroll the page sideways. */
+.ambre-commandbar:has(.murmure-search) {
     position: relative;
-    margin-left: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.murmure-search {
+    margin-left: auto;
 }
 
 .murmure-search-results {
     position: absolute;
     top: 100%;
-    right: 0;
+    right: var(--space-2);
     z-index: 10;
-    width: min(28rem, 90vw);
+    width: min(28rem, calc(100% - 2 * var(--space-2)));
+    box-sizing: border-box;
     max-height: 60vh;
     overflow-y: auto;
     padding: var(--space-2);

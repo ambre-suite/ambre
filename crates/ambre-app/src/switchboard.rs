@@ -489,6 +489,19 @@ impl Switchboard {
         }
     }
 
+    /// Whether the header's sync state mirrors the link of `document_id`
+    /// (`CHROME-257`).
+    ///
+    /// A document page mirrors its routed document. A Murmure page routes no
+    /// document, so it mirrors every one it opened: one socket carries them
+    /// all. A guard on the routed document kept that header offline for good.
+    fn mirrors_link_of(&self, shown: Shown, document_id: Id<Document>) -> bool {
+        match self.page {
+            Page::Document => shown.current == Some(document_id),
+            Page::Murmure => true,
+        }
+    }
+
     /// What a service event calls for, in the order the wiring applies it.
     ///
     /// A content event calls for nothing here: it goes on to the view. The
@@ -545,13 +558,13 @@ impl Switchboard {
                 effects.extend(face);
                 effects.extend(toast.map(Effect::Notice));
             }
-            // Chrome status indicator (`-chrome.md` 2.G): mirror the active
-            // document's WebSocket link into the header label. Ignored for a
+            // Chrome status indicator (`-chrome.md` 2.G): mirror the link
+            // into the header label (`CHROME-257`). A document page ignores a
             // non-active document (a stale push during a fast doc switch).
             UiEvent::ConnectionStatus {
                 document_id,
                 connected,
-            } if shown.current == Some(*document_id) => {
+            } if self.mirrors_link_of(shown, *document_id) => {
                 effects.push(Effect::Status(ChromeStatus {
                     connected: *connected,
                     ..shown.status
@@ -2001,6 +2014,44 @@ mod tests {
             effects.get(1).and_then(notice),
             Some((Tone::Warning, "The document could not open."))
         );
+    }
+
+    /// `CHROME-257`: a Murmure page routes no document, so its header
+    /// follows the link of each document it opened. A guard on the routed
+    /// document read `Offline` there for the whole session.
+    #[test]
+    fn a_murmure_header_follows_the_link_of_any_opened_document() {
+        let channel = Id::<Document>::mint();
+        let space = Id::<Document>::mint();
+        let mut switchboard = Switchboard::new(Page::Murmure);
+        let link = |document_id, connected| UiEvent::ConnectionStatus {
+            document_id,
+            connected,
+        };
+        let mut shown = on(None);
+        shown.status = ChromeStatus::default();
+        for (ev, connected) in [
+            (link(space, LinkState::Connected), LinkState::Connected),
+            (
+                link(channel, LinkState::Disconnected),
+                LinkState::Disconnected,
+            ),
+            (link(channel, LinkState::Connected), LinkState::Connected),
+        ] {
+            assert_eq!(
+                switchboard
+                    .service(&ev, shown, &nobody())
+                    .first()
+                    .map(|e| match e {
+                        Effect::Status(status) => Some(*status),
+                        _ => None,
+                    }),
+                Some(Some(ChromeStatus {
+                    hydrating: false,
+                    connected,
+                }))
+            );
+        }
     }
 
     /// `CHROME-127`: a failed open whose key no member signed raises a
