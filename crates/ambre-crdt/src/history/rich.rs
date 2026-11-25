@@ -124,6 +124,19 @@ impl Rich {
         }
     }
 
+    /// The length of each run, in order: one insertion of
+    /// [`write_into`](Self::write_into) each.
+    pub(super) fn run_lens(&self) -> impl Iterator<Item = Len<Chars>> + '_ {
+        self.runs.iter().map(|run| run.size)
+    }
+
+    /// Append the characters of `other`, with their marks.
+    fn append(&mut self, other: &Self) {
+        for run in &other.runs {
+            self.push(&run.text, run.marks.clone());
+        }
+    }
+
     /// How many characters the text holds.
     pub(super) fn len(&self) -> Len<Chars> {
         self.runs.iter().fold(Len::ZERO, |sum, run| sum + run.size)
@@ -381,7 +394,16 @@ impl Rich {
                     let len = Len::<Chars>::of(*delete);
                     let content = self.slice(at, len);
                     self.splice(at, len, &Self::default());
-                    edits.push(Edit::Took { at, content });
+                    // Loro hands a deletion over several runs out as several
+                    // deletions at one place. They took out one stretch, and
+                    // an undo puts it back as one, in its order.
+                    match edits.last_mut() {
+                        Some(Edit::Took {
+                            at: last,
+                            content: taken,
+                        }) if *last == at => taken.append(&content),
+                        _ => edits.push(Edit::Took { at, content }),
+                    }
                 }
             }
         }

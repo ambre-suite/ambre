@@ -9,8 +9,8 @@
 //!
 //! A press on the faces of the bubble opens its mini video (`MURMURE-699`). The render runtime of
 //! the page draws that video, never an element over the canvas (`CALL-015`). So the bubble
-//! publishes the part of the canvas it covers, and the box of its mini video (`MURMURE-698`). The
-//! runtime places the picture by that box, in each application alike.
+//! publishes the box of its mini video, and the runtime places the picture by that box, in each
+//! application alike.
 
 use ambre_core::id::{Channel, Id};
 use ambre_core::index::Pos;
@@ -101,31 +101,28 @@ impl Mini {
     }
 }
 
-/// What the bubble covers of the page, as the bubble last measured it, in CSS pixels of the
-/// window (`MURMURE-698`). `None` means nothing of that part shows: no bubble, or a folded one.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Cover {
-    /// The box of the whole bubble.
-    pub bubble: Option<Rect>,
-    /// The box of its mini video, which the render runtime fills.
-    pub mini: Option<Rect>,
+/// The box of the mini video of the bubble, as the bubble last measured it, in CSS pixels of the
+/// window. The render runtime draws the picture through it (`MURMURE-699`). A box of no size
+/// holds no picture, so none exists.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MiniBox {
+    /// The box on the page, of a size above zero.
+    page: Rect,
 }
 
-impl Cover {
-    /// Nothing covered: the bubble left, or the page shows the channel of the call.
-    pub const NONE: Self = Self {
-        bubble: None,
-        mini: None,
-    };
-
-    /// The box of the mini video on a canvas whose top left corner sits at `origin` on the page.
-    /// A canvas pixel is a CSS pixel (`CANVAS-032`), so the offset is the whole conversion.
+impl MiniBox {
+    /// The box at `page`, or `None` for a box of no size: a box the stylesheet hides.
     #[must_use]
-    pub fn mini_on_canvas(self, origin: Point<Px<Css>>) -> Option<Rect> {
+    pub fn on_page(page: Rect) -> Option<Self> {
+        (page.width() > 0.0 && page.height() > 0.0).then_some(Self { page })
+    }
+
+    /// The box on a canvas whose top left corner sits at `origin` on the page. A canvas pixel is
+    /// a CSS pixel (`CANVAS-032`), so the offset is the whole conversion.
+    #[must_use]
+    pub fn on_canvas(self, origin: Point<Px<Css>>) -> Rect {
         let (dx, dy) = (f64::from(origin.x.get()), f64::from(origin.y.get()));
-        self.mini
-            .filter(|mini| mini.width() > 0.0 && mini.height() > 0.0)
-            .map(|mini| mini - ambre_draw::Vec2::new(dx, dy))
+        self.page - ambre_draw::Vec2::new(dx, dy)
     }
 }
 
@@ -220,30 +217,18 @@ mod tests {
         assert_eq!(Mini::Open.toggled(), Mini::Folded);
     }
 
-    /// `MURMURE-698`: the mini video lands on the canvas at its box on the page, less the corner
-    /// of the canvas. A folded bubble, or a box of no size, places nothing.
+    /// `MURMURE-699`: the mini video lands on the canvas at its box on the page, less the corner
+    /// of the canvas. A box of no size holds no picture.
     #[test]
     fn the_mini_video_lands_at_its_box_less_the_corner_of_the_canvas() {
         let origin = Point::new(Px::<Css>::new(40.0), Px::<Css>::new(96.0));
-        let cover = Cover {
-            bubble: Some(Rect::new(700.0, 400.0, 960.0, 640.0)),
-            mini: Some(Rect::new(701.0, 450.0, 959.0, 595.0)),
-        };
+        let mini = MiniBox::on_page(Rect::new(701.0, 450.0, 959.0, 595.0)).expect("a box");
         assert_eq!(
-            cover.mini_on_canvas(origin),
-            Some(Rect::new(661.0, 354.0, 919.0, 499.0))
+            mini.on_canvas(origin),
+            Rect::new(661.0, 354.0, 919.0, 499.0)
         );
-        let folded = Cover {
-            mini: None,
-            ..cover
-        };
-        assert_eq!(folded.mini_on_canvas(origin), None);
-        let empty = Cover {
-            mini: Some(Rect::new(10.0, 10.0, 10.0, 40.0)),
-            ..cover
-        };
-        assert_eq!(empty.mini_on_canvas(origin), None);
-        assert_eq!(Cover::NONE.mini_on_canvas(origin), None);
+        assert_eq!(MiniBox::on_page(Rect::new(10.0, 10.0, 10.0, 40.0)), None);
+        assert_eq!(MiniBox::on_page(Rect::new(10.0, 10.0, 40.0, 10.0)), None);
     }
 
     /// The clock reads minutes and seconds, then hours past an hour.

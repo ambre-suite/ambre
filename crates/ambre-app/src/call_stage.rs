@@ -27,7 +27,7 @@ use ambre_core::id::{Id, User};
 use ambre_core::index::Pos;
 use ambre_core::{Bounded, FracMs, Instant, MeterLevel, OWN_SLOT, PageLoad, SCREEN_SLOT, TimeSpan};
 use ambre_murmure::ui::call_controls::CallPhase;
-use ambre_murmure::ui::call_float::{Cover, Mini, Received};
+use ambre_murmure::ui::call_float::{Mini, MiniBox, Received};
 use ambre_murmure::ui::call_videos::{
     CallPress, CallStage, Fill, GridPages, Layout, Own, Paging, Participant, Picture, Subject,
     Turn, Voices, Width, grid,
@@ -51,6 +51,9 @@ thread_local! {
     /// How much of the channel region the call takes, which the fill button sets.
     static FILL: ArcRwSignal<Fill> = ArcRwSignal::new(Fill::Band);
     /// Whether the header shows the list of the participants (the Murmure calls spec, section 3, the video region).
+    /// Whether the header shows the panel of the devices (the Murmure calls spec, section 3, the devices).
+    static DEVICES: ArcRwSignal<ambre_chrome::Openness> =
+        ArcRwSignal::new(ambre_chrome::Openness::Closed);
     static ROSTER: ArcRwSignal<ambre_chrome::Openness> =
         ArcRwSignal::new(ambre_chrome::Openness::Closed);
     /// The page of the grid the member turned to (the Murmure calls spec, the video region).
@@ -64,9 +67,8 @@ thread_local! {
     static SCREEN: Cell<Subject> = const { Cell::new(Subject::None) };
     /// The layout and the width of the last stage, which size the pages the header turns.
     static SHAPE: ArcRwSignal<(Layout, Width)> = ArcRwSignal::new((Layout::Band, Width::Wider));
-    /// What the call bubble covers of the page, as it last measured itself (the Murmure calls
-    /// spec, section 3).
-    static COVER: Cell<Cover> = const { Cell::new(Cover::NONE) };
+    /// The box of the mini video of the bubble, as the bubble last measured it.
+    static MINI_BOX: Cell<Option<MiniBox>> = const { Cell::new(None) };
     /// Whether the bubble shows its mini video, which a press on its faces sets.
     static MINI: ArcRwSignal<Mini> = ArcRwSignal::new(Mini::Folded);
     /// What the mini video of the bubble shows now, which the bubble reads to open its box.
@@ -88,15 +90,14 @@ pub(crate) enum MiniShows {
 /// another aspect then leaves no part of the box open on the canvas below.
 const MINI_BACKDROP: ambre_draw::Color = ambre_draw::Color::from_rgb8(0x10, 0x10, 0x12);
 
-/// The bubble publishes what it covers of the page (the Murmure calls spec, section 3).
-pub(crate) fn publish_cover(cover: Cover) {
-    COVER.with(|c| c.set(cover));
+/// The bubble publishes the box of its mini video, or `None` while the box does not show.
+pub(crate) fn publish_mini_box(mini: Option<MiniBox>) {
+    MINI_BOX.with(|m| m.set(mini));
 }
 
-/// What the call bubble covers of the page, as it last published it (the Murmure calls spec,
-/// section 3).
-pub(crate) fn cover() -> Cover {
-    COVER.with(Cell::get)
+/// The box of the mini video, as the bubble last published it.
+pub(crate) fn mini_box() -> Option<MiniBox> {
+    MINI_BOX.with(Cell::get)
 }
 
 /// Whether the bubble shows its mini video, for the faces button.
@@ -115,7 +116,7 @@ pub(crate) fn mini_shows() -> ArcRwSignal<MiniShows> {
 /// It draws a received screen first, then the camera of the member who spoke last. `None` while
 /// the bubble is folded or hidden, or while neither video arrives.
 fn mini_picture() -> Option<Picture> {
-    let on_canvas = cover().mini_on_canvas(crate::host::canvas_origin())?;
+    let on_canvas = mini_box()?.on_canvas(crate::host::canvas_origin());
     if !matches!(crate::call::phase().get_untracked(), CallPhase::InCall(_)) {
         return None;
     }
@@ -215,6 +216,11 @@ pub(crate) fn toggle_fill() {
 /// Whether the header shows the list of the participants of the call.
 pub(crate) fn roster() -> ArcRwSignal<ambre_chrome::Openness> {
     ROSTER.with(ArcRwSignal::clone)
+}
+
+/// Whether the header shows the panel of the devices, for the devices button and the palette.
+pub(crate) fn devices() -> ArcRwSignal<ambre_chrome::Openness> {
+    DEVICES.with(ArcRwSignal::clone)
 }
 
 /// The page of the grid the member turned to, for the page buttons of the header.

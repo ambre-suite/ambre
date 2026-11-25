@@ -293,9 +293,7 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")]
         if let Some(id) = self.view_cmd.get_untracked() {
             self.view_cmd.set(None);
-            if id == crate::chrome::ZOOM_TO_SELECTION {
-                self.zoom_to_selection();
-            }
+            self.run_view_command(id);
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -697,10 +695,28 @@ impl TrameView {
         true
     }
 
-    /// Zoom so the selection shows whole (`ZOOM-007`). The selection stays
-    /// (`ZOOM-010`), and the chip's signal takes the new factor.
+    /// Perform a command the grid view owns. A zoom to the selection frames
+    /// it (`ZOOM-007`). The function of the creation bar opens the editor of
+    /// the active cell on the sign of a formula (`CHROME-255`). Any other id
+    /// does nothing.
+    pub fn run_view_command(&mut self, id: ambre_core::StaticKey<ambre_core::Commands>) {
+        if id == crate::ui::commands::ZOOM_TO_SELECTION {
+            self.zoom_to_selection();
+        } else if id == crate::ui::commands::INSERT_FUNCTION {
+            self.begin_edit(String::from("="));
+        }
+    }
+
+    /// Zoom so the selection shows whole (`ZOOM-007`), clear of the floating
+    /// surfaces of the shell as the chrome last measured them (`ZOOM-011`).
+    /// The selection stays (`ZOOM-010`), and the chip's signal takes the new
+    /// factor. The host build mounts no chrome, so nothing covers its canvas.
     pub fn zoom_to_selection(&mut self) -> bool {
-        if !self.state.zoom_to_selection() {
+        #[cfg(target_arch = "wasm32")]
+        let clear = ambre_chrome::cover::canvas_clearance(&self.cover.get_untracked());
+        #[cfg(not(target_arch = "wasm32"))]
+        let clear = ambre_client_core::cover::Clearance::default();
+        if !self.state.zoom_to_selection(clear) {
             return false;
         }
         #[cfg(target_arch = "wasm32")]

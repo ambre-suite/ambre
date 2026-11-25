@@ -1,0 +1,167 @@
+{{- $c := dict "root" . "component" "web" -}}
+{{- $domain := include "ambre.domain" . -}}
+{{- $tls := required "tls: an ACME email, or internal" .Values.tls -}}
+{{- $persist := .Values.web.persistence.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+data:
+  # The web server of the chart. It holds the certificate of the domain on
+  # port 8443, and port 8080 answers the ACME challenge and sends every other
+  # request to HTTPS. The Service maps ports 80 and 443 onto them, so Caddy
+  # runs as a user without privileges.
+  Caddyfile: |
+    {
+    	http_port 8080
+    	https_port 8443
+    	auto_https disable_redirects
+    	# A user without privileges cannot write the trust store of the system.
+    	skip_install_trust
+    }
+
+    http://{{ $domain }} {
+    	redir https://{host}{uri} permanent
+    }
+
+    {{ $domain }} {
+    	tls {{ $tls }}
+
+    	# The relay. Caddy sets `X-Forwarded-For` to the address of the
+    	# client, and drops any value the client sent: the relay trusts one hop.
+    	handle /api/* {
+    		reverse_proxy {{ include "ambre.name" (dict "root" . "component" "relay") }}:3000
+    	}
+    {{- if .Values.garage.enabled }}
+
+    	# The object store, under the origin of the page. A signature covers
+    	# the host header, so the proxy sends the host the relay signed for.
+    	handle_path /s3/* {
+    		reverse_proxy {{ include "ambre.name" (dict "root" . "component" "garage") }}:3900 {
+    			header_up Host {{ include "ambre.name" (dict "root" . "component" "garage") }}:3900
+    		}
+    	}
+    {{- end }}
+
+    	# The signalling of the SFU. Its media goes straight to the address of
+    	# its node, never through this server (`CALL-141`).
+    	handle_path /sfu/* {
+    		reverse_proxy {{ include "ambre.name" (dict "root" . "component" "sfu") }}:{{ .Values.sfu.signalPort }}
+    	}
+
+    	handle {
+    		root * /srv/ambre
+    		import /etc/caddy/headers.caddy
+    		try_files {path} /index.html
+    		file_server {
+    			precompressed br
+    		}
+    	}
+    }
+---
+{{- if $persist }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.web.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.web.persistence.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  # One pod holds the certificate and its ACME account.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "ambre.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ambre.labels" $c | nindent 8 }}
+      annotations:
+        checksum/caddyfile: {{ printf "%s%s%s" $domain $tls (toJson .Values.garage.enabled) | sha256sum }}
+    spec:
+      {{- include "ambre.podSecurity" (dict "uid" 1000) | nindent 6 }}
+      containers:
+        - name: web
+          image: {{ include "ambre.image" $c }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: https
+              containerPort: 8443
+          readinessProbe:
+            tcpSocket:
+              port: https
+            periodSeconds: 5
+          {{- with .Values.web.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: caddyfile
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+              readOnly: true
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /config
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: caddyfile
+          configMap:
+            name: {{ include "ambre.name" $c }}
+        - name: data
+          {{- if $persist }}
+          persistentVolumeClaim:
+            claimName: {{ include "ambre.name" $c }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ambre.name" $c }}
+  labels: {{- include "ambre.labels" $c | nindent 4 }}
+spec:
+  type: {{ .Values.web.service.type }}
+  {{- if ne .Values.web.service.type "ClusterIP" }}
+  # The relay limits each client by its address, so the address of the
+  # client reaches Caddy unchanged.
+  externalTrafficPolicy: Local
+  {{- end }}
+  selector: {{- include "ambre.selector" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      {{- with .Values.web.service.httpNodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+    - name: https
+      port: 443
+      targetPort: https
+      {{- with .Values.web.service.httpsNodePort }}
+      nodePort: {{ . }}
+      {{- end }}

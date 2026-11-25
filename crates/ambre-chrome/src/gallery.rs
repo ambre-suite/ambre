@@ -41,6 +41,7 @@ static ACTION: ambre_commands::Command = ambre_commands::Command {
     keybindings: &[],
     category: ambre_core::StaticKey::<ambre_core::Categories>::new("gallery"),
     home: ambre_commands::Home::ContextPanel,
+    description: None,
 };
 
 /// One specimen: a name the snapshot reads, and the control under it.
@@ -191,6 +192,7 @@ pub fn Gallery() -> impl IntoView {
                         prefs=prefs
                         title="Document"
                         sections=Signal::stored(vec![section])
+                        cover=RwSignal::new(ambre_client_core::cover::Cover::default())
                     />
                 </div>
             </Specimen>

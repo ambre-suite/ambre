@@ -88,7 +88,7 @@ A record a peer deleted takes no write (`ambre-spec-undo.md`, `UNDO-012`).
 * `crates/ambre-toile/src/logic/state/mod.rs` -- the revert and replay handler, and the event;
 * `logic/state/caches.rs` -- the refresh step 3 runs, and the whole reseed the tests compare it with;
 * `ui/menu_bar.rs` -- the two entries and their chords;
-* `chrome/commands.rs` -- the mirror from `UndoState` into the command store the menu bar reads.
+* `chrome/commands.rs` -- the mirror from `UndoState` into the command store the Ambre menu reads.
 
 ---
 

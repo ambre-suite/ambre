@@ -814,7 +814,7 @@ async fn the_panel_announces_the_registry_labels() {
             on_rename: Callback::new(|_| {}),
         });
         let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
-        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections /> }
+        view! { <ContextPanel prefs=prefs title=content.title sections=content.sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
     leptos::task::tick().await;
 
@@ -858,6 +858,25 @@ async fn the_panel_announces_the_registry_labels() {
         ambre_chrome::native_controls(&container),
         Vec::<String>::new()
     );
+    // `CHROME-185`, `CHROME-186`: each icon names itself in a tooltip, with
+    // the chord and the description its command declares.
+    assert_eq!(
+        ambre_chrome::untipped_icons(&container, chrome::COMMANDS),
+        Vec::<String>::new()
+    );
+    // `CHROME-187`: the keyboard focus shows the tooltip of an icon.
+    let bold = ambre_chrome::commands::Reach::Command(BOLD).marker();
+    let icon: web_sys::HtmlElement = container
+        .query_selector(&format!(".ambre-icon-button[data-reach=\"{bold}\"]"))
+        .unwrap()
+        .expect("the icon of bold")
+        .dyn_into()
+        .unwrap();
+    let tip = icon.query_selector(".ambre-tip").unwrap().unwrap();
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("false"));
+    icon.focus().unwrap();
+    leptos::task::tick().await;
+    assert_eq!(tip.get_attribute("data-shown").as_deref(), Some("true"));
     assert_eq!(
         ambre_chrome::unreached_controls(&container),
         Vec::<String>::new(),
@@ -967,6 +986,7 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
                 title=content.title
                 subtitle=content.subtitle
                 sections=content.sections
+                cover=RwSignal::new(ambre_client_core::cover::Cover::default())
             />
         }
     });
@@ -1048,7 +1068,7 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
     assert_eq!(value("Margins"), "Wide");
     let landscape = container
         .query_selector(
-            "[role=\"radiogroup\"][aria-label=\"Orientation\"] [aria-label=\"Landscape\"]",
+            "[role=\"radiogroup\"][aria-label=\"Orientation\"] [aria-label=\"Page setup: landscape\"]",
         )
         .unwrap()
         .expect("a landscape segment")
@@ -1064,7 +1084,10 @@ async fn the_sheet_panel_names_the_selection_and_folds_its_print_group() {
             .unwrap_or_else(|| panic!("{name}"))
             .inner_html()
     };
-    assert_ne!(glyph("Portrait"), glyph("Landscape"));
+    assert_ne!(
+        glyph("Page setup: portrait"),
+        glyph("Page setup: landscape")
+    );
 
     let find = ambre_chrome::commands::Reach::Command(chrome::FIND);
     assert!(
@@ -1496,4 +1519,35 @@ async fn closing_the_sort_dialog_sorts_nothing() {
         assert_eq!(emitted.get_untracked(), None, "{selector}");
         root.remove();
     }
+}
+
+/// `CHROME-255`: the function of the creation bar asks the grid view to open
+/// the editor of the active cell on the sign of a formula. Nothing reaches the
+/// shell, and the sheet's bar offers it.
+#[wasm_bindgen_test]
+fn the_function_of_the_creation_bar_asks_the_grid_for_a_formula() {
+    use ambre_chrome::CommandHandler;
+    let handler = ambre_trame::chrome::TrameHandler {
+        find: RwSignal::new(None),
+        filter_popover: RwSignal::new(None),
+        filter_values: RwSignal::new(Vec::new()),
+        style: ambre_trame::chrome::StyleState::new(),
+        anchor: RwSignal::new(None),
+        view_cmd: RwSignal::new(None),
+    };
+    assert!(
+        handler
+            .on_command(ambre_trame::chrome::INSERT_FUNCTION)
+            .is_empty()
+    );
+    assert_eq!(
+        handler.view_cmd.get_untracked(),
+        Some(ambre_trame::chrome::INSERT_FUNCTION)
+    );
+    let homed = ambre_chrome::creation_entries(ambre_trame::chrome::COMMANDS);
+    assert!(
+        homed
+            .iter()
+            .any(|c| c.id == ambre_trame::chrome::INSERT_FUNCTION)
+    );
 }

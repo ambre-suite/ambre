@@ -34,6 +34,7 @@ static BOLD: Command = Command {
     keybindings: &[],
     category: StaticKey::<Categories>::new("format"),
     home: Home::ContextPanel,
+    description: None,
 };
 
 static INK: Property = Property {
@@ -108,7 +109,7 @@ fn mount_panel(prefs: PanelPrefs) -> web_sys::Element {
     mount_in_container(move || {
         view! {
             <div class="ambre-body" style="height:400px;width:900px">
-                <ContextPanel prefs=prefs title="Nothing selected" sections=two_sections() />
+                <ContextPanel prefs=prefs title="Nothing selected" sections=two_sections() cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
             </div>
         }
     })
@@ -367,7 +368,7 @@ async fn a_section_folded_first_folds_once_and_an_unfold_holds() {
     ]);
     let prefs = PanelPrefs::new(DockSide::Right, PanelWidth::DEFAULT, Fold::Open);
     let root = mount_in_container(move || {
-        view! { <ContextPanel prefs=prefs title="Nothing selected" sections=sections /> }
+        view! { <ContextPanel prefs=prefs title="Nothing selected" sections=sections cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
     leptos::task::tick().await;
     let folded = |key: &str| {
@@ -404,8 +405,10 @@ async fn a_format_bar_control_shows_its_glyph_as_an_icon_button() {
             on_press: Callback::new(|()| {}),
             icon: Some(icondata::BsTypeBold),
             chord: None,
+            description: None,
+            reach: None,
         }];
-        view! { <FormatBar anchor=ambre_core::Point::default() controls=controls /> }
+        view! { <FormatBar anchor=ambre_core::Point::default() controls=controls cover=RwSignal::new(ambre_client_core::cover::Cover::default()) /> }
     });
     leptos::task::tick().await;
     let control = q(&root, ".ambre-format-bar .ambre-icon-button");
@@ -428,7 +431,7 @@ async fn the_subtitle_counts_the_selection_under_the_title() {
     with_styles();
     let root = mount_in_container(move || {
         view! {
-            <ContextPanel prefs=prefs title="Selection" subtitle=subtitle sections=two_sections() />
+            <ContextPanel prefs=prefs title="Selection" subtitle=subtitle sections=two_sections() cover=RwSignal::new(ambre_client_core::cover::Cover::default()) />
         }
     });
     leptos::task::tick().await;

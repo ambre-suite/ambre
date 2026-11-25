@@ -328,9 +328,9 @@ pub struct ToileSignals {
     pub present_mode: RwSignal<crate::message::PresentMode>,
     /// The find counters.
     pub find_result: RwSignal<Option<crate::message::FindResults>>,
-    /// What the shell's floating surfaces cover, as the chrome measures it.
-    /// The view reads it when a fit lands (`ZOOM-011`).
-    pub cover: RwSignal<super::cover::Cover>,
+    /// What the shell's floating surfaces cover, as each one measures
+    /// itself. The view reads it when a fit lands (`ZOOM-011`).
+    pub cover: RwSignal<ambre_client_core::cover::Cover>,
 }
 
 /// The wiring of a board view: its channels to the Logic thread, its text
@@ -645,7 +645,7 @@ pub struct ToileView {
     /// What the floating surfaces cover, as the chrome last measured it. Read
     /// when a fit lands, never written here (`ZOOM-011`). Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    cover: RwSignal<super::cover::Cover>,
+    cover: RwSignal<ambre_client_core::cover::Cover>,
 
     /// The element that anchors a thread the panel opened, awaiting the
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
@@ -2367,12 +2367,18 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_float_bar(&self) {}
 
-    /// The strips a fit keeps clear of, from what the chrome last measured of
-    /// the floating surfaces (`ZOOM-011`). The host build mounts no chrome, so
-    /// nothing covers its canvas.
+    /// The strips a fit keeps clear of, from what each floating surface of
+    /// the shell last measured of itself (`ZOOM-011`). The host build mounts
+    /// no chrome, so nothing covers its canvas.
     #[cfg(target_arch = "wasm32")]
     fn fit_clearance(&self) -> kurbo::Insets {
-        self.cover.get_untracked().clearance(canvas_client_offset())
+        let clear = ambre_chrome::cover::canvas_clearance(&self.cover.get_untracked());
+        kurbo::Insets {
+            x0: f64::from(clear.left.get()),
+            y0: f64::from(clear.top.get()),
+            x1: f64::from(clear.right.get()),
+            y1: f64::from(clear.bottom.get()),
+        }
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn fit_clearance(&self) -> kurbo::Insets {

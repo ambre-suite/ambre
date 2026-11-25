@@ -244,6 +244,11 @@ RETIRED = {
     "PROSE-102": "SCHEMA-017",
     "TRAME-224": "SCHEMA-017",
     "TOILE-257": "SCHEMA-017",
+    # Withdrawn when two builds of one story met: each stated a rule of the
+    # Prose context panel that a row of the other build states.
+    "PROSE-UI-268": "PROSE-UI-188",
+    "PROSE-UI-269": "PROSE-UI-258",
+    "PROSE-UI-270": "PROSE-UI-258, PROSE-UI-265",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to

@@ -49,6 +49,11 @@ url               = { workspace = true }
 # (`ambre-spec-session.md` section 3, `SRV-267`). A hash, no key: it grants the
 # relay no capability that `ZK-004` bans. Already in the tree through `ambre-crypto`.
 sha2              = { workspace = true }
+# The source of a copy names its object in a header, percent-encoded. The record
+# of a snapshot copies it out of the reach of its upload link on a store that
+# does not verify the digest (`ambre-spec-object-store.md` section 3,
+# `SRV-315`). Already in the tree through `url`.
+percent-encoding  = { workspace = true }
 
 # Least privilege (ZK-004 / SRV-012, `ambre-spec-zero-knowledge.md`): the server
 # verifies Ed25519 signatures and mints its own access tokens -- nothing else.

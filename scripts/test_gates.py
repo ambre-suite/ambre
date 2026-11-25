@@ -37,6 +37,7 @@ import contract_index  # noqa: E402
 import contracts  # noqa: E402
 import converter_boundary  # noqa: E402
 import crate_boundaries  # noqa: E402
+import chart  # noqa: E402
 import crate_table  # noqa: E402
 import feature_inventory  # noqa: E402
 import fixture_provenance  # noqa: E402
@@ -65,6 +66,7 @@ TOOL = "tool"
 # prints or serves a build, and holds no rule.
 SCRIPTS = {
     "ceiling_raise": GATE,
+    "chart": GATE,
     "checkout_credentials": GATE,
     "ci_cache": TOOL,
     "client_digest": GATE,
@@ -300,6 +302,15 @@ class GatesFailWithNoFlag(unittest.TestCase):
                 lambda path: "services:\n  redis:\n    image: redis:8-alpine\n",
             ),
         ])
+
+    def test_chart(self) -> None:
+        # A render with no SFU breaks `CALL-141`; Helm itself never runs.
+        lint = subprocess.CompletedProcess([], 0, "", "")
+        self.fails("chart", [
+            mock.patch.object(chart.subprocess, "run", lambda *a, **k: lint),
+            mock.patch.object(chart, "render", lambda *args: []),
+            mock.patch.object(chart, "compose_images", lambda: {}),
+        ], run=lambda: chart.main(["check"]))
 
     def test_checkout_credentials(self) -> None:
         self.fails("checkout_credentials", [

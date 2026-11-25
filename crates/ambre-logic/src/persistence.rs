@@ -982,16 +982,17 @@ impl PersistenceStore {
         rx
     }
 
-    /// Load the pinned TOFU exchange key for `user_id`, if any.
+    /// Load the pinned TOFU keys for `user_id`, if any.
     ///
-    /// Returns a one-shot receiver resolving to `Some(key)` when this user's key
-    /// has been confirmed before, or `None` (first invitation / read error). The
-    /// Main thread awaits it and compares against the freshly fetched key to
-    /// classify the trust state (`ambre-spec-key-verification.md`).
+    /// Returns a one-shot receiver resolving to `Some(keys)` when this user's
+    /// keys have been confirmed before, or `None` (first invitation / read
+    /// error). The Main thread awaits it and compares against the freshly
+    /// fetched keys to classify the trust state
+    /// (`ambre-spec-key-verification.md`).
     pub fn load_trusted_key(
         &self,
         user_id: Id<User>,
-    ) -> oneshot::Receiver<Option<FixedBytes<ambre_core::ExchangePublicKey>>> {
+    ) -> oneshot::Receiver<Option<ambre_bus::RecipientKeys>> {
         let (tx, rx) = answer();
         let key = IdbKey::user(user_id);
 
@@ -1022,16 +1023,18 @@ impl PersistenceStore {
         let req = request.clone();
         let on_success =
             Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
-                // Only a full 32-byte value is a valid pin; anything else is
-                // treated as absent so the caller re-confirms rather than trusting
-                // a truncated row.
+                // Only the two keys, 64 bytes, are a valid pin. Anything else
+                // is treated as absent, so the caller re-confirms rather than
+                // trusting a truncated row. A pin of the exchange key alone,
+                // 32 bytes, asks again too: its signing key was never shown
+                // (`CHROME-141`).
                 let data = req
                     .result()
                     .ok()
                     .filter(|v| !v.is_undefined() && !v.is_null())
                     .and_then(|v| v.dyn_into::<Uint8Array>().ok())
                     .map(|a| a.to_vec())
-                    .and_then(|v| FixedBytes::<ambre_core::ExchangePublicKey>::from_slice(&v).ok());
+                    .and_then(|v| pinned_keys(&v));
                 tx_ok.send(data);
             });
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
@@ -1046,16 +1049,13 @@ impl PersistenceStore {
         rx
     }
 
-    /// Pin `key` as the trusted TOFU exchange key for `user_id` (fire-and-forget).
+    /// Pin `keys` as the trusted TOFU keys for `user_id` (fire-and-forget):
+    /// the exchange key, then the signing key, 64 bytes in one row.
     ///
     /// Called on the user's confirmation in the share dialog, and again when they
     /// deliberately re-pin after a "key changed" alert. The transaction
     /// auto-commits when the Main thread returns to its event loop.
-    pub fn save_trusted_key(
-        &self,
-        user_id: Id<User>,
-        key: &FixedBytes<ambre_core::ExchangePublicKey>,
-    ) {
+    pub fn save_trusted_key(&self, user_id: Id<User>, keys: &ambre_bus::RecipientKeys) {
         let row = IdbKey::user(user_id);
         let txn = match self.db.transaction_with_str_and_mode(
             IdbStore::TrustedKeys.name(),
@@ -1075,8 +1075,8 @@ impl PersistenceStore {
             }
         };
 
-        let array = Uint8Array::new_with_length(key.as_slice().len() as u32);
-        array.copy_from(key.as_slice());
+        let pin = [keys.exchange.as_slice(), keys.signing.as_slice()].concat();
+        let array = Uint8Array::from(pin.as_slice());
         if let Err(e) = store.put_with_key(array.as_ref(), &row.to_js()) {
             tracing::warn!("Persistence: trusted_key put failed for {row}: {e:?}");
         }
@@ -1287,6 +1287,18 @@ fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, FixedBytes<SessionNonce
     Some((ambre_core::PeerId::new(u64::from_le_bytes(*peer)), nonce))
 }
 
+/// Parse one `trusted_keys` row: the 32 bytes of the exchange key, then the
+/// 32 of the signing key. `None` for any other length, a pin of the exchange
+/// key alone included (`CHROME-141`).
+fn pinned_keys(row: &[u8]) -> Option<ambre_bus::RecipientKeys> {
+    let (exchange, rest) = FixedBytes::<ambre_core::ExchangePublicKey>::split_from(row)?;
+    let (signing, rest) = FixedBytes::<ambre_core::PublicKey>::split_from(rest)?;
+    if !rest.is_empty() {
+        return None;
+    }
+    Some(ambre_bus::RecipientKeys { exchange, signing })
+}
+
 /// The key range holding every row of `document`, in a store whose keys open
 /// with [`IdbKey::document`] and a colon. It runs from `"{key}:"` up to
 /// `"{key};"`, the character after the colon.
@@ -1403,6 +1415,35 @@ mod wasm_tests {
         assert_eq!(IdbKey::document_of(&doc.to_string()), None);
     }
 
+    /// The pin of `byte`: an exchange key, and a signing key that differs
+    /// from it.
+    fn pinned(byte: u8) -> ambre_bus::RecipientKeys {
+        ambre_bus::RecipientKeys {
+            exchange: FixedBytes::from_array([byte; 32]),
+            signing: FixedBytes::from_array([byte ^ 0x80; 32]),
+        }
+    }
+
+    /// `CHROME-141`: a pin reads back only as the two keys, the exchange key
+    /// first. A row of the exchange key alone, as a pin held before the
+    /// signing key, reads as no pin, and so does a longer row.
+    #[wasm_bindgen_test]
+    fn a_pin_reads_back_only_as_both_keys() {
+        let keys = pinned(0x5A);
+        let row = [keys.exchange.as_slice(), keys.signing.as_slice()].concat();
+        assert_eq!(pinned_keys(&row), Some(keys));
+        assert_eq!(
+            pinned_keys(keys.exchange.as_slice()),
+            None,
+            "the exchange key alone"
+        );
+        assert_eq!(
+            pinned_keys(&[row.as_slice(), &[0]].concat()),
+            None,
+            "a longer row"
+        );
+    }
+
     #[wasm_bindgen_test]
     async fn trusted_key_roundtrips_and_absent_is_none() {
         let name = "ambre-test-trusted-roundtrip";
@@ -1416,10 +1457,10 @@ mod wasm_tests {
         // Absent before any write.
         assert_eq!(store.load_trusted_key(user).await.unwrap(), None);
 
-        // Pin, then read it back byte-for-byte.
-        let key = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0xAB; 32]);
-        store.save_trusted_key(user, &key);
-        assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
+        // Pin, then read both keys back byte-for-byte.
+        let keys = pinned(0xAB);
+        store.save_trusted_key(user, &keys);
+        assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(keys));
 
         // A different user is still absent (keys are per-Id<User>).
         assert_eq!(
@@ -1446,17 +1487,16 @@ mod wasm_tests {
             Id::<User>::from_bytes([1; 16]),
             Id::<User>::from_bytes([2; 16]),
         );
-        let pin = FixedBytes::<ambre_core::ExchangePublicKey>::from_array;
-        store.save_trusted_key(alice, &pin([0xA1; 32]));
-        store.save_trusted_key(bob, &pin([0xB1; 32]));
-        store.save_trusted_key(alice, &pin([0xA2; 32]));
+        store.save_trusted_key(alice, &pinned(0xA1));
+        store.save_trusted_key(bob, &pinned(0xB1));
+        store.save_trusted_key(alice, &pinned(0xA2));
         assert_eq!(
             store.load_trusted_key(alice).await.unwrap(),
-            Some(pin([0xA2; 32]))
+            Some(pinned(0xA2))
         );
         assert_eq!(
             store.load_trusted_key(bob).await.unwrap(),
-            Some(pin([0xB1; 32]))
+            Some(pinned(0xB1))
         );
     }
 
@@ -1487,10 +1527,7 @@ mod wasm_tests {
         store.delete_snapshot(doc);
         // A user's pin beside them is no inviter.
         let user = Id::<User>::from_bytes([0x33; 16]);
-        store.save_trusted_key(
-            user,
-            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0xC1; 32]),
-        );
+        store.save_trusted_key(user, &pinned(0xC1));
         // A later page opens the store afresh.
         let later = open().await;
         let mut kept = later.load_inviters(me).await.unwrap();
@@ -1607,9 +1644,11 @@ mod wasm_tests {
 
         // The new store is usable after the upgrade.
         let user = Id::<User>::from_bytes([4; 16]);
-        let key = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0x5A; 32]);
-        store.save_trusted_key(user, &key);
-        assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
+        store.save_trusted_key(user, &pinned(0x5A));
+        assert_eq!(
+            store.load_trusted_key(user).await.unwrap(),
+            Some(pinned(0x5A))
+        );
     }
 
     #[wasm_bindgen_test]
