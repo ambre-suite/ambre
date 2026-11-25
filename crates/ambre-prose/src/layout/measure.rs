@@ -131,7 +131,18 @@ impl EffectiveStyle {
         weight: Weight,
     ) -> Self {
         let paragraph = doc::read_paragraph_style(tree, id);
-        Self::from_parts(defaults, &paragraph, weight)
+        let mut style = Self::from_parts(defaults, &paragraph, weight);
+        // The built-in quote: italic, and set in from the left unless the
+        // paragraph names its own indent (`PROSE-UI-260`).
+        if doc::style_of(tree, id).and_then(|s| doc::BuiltInStyle::of(&s))
+            == Some(doc::BuiltInStyle::Quote)
+        {
+            style.slant = ambre_core::Slant::Italic;
+            if paragraph.indent_left.is_none() {
+                style.indent_left = doc::QUOTE_INDENT.to_doc_px();
+            }
+        }
+        style
     }
 
     /// The same resolution, from parts a caller already holds.

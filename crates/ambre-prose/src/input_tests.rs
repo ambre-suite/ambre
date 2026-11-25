@@ -3397,3 +3397,124 @@ fn an_import_keeps_the_zoom() {
     assert_ne!(snapshot(&rig), before, "the import wrote nothing");
     assert_eq!(rig.ui.viewport.zoom, zoom, "the import moved the zoom");
 }
+
+/// `PROSE-UI-265`: each write of the context panel leaves as one command
+/// over the selection the view holds. One undo takes it back, whatever the
+/// number of blocks. A default font needs no selection.
+#[test]
+fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
+    use crate::view::panel::TextWrite;
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    let default_font = TextWrite::DefaultFont(ambre_core::FontFamily::from_label("Lora"));
+    assert!(matches!(
+        rig.ui.text_write(default_font.clone()),
+        Some(ProseCommand::SetDefaultFont { .. })
+    ));
+    assert_eq!(
+        rig.ui.text_write(TextWrite::Font(None)),
+        None,
+        "a write over a selection waits for one"
+    );
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: Pos::<DocChar>::new(6),
+        anchor: Some((first, Pos::<DocChar>::new(2))),
+    });
+    let writes = [
+        TextWrite::Font(Some(ambre_core::FontFamily::from_label("Lora"))),
+        TextWrite::Size(ambre_core::FontSize::new(18.0)),
+        TextWrite::Colour(Some(ambre_core::Rgba::from_bits(0x2f6f_d6ff))),
+        TextWrite::Highlight(Some(ambre_core::Rgba::from_bits(0xffff_00ff))),
+        TextWrite::Link(Some(ambre_core::LinkUrl::new(
+            " https://example.org ".to_owned(),
+        ))),
+        TextWrite::Paragraph(crate::events::ParagraphStyle {
+            align: Some(crate::events::Align::Right),
+            ..crate::events::ParagraphStyle::default()
+        }),
+        TextWrite::Kind(crate::message::ParagraphKind::Heading(
+            crate::message::HeadingLevel::H2,
+        )),
+        default_font,
+    ];
+    // What a write may change, block by block, and the document defaults.
+    let held = |logic: &ProseState| {
+        format!(
+            "{:?}",
+            [first, second].map(|b| (
+                logic.resolved_runs(&b),
+                logic.paragraph_style_of(&b),
+                logic.block_type_of(&b),
+                logic.defaults(),
+            ))
+        )
+    };
+    for write in writes {
+        let before = held(&rig.logic);
+        let command = rig.ui.text_write(write.clone()).expect("one command");
+        if let ProseCommand::MarkSelection { anchor, focus, .. }
+        | ProseCommand::SetSelectionParagraph { anchor, focus, .. }
+        | ProseCommand::SetSelectionKind { anchor, focus, .. } = &command
+        {
+            assert_eq!(*anchor, (first, Pos::<DocChar>::new(2)), "{write:?}");
+            assert_eq!(*focus, (second, Pos::<DocChar>::new(6)), "{write:?}");
+        }
+        let out = rig.logic.handle_command(command);
+        assert!(out.update.is_some(), "{write:?} writes");
+        assert_ne!(held(&rig.logic), before, "{write:?} changes the document");
+        rig.logic.handle_command(ProseCommand::Undo);
+        assert_eq!(
+            held(&rig.logic),
+            before,
+            "{write:?}: one undo takes it back"
+        );
+    }
+    // A link of blanks takes the link off.
+    assert!(matches!(
+        rig.ui
+            .text_write(TextWrite::Link(Some(ambre_core::LinkUrl::new(
+                "  ".to_owned()
+            )))),
+        Some(ProseCommand::MarkSelection { value: None, .. })
+    ));
+}
+
+/// `PROSE-UI-262`: a comment from the bar opens a thread over the part of
+/// the selection in its first block; an empty one sends nothing.
+#[test]
+fn a_comment_from_the_bar_anchors_in_the_first_block_of_the_selection() {
+    use crate::view::annotate::AnnotationIntent;
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: Pos::<DocChar>::new(3),
+        anchor: Some((first, Pos::<DocChar>::new(6))),
+    });
+    let now = Instant::<ambre_core::Authored>::new(1);
+    assert_eq!(
+        rig.ui.take_intent(
+            AnnotationIntent::Comment {
+                text: "  ".to_owned()
+            },
+            now
+        ),
+        None
+    );
+    let sent = rig.ui.take_intent(
+        AnnotationIntent::Comment {
+            text: "Why?".to_owned(),
+        },
+        now,
+    );
+    assert_eq!(
+        sent,
+        Some(ProseCommand::AddComment {
+            block_id: first,
+            range: Span::<DocChar>::new(Pos::<DocChar>::new(6), Pos::<DocChar>::new(11)),
+            text: "Why?".to_owned(),
+            now,
+        })
+    );
+}

@@ -652,6 +652,7 @@ impl Paginator {
         self.measured = measured;
         self.version = self.version.next();
         self.layout = pass::layout_of(page_box, &placement);
+        self.layout.fonts = crate::doc::DocFonts::of(&self.defaults);
         self.bands.stamp(&mut self.layout);
         self.layout.first_dirty_page = Some(first_dirty);
         self.layout.missing_scripts = self.measurer.missing();

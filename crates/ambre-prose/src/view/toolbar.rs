@@ -35,6 +35,29 @@ impl ToolbarState {
     }
 }
 
+/// The field of the format bar a press opened: the address of a link, or
+/// the first reply of a comment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BarPrompt {
+    Link,
+    Comment,
+}
+
+impl BarPrompt {
+    /// The field a command id opens, or `None` for a command that writes at
+    /// once.
+    #[must_use]
+    pub fn of(id: StaticKey<Commands>) -> Option<Self> {
+        if id == crate::commands::LINK {
+            Some(Self::Link)
+        } else if id == crate::commands::COMMENT {
+            Some(Self::Comment)
+        } else {
+            None
+        }
+    }
+}
+
 /// The state one key of the bar holds in a set of marks.
 #[must_use]
 pub fn state_of(marks: &ActiveMarks, key: MarkRoot) -> TriState {
@@ -160,6 +183,62 @@ impl ProseUiState {
                 MarkAction::Apply
             },
         })
+    }
+
+    /// The one command a control of the context panel asks for, over the
+    /// selection the view holds (`PROSE-UI-098`). Every write over a
+    /// selection is one command, so one undo takes it back
+    /// (`CHROME-173`). A default font needs no selection.
+    ///
+    /// `None` when no selection waits for a write that needs one, or when
+    /// the registry has no spelling for the value.
+    #[must_use]
+    pub fn text_write(&self, write: crate::view::panel::TextWrite) -> Option<ProseCommand> {
+        use crate::view::panel::TextWrite;
+        if let TextWrite::DefaultFont(family) = write {
+            return Some(ProseCommand::SetDefaultFont { family });
+        }
+        let (anchor, focus) = self.selection()?;
+        let mark = |root: MarkRoot, raw: Option<String>| {
+            let value = match raw {
+                Some(raw) => Some(crate::mark::validate_value(&root.key(), Some(&raw)).ok()?),
+                None => None,
+            };
+            Some(ProseCommand::MarkSelection {
+                anchor,
+                focus,
+                key: root.key(),
+                value,
+            })
+        };
+        let colour = crate::mark::canonical_color;
+        match write {
+            TextWrite::Font(family) => {
+                mark(MarkRoot::FontFamily, family.map(|f| f.label().to_owned()))
+            }
+            TextWrite::Size(size) => {
+                mark(MarkRoot::FontSize, size.map(crate::mark::canonical_number))
+            }
+            TextWrite::Colour(rgb) => mark(MarkRoot::Ink, rgb.map(colour)),
+            TextWrite::Highlight(rgb) => mark(MarkRoot::Highlight, rgb.map(colour)),
+            // An empty address takes the link off.
+            TextWrite::Link(url) => mark(
+                MarkRoot::Link,
+                url.map(|u| u.as_str().trim().to_owned())
+                    .filter(|u| !u.is_empty()),
+            ),
+            TextWrite::Paragraph(style) => Some(ProseCommand::SetSelectionParagraph {
+                anchor,
+                focus,
+                style,
+            }),
+            TextWrite::Kind(kind) => Some(ProseCommand::SetSelectionKind {
+                anchor,
+                focus,
+                kind,
+            }),
+            TextWrite::DefaultFont(..) => None,
+        }
     }
 
     /// The top-centre of the selection's first line, on the canvas.

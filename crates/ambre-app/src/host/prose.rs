@@ -249,6 +249,7 @@ impl ProseView {
         self.take_intent();
         self.take_format();
         self.take_page();
+        self.take_text_write();
         self.take_ruler();
         self.take_slash_pick();
         self.sync_zoom();
@@ -324,6 +325,11 @@ impl ProseView {
             return;
         };
         self.annotations.format.set(None);
+        // The link and the comment open a field of the bar, which writes
+        // once the user confirms it.
+        if self.annotations.open_prompt(id).is_some() {
+            return;
+        }
         if let Some(command) = self.state.format(id) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
@@ -339,6 +345,22 @@ impl ProseView {
             return;
         }
         let Some(command) = self.annotations.take_page_write() else {
+            return;
+        };
+        send_edit(&mut self.outbox, self.document_id, command);
+        self.busy_pub
+            .publish(BusyLevel::from_busy(self.outbox.is_busy()));
+    }
+
+    /// Act on the write a control of the text, paragraph or default styles
+    /// section asked for. One command covers the whole selection, so one
+    /// undo takes it back (`CHROME-173`). One that waits behind a busy
+    /// outbox stays in its signal for a later frame.
+    fn take_text_write(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(command) = self.annotations.take_text_write(&self.state) else {
             return;
         };
         send_edit(&mut self.outbox, self.document_id, command);
@@ -455,6 +477,15 @@ impl ProseView {
         let page = Some(self.state.shaped.layout.format);
         if self.annotations.page.with_untracked(|shown| *shown != page) {
             self.annotations.page.set(page);
+        }
+        // The default fonts, for the default styles section (`PROSE-UI-261`).
+        let fonts = Some(self.state.shaped.layout.fonts.clone());
+        if self
+            .annotations
+            .fonts
+            .with_untracked(|shown| *shown != fonts)
+        {
+            self.annotations.fonts.set(fonts);
         }
         // The slash menu sits at the caret, and moves when the bar does.
         self.publish_slash();

@@ -13,6 +13,7 @@
 #![cfg(target_arch = "wasm32")]
 #![expect(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::indexing_slicing,
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
@@ -201,7 +202,7 @@ async fn the_format_bar_follows_its_anchor_and_reports_each_mark() {
     });
     leptos::task::tick().await;
     assert!(one(&root, ".ambre-format-bar").is_some());
-    assert_eq!(pressed(&root), ["false"; 5], "no answer yet: nothing on");
+    assert_eq!(pressed(&root), ["false"; 4], "no answer yet: nothing on");
 
     signals.toolbar.set(ToolbarState {
         anchor: Some(at(200.0, 100.0)),
@@ -212,7 +213,7 @@ async fn the_format_bar_follows_its_anchor_and_reports_each_mark() {
         }),
     });
     leptos::task::tick().await;
-    assert_eq!(pressed(&root), ["true", "mixed", "false", "false", "false"]);
+    assert_eq!(pressed(&root), ["true", "mixed", "false", "false"]);
 
     signals.toolbar.set(ToolbarState::default());
     leptos::task::tick().await;
@@ -234,8 +235,13 @@ async fn a_control_press_hands_its_command_back_and_keeps_the_focus() {
     leptos::task::tick().await;
 
     let controls = all(&root, ".ambre-format-control");
-    assert_eq!(controls.len(), ambre_prose::commands::FORMAT_BAR.len());
-    for (control, (id, _)) in controls.iter().zip(ambre_prose::commands::FORMAT_BAR) {
+    let ids: Vec<_> = ambre_prose::commands::BAR_MARKS
+        .iter()
+        .map(|(id, _)| *id)
+        .chain([ambre_prose::commands::LINK])
+        .collect();
+    assert_eq!(controls.len(), ids.len());
+    for (control, id) in controls.iter().zip(ids) {
         assert!(mousedown_is_held(control), "{id:?} takes the focus");
         signals.format.set(None);
         control.click();
@@ -444,5 +450,111 @@ async fn the_spelling_popover_lists_the_corrections_and_hands_back_a_pick() {
     signals.spelling.set(None);
     leptos::task::tick().await;
     assert!(one(&root, ".ambre-prose-spelling").is_none(), "closed");
+    root.remove();
+}
+
+/// `PROSE-UI-262`: the bar shows, in order, bold, italic, underline, the
+/// link, the paragraph style list and the comment. The list hands its pick
+/// to the view; the comment and the link open a field whose Enter hands its
+/// text to the view.
+#[wasm_bindgen_test]
+async fn the_format_bar_follows_the_mockup_and_opens_its_fields() {
+    use ambre_prose::view::panel::{PanelKind, TextWrite};
+    use ambre_prose::view::toolbar::BarPrompt;
+    let signals = ProseSignals::new();
+    signals.canvas_origin.set(origin());
+    signals.toolbar.set(ToolbarState {
+        anchor: Some(at(200.0, 100.0)),
+        active: None,
+    });
+    let root = mount_in_container(move || view! { <chrome::ProseFormatBar signals=signals /> });
+    leptos::task::tick().await;
+    // A mark control names its command by its label. The list and the
+    // comment name theirs by their marker. In document order, they follow
+    // the context bar of the selection (`CHROME-208`).
+    let shown: Vec<String> = all(
+        &root,
+        ".ambre-format-control, .ambre-format-bar [data-reach]",
+    )
+    .iter()
+    .map(|e| {
+        e.get_attribute("data-reach")
+            .or_else(|| e.get_attribute("aria-label"))
+            .unwrap_or_default()
+    })
+    .collect();
+    let expected = PanelKind::Text.bar();
+    assert_eq!(shown.len(), expected.len(), "{shown:?}");
+    for (found, entry) in shown.iter().zip(expected) {
+        let named = match entry {
+            ambre_chrome::commands::Reach::Command(id) => {
+                ambre_commands::find(ambre_prose::commands::COMMANDS, *id)
+                    .map(|c| (c.title)(&ambre_commands::Locale::En).into_string())
+                    .is_some_and(|label| *found == label)
+            }
+            _ => false,
+        };
+        assert!(
+            named || entry.matches_marker(found),
+            "{found} is not {entry:?}"
+        );
+    }
+
+    // The paragraph style list: a pick is one write.
+    let option = |label: &str| -> web_sys::HtmlElement {
+        all(
+            &root,
+            "[role=\"listbox\"][aria-label=\"Paragraph style\"] [role=\"option\"]",
+        )
+        .into_iter()
+        .find(|o| o.text_content().unwrap_or_default() == label)
+        .expect("the option")
+    };
+    option("Heading 1").click();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Kind(
+            ambre_prose::message::ParagraphKind::Heading(ambre_prose::message::HeadingLevel::H1)
+        ))
+    );
+
+    // The comment opens its field; Enter hands the text to the view.
+    one(&root, "[aria-label=\"Comment\"]")
+        .expect("the comment")
+        .click();
+    leptos::task::tick().await;
+    assert_eq!(signals.prompt.get_untracked(), Some(BarPrompt::Comment));
+    let field: web_sys::HtmlInputElement = one(&root, ".ambre-format-prompt")
+        .expect("the field")
+        .dyn_into()
+        .unwrap();
+    field.set_value("Why?");
+    let enter = web_sys::KeyboardEventInit::new();
+    enter.set_key("Enter");
+    enter.set_bubbles(true);
+    let event =
+        web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &enter).unwrap();
+    field.dispatch_event(&event).unwrap();
+    assert!(matches!(
+        signals.intent.get_untracked(),
+        Some(ambre_prose::view::annotate::AnnotationIntent::Comment { text }) if text == "Why?"
+    ));
+    assert_eq!(signals.prompt.get_untracked(), None, "the field closes");
+
+    // The link field hands its address to the view.
+    signals.prompt.set(Some(BarPrompt::Link));
+    leptos::task::tick().await;
+    let field: web_sys::HtmlInputElement = one(&root, ".ambre-format-prompt")
+        .expect("the field")
+        .dyn_into()
+        .unwrap();
+    field.set_value("https://example.org");
+    field.dispatch_event(&event).unwrap();
+    assert_eq!(
+        signals.text_write.get_untracked(),
+        Some(TextWrite::Link(Some(ambre_core::LinkUrl::new(
+            "https://example.org".to_owned()
+        ))))
+    );
     root.remove();
 }

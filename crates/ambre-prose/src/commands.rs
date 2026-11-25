@@ -132,6 +132,20 @@ pub const SUBSCRIPT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.for
 /// Remove every formatting mark of the selection (`PROSE-UI-191`,
 /// `PROSE-UI-254`).
 pub const CLEAR_FORMATTING: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.clear");
+/// Link the selection to an address, or take its link off
+/// (`PROSE-UI-188`). The press opens the address field of the bar.
+pub const LINK: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.link");
+/// Open a discussion thread over the selection. The press opens the
+/// comment field of the bar.
+pub const COMMENT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.comment.add");
+
+/// The three marks the floating bar shows, in the mockup's order. The bar
+/// adds the link, the paragraph style list and the comment after them.
+pub const BAR_MARKS: [(StaticKey<Commands>, MarkRoot); 3] = [
+    (BOLD, MarkRoot::Bold),
+    (ITALIC, MarkRoot::Italic),
+    (UNDERLINE, MarkRoot::Underline),
+];
 
 /// Each control of the format bar, in the order the bar shows them, with the
 /// mark key it applies or removes.
@@ -169,6 +183,14 @@ fn subscript_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandT
 
 fn clear_formatting_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     ambre_core::Validated::new("Clear formatting")
+}
+
+fn link_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Link")
+}
+
+fn comment_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Comment")
 }
 
 fn bold_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
@@ -341,6 +363,22 @@ pub const COMMANDS: &[Command] = &[
         title: clear_formatting_title,
         icon: Some(StaticKey::<Icons>::new("format-clear")),
         keybindings: &[KeyBinding::primary(KeyChar::new('\\'))],
+        category: FORMAT,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: LINK,
+        title: link_title,
+        icon: Some(StaticKey::<Icons>::new("link")),
+        keybindings: &[],
+        category: FORMAT,
+        home: Home::ContextPanel,
+    },
+    Command {
+        id: COMMENT,
+        title: comment_title,
+        icon: Some(StaticKey::<Icons>::new("comment-outline")),
+        keybindings: &[],
         category: FORMAT,
         home: Home::ContextPanel,
     },

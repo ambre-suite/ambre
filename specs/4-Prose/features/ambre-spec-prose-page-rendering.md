@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | `ambre_prose::view::paint::tests::a_remote_caret_is_painted_after_every_glyph_of_its_page` | none | verified |
 | `PROSE-UI-207` | `OBS` | A bold or italic mark MUST reach the glyphs of the text it covers. | this spec section 2 | `ambre_prose::logic::marks::tests::a_bold_or_italic_mark_reaches_the_glyphs` | none | verified |
 | `PROSE-UI-209` | `OBS` | An underline or strike-through mark MUST be drawn across the text it covers. | this spec section 2 | `ambre_prose::view::paint::tests::an_underline_and_a_strike_through_are_drawn_across_their_text` | none | verified |
-| `PROSE-UI-210` | `OBS` | A size, font or colour mark MUST reach the glyphs of the text it covers. | this spec section 2 | not built | unbuilt -- lands with the `The format bar's other controls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-210` | `OBS` | A size, font or colour mark MUST reach the glyphs of the text it covers. | this spec section 2 | not built | unbuilt -- lands with the `The format bar's other controls` Story (`ambre-roadmap.md` MVP) | unimplemented |
 
 ### 1.2 Paint a page
 

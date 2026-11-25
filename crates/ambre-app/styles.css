@@ -451,6 +451,14 @@ body {
     box-shadow: var(--shadow-mid);
 }
 
+/* The rule between the marks and the paragraph style list of the bar. */
+.ambre-format-sep {
+    align-self: stretch;
+    width: 1px;
+    margin: var(--space-1) var(--space-1);
+    background: var(--border);
+}
+
 .ambre-format-control {
     appearance: none;
     border: 1px solid transparent;
