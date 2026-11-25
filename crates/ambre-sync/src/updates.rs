@@ -4140,6 +4140,38 @@ mod tests {
         assert_eq!(held, std::collections::BTreeSet::from([2, 3]));
     }
 
+    /// `SYNC-276`: a quarantine at its cap of 32 MiB fits. Two updates of
+    /// 16 MiB stay with no warning, and one byte more drops the oldest.
+    #[test]
+    fn a_quarantine_at_its_bytes_keeps_every_entry() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let parent = Id::<Snapshot>::mint();
+        let mut receive = |clock: u64, bytes: usize| {
+            let mut update =
+                make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+            update.ciphertext = Payload::new(vec![0; bytes]);
+            state.receive_update(Seq::<Relay>::new(clock), update);
+        };
+        receive(1, 16 * 1024 * 1024);
+        receive(2, 16 * 1024 * 1024);
+        let overflows = |rx: &_| {
+            drain(rx)
+                .into_iter()
+                .filter(|e| matches!(e, LogicEvent::SyncWarning { code, .. } if *code == SyncWarningCode::QuarantineOverflow))
+                .count()
+        };
+        assert_eq!(overflows(&rx), 0, "the cap itself fits");
+        receive(3, 1);
+        assert_eq!(overflows(&rx), 1);
+        let held: std::collections::BTreeSet<u64> = state.documents[&doc]
+            .quarantine
+            .values()
+            .flatten()
+            .map(|(_, u)| u.public_data.clock.get())
+            .collect();
+        assert_eq!(held, std::collections::BTreeSet::from([2, 3]));
+    }
+
     /// `SYNC-310`: the deltas held for a listing, and those a listing
     /// refused, keep the byte cap of the quarantine. Three of 12 MiB pass
     /// 32 MiB under the count cap: the oldest leaves, and one warning is

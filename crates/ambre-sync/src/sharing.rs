@@ -5480,7 +5480,8 @@ mod tests {
     /// Holds `SYNC-319` at a revoke on the log of a channel's `meta`. A
     /// channel of 40 documents past the `meta` takes the revoke and two
     /// continuations, each within the caps of one entry, in one request.
-    /// The walk then caps Carol in every document, at her clock there.
+    /// The walk then caps Carol in every document, at her clock there, and
+    /// the footing the task hands back stands past the whole run.
     #[tokio::test]
     async fn a_revoke_from_a_large_channel_caps_every_document_over_a_run_of_entries() {
         let owner = Peer::new(1);
@@ -5519,6 +5520,9 @@ mod tests {
             erx.try_recv(),
             Ok(SyncEvent::RevocationComplete { .. })
         ));
+        let Ok(SyncEvent::FootingAdvanced { footing, .. }) = erx.try_recv() else {
+            panic!("the footing advances past the run");
+        };
         let calls = http.calls();
         let Call::Post(_, body) = &calls[1] else {
             panic!("expected the revoke POST: {calls:?}");
@@ -5562,6 +5566,16 @@ mod tests {
         );
 
         let log = logged.walk(&sent);
+        let mut texts = logged.log.clone();
+        texts.extend(
+            sent.iter()
+                .map(|text| serde_json::from_value(serde_json::json!(text)).unwrap()),
+        );
+        assert_eq!(
+            footing,
+            footing_of(meta, &texts),
+            "the footing passes the revoke and each continuation"
+        );
         let carol_key = carol.author.public();
         let head = ambre_protocol::LogHead::EMPTY;
         let admits = |document, at| {

@@ -1553,11 +1553,20 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
 pub(crate) async fn fetch_bytes(
     url: &ambre_core::Credential<ambre_core::PresignedUrl>,
 ) -> Result<Payload<crate::pipeline::FetchedBlob>, HttpError> {
+    fetch_bytes_via(&Fetch, url).await
+}
+
+/// The download of [`fetch_bytes`] over `transport`, so a host test holds
+/// the ceiling of an object.
+async fn fetch_bytes_via(
+    transport: &impl Transport,
+    url: &ambre_core::Credential<ambre_core::PresignedUrl>,
+) -> Result<Payload<crate::pipeline::FetchedBlob>, HttpError> {
     let request = Outgoing {
         ceiling: OBJECT_CEILING,
         ..Outgoing::new(Method::Get, url.into())
     };
-    let resp = exchange(&Fetch, &request).await?;
+    let resp = exchange(transport, &request).await?;
     expect_ok(&request, &resp)?;
     Ok(resp.body.into_role())
 }
@@ -2739,6 +2748,27 @@ mod tests {
             ..answer
         };
         assert!(exchange(&transport, &object).await.is_ok());
+    }
+
+    /// `SYNC-277`: a download from the store reads under the ceiling of an
+    /// object. A snapshot past the ceiling of a relay answer still opens.
+    #[tokio::test]
+    async fn a_download_from_the_store_holds_the_ceiling_of_an_object() {
+        let large = "a".repeat(17 * 1024 * 1024);
+        let transport = Scripted::new([Ok((200, serde_json::json!(large)))]);
+        let link = ambre_core::Credential::<ambre_core::PresignedUrl>::new(
+            "https://store.test/bucket/object".to_owned(),
+        );
+        let body = fetch_bytes_via(&transport, &link).await.expect("an object");
+        assert_eq!(
+            body.as_bytes().len(),
+            17 * 1024 * 1024 + 2,
+            "the JSON quotes"
+        );
+        assert_eq!(
+            transport.sent.borrow().first().map(|sent| sent.ceiling),
+            Some(OBJECT_CEILING)
+        );
     }
 
     /// The refusal of a `GET` or a `POST`, as the relay's answer builds it.

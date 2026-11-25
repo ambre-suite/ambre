@@ -909,6 +909,11 @@ mod tests {
             })
             .expect("the log is kept");
         assert_eq!(kept.links.len(), 2, "the chain rides beside the head");
+        assert_eq!(
+            state.kept_chains().get(&DOC).map(crate::chain::Chain::len),
+            Some(2),
+            "a listed name of this session walks the same chain"
+        );
 
         // The next session reads the row back and rebuilds the chain.
         let row = ambre_bus::KeptLog::from_row(&kept.to_row().unwrap()).expect("a row");
