@@ -385,6 +385,38 @@
 | Main | `ambre-commands`, `ambre-core` | +24 KB | A signal of a reading per value type a control edits, and the section keys |
 | Main | `.rodata` | +14 KB | The labels and the icons of the sections |
 
+* **The ceiling of Main came down to 10 520 000 on 2026-11-25.** Every wasm build of leptos erases
+  its view types: `--cfg erase_components` in `.cargo/config.toml`. Each component then returns an
+  erased view, and each reactive closure of `view!` takes one shared type. So the render code of
+  leptos builds once per output type, not once per call site. The cost is one allocation per
+  reactive closure and one dynamic call per render. The wasm tier and the wasm lint repeat the flag,
+  because each one replaces the rustflags of `.cargo/config.toml`.
+* **The figures of the cut.** `just size` on the session container, over `main` at `f2f601d`, by
+  the Win back room in Main Story (`ambre-roadmap.md`). The ceiling sits 2 % above the cut figure.
+
+| Build | Main raw | Main brotli | Sync raw | What |
+|---|---|---|---|---|
+| `f2f601d` | 10 775 229 | 2 896 738 | 1 349 581 | before the cut |
+| `erase_components` | 10 306 403 | 2 771 135 | 1 349 581 | kept: 468 826 raw and 125 603 brotli less |
+
+* **Where the cut came from.** The table below is `twiggy top` on a build that keeps the name
+  section, before the bindings, with the name section left out of the count. It reads 496 340
+  bytes less in all. No other artefact links leptos, so no other artefact moved.
+
+| Crate | Change | Why |
+|---|---|---|
+| `tachys` | -287 593 | The render, mount and rebuild code of each view type and each reactive closure |
+| `core`, `leptos`, `reactive_graph` | -191 781 | The closures and the effects built for each of those types |
+| `ambre-murmure`, `ambre-app`, `ambre-toile`, `ambre-chrome` | -37 933 | The component bodies, which now build an erased view |
+| `.rodata` | -7 560 | The type names and the vtables of the views that left |
+| `alloc` | +12 178 | The shared box of each reactive closure |
+
+| Alternative | Rejected because |
+|---|---|
+| **A lazy module for the panels** (`#[lazy]` of leptos, the `wasm_split` crates) | The macro writes `unsafe extern` and `#[unsafe(no_mangle)]` into our crate, and `unsafe_code = "forbid"` refuses them (`README.md`, the Security pillar). Trunk 0.22 has no split step. Each split module would also have to join the shared `+atomics` memory of Main |
+| **`-Z merge-functions=trampolines`** | It grew the code of Main by 41 713 bytes: each folded copy keeps a thunk of its own. `ARCH-033` refuses a `-Z` flag in a rustflags list too |
+| **`-Z merge-functions=aliases`** | It wrote the same bytes: the build already merges functions this way |
+
 * **A budget or the Main ceiling rises only through a story of its own (`ARCH-095`).** The ceiling
   of Main rose twice in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature
   story. A raise needs a story row of the roadmap or of the journal that names the new figure and
