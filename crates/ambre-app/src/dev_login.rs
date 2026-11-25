@@ -62,6 +62,7 @@ pub(crate) fn forget_user() {}
 /// name signs the page in.
 #[cfg(feature = "dev-login")]
 pub(crate) fn sign_in_at_boot(outbox: &ShellOutbox) -> BootSignIn {
+    LOGIC.with(|slot| *slot.borrow_mut() = Some(outbox.clone()));
     let Some(username) = user_from_url().or_else(stored_user) else {
         return BootSignIn::None;
     };
@@ -72,6 +73,33 @@ pub(crate) fn sign_in_at_boot(outbox: &ShellOutbox) -> BootSignIn {
         cmd: RestCommand::DevLogin { username },
     });
     BootSignIn::Sent
+}
+
+#[cfg(feature = "dev-login")]
+thread_local! {
+    /// The writer to the Logic thread that [`dev_interface_language`] sends on.
+    static LOGIC: std::cell::RefCell<Option<ShellOutbox>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Sets the interface language of the account to `tag`, a BCP 47 tag. No
+/// control of the page sets the language yet, so the browser belt calls this
+/// export to prove that the language follows the account (`SETTINGS-024`). A
+/// tag that does not parse sets nothing. Only a `dev-login` build exports it.
+#[cfg(feature = "dev-login")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn dev_interface_language(tag: &str) {
+    let Ok(language) = ambre_client_core::DocumentLocale::parse(tag) else {
+        tracing::warn!("Dev: the interface language names no tag");
+        return;
+    };
+    let command = LogicCommand::ChangeSetting {
+        change: ambre_client_core::SettingChange::InterfaceLanguage(language),
+    };
+    LOGIC.with(|slot| {
+        if let Some(logic) = slot.borrow().as_ref() {
+            logic.send(command);
+        }
+    });
 }
 
 /// A build without the development sign-in reads no `?user=` and no stored

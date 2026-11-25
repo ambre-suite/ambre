@@ -4521,6 +4521,7 @@ ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(out) | param | &mut 
 ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(row) | param | u32	local	the row being written, which picks its cells and merges
 ambre-xlsx | src/ods/write.rs | crate::ods::write | slots(row) | param | u32	local	the row whose slots are built
 ambre-xlsx | src/ods/write.rs | crate::ods::write | table_xml(out) | param | &mut String	generic	the content part being written, one table appended
+ambre-app | src/dev_login.rs | crate::dev_login | dev_interface_language(tag) | param | &str	foreign-api	the BCP 47 tag a page script passes to the wasm export as a JavaScript string; the export parses it into DocumentLocale at once
 ambre-app | src/call.rs | crate::call | join_call(call) | param | &str	foreign-api	the call id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Call> at once
 ambre-app | src/call.rs | crate::call | join_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/call.rs | crate::call | leave_channel(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once

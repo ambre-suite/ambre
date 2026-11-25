@@ -85,6 +85,34 @@ async fn wait_panel(page: &Page, attribute: &str, value: &str) {
         .await;
 }
 
+/// Sets the interface language of the account from `page`. No control sets
+/// it yet, so the belt calls the export of the development build.
+async fn set_language(page: &Page, tag: &str) {
+    page.browser
+        .script(
+            "window.wasmBindings.dev_interface_language(arguments[0]); return true;",
+            json!([tag]),
+        )
+        .await;
+}
+
+/// Waits until the boot hint `page` keeps names the interface language
+/// `tag`. The hint is the one place the page writes the language today
+/// (`SETTINGS-029`, `SETTINGS-037`).
+async fn wait_language(page: &Page, tag: &str) {
+    page.browser
+        .wait_for(
+            &format!("the interface language {tag} in the boot hint"),
+            &format!(
+                "const h = localStorage.getItem('ambre.boot_hint') || ''; \
+                 return h.split(';')[2] === {};",
+                Value::String(tag.to_owned())
+            ),
+            STEP,
+        )
+        .await;
+}
+
 /// Docks the panel to the left, as a person does.
 async fn dock_left(page: &Page) {
     press(page, "Dock the panel to the left").await;
@@ -105,8 +133,10 @@ mod tests {
 
     /// `SETTINGS-012`, `SETTINGS-041`: a theme switched on one device of an
     /// account shows on the other, through the relay. A switch back on the
-    /// second shows on the first. The side of the panel follows the
-    /// account in every application, and its fold in one application alone.
+    /// second shows on the first. The interface language follows the account
+    /// into the boot hint of the other device. The side of the panel follows
+    /// the account in every application, and its fold in one application
+    /// alone.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -131,6 +161,14 @@ mod tests {
         switch_theme(&phone).await;
         wait_theme(&phone, &first).await;
         wait_theme(&laptop, &first).await;
+
+        // The interface language, one way and back (`SETTINGS-024`).
+        set_language(&laptop, "fr").await;
+        wait_language(&laptop, "fr").await;
+        wait_language(&phone, "fr").await;
+        set_language(&phone, "de").await;
+        wait_language(&phone, "de").await;
+        wait_language(&laptop, "de").await;
 
         // One side for every application (`SETTINGS-041`).
         wait_panel(&phone, "data-side", "right").await;

@@ -70,6 +70,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 |---|---|---|---|---|---|---|
 | `SETTINGS-012` | `POST` | A change MUST reach every other signed-in device of the user as a delta of the settings document. | this spec section 3, the merge | `ambre_logic::settings::tests::a_change_reaches_the_other_device_as_one_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` -- a second device takes the delta | none | verified |
 | `SETTINGS-041` | `POST` | Once the settings document answers, the side and the fold of the context panel MUST follow the account on every device. | this spec section 3, the catalogue; `SETTINGS-025`; `SETTINGS-026` | `ambre_app::shell::panel::tests::the_side_and_the_fold_follow_the_account` -- wasm tier, the account moves the panel, a change of the person reaches it, and no value of the account is written back; `ambre_belt::settings::tests::the_settings_follow_the_account_across_two_devices` -- browser tier, two devices of one account | none | verified |
+| `SETTINGS-050` | `POST` | A change of the interface language MUST reach the boot hint of every other signed-in device of the user. | this spec section 3, the boot; `SETTINGS-024`; `SETTINGS-037` | `ambre_belt::settings::tests::the_settings_follow_the_account_across_two_devices` -- browser tier, two devices of one account, one way and back, the language set through the export of the development build | none | verified |
 | `SETTINGS-035` | `POST` | A change made while the socket is down MUST reach the relay once the socket is back. | this spec section 3, the merge; `RESID-019` | `ambre_logic::settings_flow::tests::a_change_made_while_the_socket_is_down_leaves_once_it_is_back` -- in the page, the change past the last echo leaves again; `ambre_logic::settings_flow::tests::a_change_left_offline_by_an_earlier_page_leaves_at_the_next_open` -- after a reload, the local copy sends it under the nonce of its session once the replay is in | none | verified |
 | `SETTINGS-036` | `POST` | Changes made within one coalescing delay MUST leave the device as one delta. | this spec section 3, the budget; `ambre-spec-budgets.md section 8` | `ambre_logic::settings::tests::a_burst_of_writes_leaves_as_one_delta`; `ambre_logic::settings_flow::tests::a_burst_of_changes_leaves_as_one_delta_after_the_delay` | none | verified |
 | `SETTINGS-037` | `POST` | A change of the theme or of the interface language MUST rewrite the boot hint of the device. | this spec section 3, the boot | `ambre_app::switchboard::tests::the_settings_of_the_account_reach_the_page_as_one_effect`; `ambre_app::platform::tests::the_boot_hint_reads_back_from_the_storage_and_a_sign_out_deletes_it` -- wasm tier, a later hint replaces the first | none | verified |
@@ -89,7 +90,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 41 `verified`, 1 `unimplemented`: no command title reads the interface language
+* **Verification.** 42 `verified`, 1 `unimplemented`: no command title reads the interface language
   yet. The row lands with one Story.
 
 ---
@@ -311,8 +312,6 @@ changes them. The theme sits in the avatar menu, and the side and the fold on th
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The settings keep no local copy.** A change made offline lives until the page closes, and a
-  device does not recall across sessions which document it opened (`SETTINGS-031`, `SETTINGS-035`).
 * **The reader's locale still reads the device.** The locale and the convention are settings of the
   account, and the boot still reads the reader's locale from the browser's local storage.
 * **No control returns the theme to `system`.** The theme switch has two values. A third entry of
