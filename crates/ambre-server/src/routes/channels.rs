@@ -763,29 +763,31 @@ pub struct ThreadErasuresJson {
     pub erasures: Vec<ThreadErasureJson>,
 }
 
-/// The `meta` of `channel_id`, when `user` is a member of it with `role`.
-/// An unknown channel and a stranger answer the same 403.
+/// The role of `user` on the `meta` of `channel_id`, and the space of the
+/// channel: none for a direct message. An unknown channel and a stranger
+/// answer the same 403.
 async fn meta_role(
     state: &AppState,
     channel_id: &Id<id::Channel>,
     user: &Id<User>,
-) -> Result<(Id<Meta>, Role), AppError> {
-    let meta = db::get_channel(&state.db, channel_id)
+) -> Result<(Role, Option<Id<Space>>), AppError> {
+    let (space, meta) = db::get_channel(&state.db, channel_id)
         .await?
-        .and_then(|channel| channel.meta_id)
+        .and_then(|channel| Some((channel.space_id, channel.meta_id?)))
         .ok_or(AppError::Forbidden)?;
     let role = db::member_role(&state.db, &meta.document_id(), user)
         .await?
         .ok_or(AppError::Forbidden)?;
-    Ok((meta, role))
+    Ok((role, space))
 }
 
-/// `POST /api/channels/{id}/erasures`: record an owner's erasure of a thread
-/// name that no document of the channel answers (`SRV-347`).
+/// `POST /api/channels/{id}/erasures`: record an erasure of a thread name
+/// that no document of the channel answers (`SRV-347`, `SRV-349`).
 ///
-/// The caller owns the `meta`, and signs under the key its account holds.
-/// The relay refuses an erasure of a document the channel groups. It learns
-/// the thread id, which a root of the channel names, and nothing of the root.
+/// The caller owns the `meta`, or writes in a direct message, which has no
+/// owner. The caller signs under the key its account holds. The relay
+/// refuses an erasure of a document the channel groups. It learns the thread
+/// id, which a root of the channel names, and nothing of the root.
 pub async fn erase_thread(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -795,8 +797,14 @@ pub async fn erase_thread(
     use ed25519_dalek::{Signature, VerifyingKey};
     let channel_id = ids.into_inner();
     let req = body.into_inner();
-    let (_, role) = meta_role(&state, &channel_id, &auth.user_id).await?;
-    if role != Role::Owner {
+    let erases = match meta_role(&state, &channel_id, &auth.user_id).await? {
+        (Role::Owner, _) => true,
+        (role, None) => role
+            .document_rank()
+            .is_some_and(|rank| rank >= ambre_core::DocumentRank::Editor),
+        (_, Some(_)) => false,
+    };
+    if !erases {
         return Err(AppError::Forbidden);
     }
     let transcript = ambre_protocol::thread_erasure::erasure_transcript(channel_id, req.thread);
@@ -4230,6 +4238,66 @@ mod tests {
             .await
             .is_err(),
             "a stranger lists nothing"
+        );
+    }
+
+    /// `SRV-349`: a direct message has no owner, so each of its writers
+    /// erases a thread name, under their own signature over this channel. A
+    /// stranger still erases nothing, and the channel still refuses an
+    /// erasure of a document it groups.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_writer_of_a_direct_message_erases_a_thread_name(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let eve = user(&state, "eve@test.dev").await;
+        let req = direct_request(alice, &[bob]);
+        let channel = Channel {
+            id: req.channel_id,
+            meta: req.meta_id,
+            segment: req.segment_id,
+        };
+        open_direct(&state, alice, req).await.expect("create");
+        let phantom = Id::<Document>::mint();
+
+        assert_eq!(
+            erase(&state, eve, &channel, phantom, (eve, channel.id)).await,
+            StatusCode::FORBIDDEN,
+            "a stranger erases nothing"
+        );
+        assert_eq!(
+            erase(&state, bob, &channel, phantom, (alice, channel.id)).await,
+            AppError::InvalidSignature.into_response().status(),
+            "a writer signs under their own key"
+        );
+        assert_eq!(
+            erase(
+                &state,
+                bob,
+                &channel,
+                channel.segment.document_id(),
+                (bob, channel.id)
+            )
+            .await,
+            StatusCode::CONFLICT,
+            "the channel groups it"
+        );
+        assert_eq!(
+            erase(&state, bob, &channel, phantom, (bob, channel.id)).await,
+            StatusCode::OK
+        );
+        let axum::Json(listed) = list_thread_erasures(
+            State(state.clone()),
+            session(alice),
+            OpaquePathId::new(channel.id),
+        )
+        .await
+        .expect("a member lists them");
+        let erasure = listed.erasures.first().expect("one");
+        assert_eq!(
+            (erasure.thread, erasure.signer),
+            (phantom, session(bob).signing_pubkey)
         );
     }
 
