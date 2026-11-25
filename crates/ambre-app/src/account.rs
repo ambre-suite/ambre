@@ -772,6 +772,11 @@ mod tests {
         keys.close();
         keys.refuse(cause);
         assert_eq!(keys.refusal.get_untracked(), None);
+        // The close schedules the view's effect. The owner of the signals
+        // drops when the test returns. The view lives under its own owner, so
+        // the effect runs first here. Otherwise it runs in the next test and
+        // reads disposed signals.
+        tick().await;
         container.remove();
     }
 }
