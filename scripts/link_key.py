@@ -5,7 +5,7 @@ The relay signs a receipt of each thread link under a key of one purpose,
 and a census refuses to erase a thread under a receipt that the client's key
 verifies (`SYNC-330`, `SRV-363`). The published client pins no key. Its Sync
 worker reserves one slot instead: 16 marker bytes, then 32 key bytes, which a
-release publishes as zeros (`ZK-057`, `ZK-090`). Each install writes the
+release publishes as zeros (`ZK-057`, `ZK-058`). Each install writes the
 public key of its own relay into that slot, with no rebuild. A client whose
 slot stays empty counts no receipt and names no thread.
 
@@ -20,12 +20,12 @@ Commands:
   * no slot, or more than one, under `DIR`;
   * a slot that already holds a key, or that ends before its 32 bytes.
   It then writes again the `.br` and `.gz` copies of the patched file. No
-  other byte of `DIR` changes (`SRV-390`).
+  other byte of `DIR` changes (`SRV-367`).
 * `empty DIST` fails unless `DIST` holds exactly one slot, all zero: the gate
   of a release build (`ZK-057`).
 * `read FILE` prints the key the slot of `FILE` holds, or `empty`.
 * `zero FILE OUT` writes `FILE` with its slot zeroed to `OUT`. A reader then
-  compares the digest of `OUT` with the release manifest (`ZK-091`).
+  compares the digest of `OUT` with the release manifest (`ZK-059`).
 * `served ORIGIN` fetches the Sync worker that `ORIGIN` serves and fails
   unless its slot holds the key of `THREAD_LINK_KEY`. It trusts any
   certificate, so it serves the tests of a stack under an internal authority.
@@ -40,7 +40,7 @@ Commands:
     follows in its `RUN`;
   * an `init` stage that does not carry this script and the `brotli` command;
   * a compose `web` service that serves another volume than the one a
-    `link-key` service of the init image patches first (`SRV-392`).
+    `link-key` service of the init image patches first (`SRV-369`).
 
 The key is public, and the seed stays with the relay of the install. The
 patch needs only the Python standard library, and `brotli` for a `.br` copy,
@@ -267,7 +267,7 @@ def check_release(text: str) -> list[str]:
 
 
 def check_compose(compose: dict) -> list[str]:
-    """The faults of the compose file against `SRV-392`."""
+    """The faults of the compose file against `SRV-369`."""
     services = compose.get("services") or {}
     web, patcher = services.get("web") or {}, services.get("link-key")
     faults = []

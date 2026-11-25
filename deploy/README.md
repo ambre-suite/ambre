@@ -105,7 +105,7 @@ another key (`SRV-364`).
 The web image pins no key: its client holds an empty link key slot (`ZK-057`). At each start, the
 one-shot service `web-files` copies the client into the volume `webfiles`. The one-shot service
 `link-key`, of the init image, then writes `THREAD_LINK_KEY` into that copy, and `web` serves it
-(`SRV-392`). The patch refuses an empty key, a malformed key and the development key, and `web`
+(`SRV-369`). The patch refuses an empty key, a malformed key and the development key, and `web`
 then never starts: `docker compose logs link-key` says why. A client with an empty slot names no
 thread, so keep the pair together.
 
@@ -114,7 +114,7 @@ pair as `setup.sh` does, add both lines, and run `docker compose up -d`. A new k
 build: the next start patches it. Every receipt signed under the older key then counts as none.
 
 To check the served client against the release manifest, set its key bytes to zero first with
-`python3 scripts/link_key.py zero <file> <file>` (`ZK-091`).
+`python3 scripts/link_key.py zero <file> <file>` (`ZK-059`).
 
 ## Web embeds
 

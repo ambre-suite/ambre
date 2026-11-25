@@ -186,7 +186,7 @@ services:
 
   # Writes the link key of the relay into the slot of that copy, then exits.
   # It refuses no key, a malformed key and the development key, and the web
-  # server then never starts (`SRV-392`, `scripts/link_key.py`). The init
+  # server then never starts (`SRV-369`, `scripts/link_key.py`). The init
   # image alone carries Python and brotli, and its user writes the copy as
   # root made it.
   link-key:

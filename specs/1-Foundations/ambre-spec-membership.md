@@ -751,7 +751,7 @@ and no erasure covers it, held or new (`SYNC-330`). The census fails the removal
 
 A receipt counts under the link key of this client, over that channel and that thread alone
 (`SYNC-331`). The install writes that key into the link key slot of the client, and its relay holds
-the seed (`ambre-spec-zero-knowledge.md`, `ZK-090`). A development build with an empty slot takes
+the seed (`ambre-spec-zero-knowledge.md`, `ZK-058`). A development build with an empty slot takes
 the key of a public seed, which a development relay signs under. Any other client with an empty
 slot holds no key, so no receipt counts there, and an erasure works as before. A member cannot forge
 a receipt, so a phantom thread still takes the erasure.
@@ -879,7 +879,7 @@ authority: the role here hides what the relay would refuse anyway.
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 | A link receipt the relay signs proves a thread | a link entry the first replier signs into the root | any member can sign such an entry for a thread the relay never linked. A phantom would then fail every removal, and its author could never be removed. Only the relay can tell what it linked |
 | A link receipt the relay signs proves a thread | a link entry signed into the `meta` | the relay could serve the root that names the thread and withhold the delta of the `meta`. The receipt rides in the delta that names the thread, so a census that reads the name holds the proof |
-| The client files carry the link key, which the install patches | the relay serves its key, kept on first use | the relay could serve a key to the linker and another to the eraser. The eraser would then hold no receipt that counts, and would erase. A key in the files is a key a reader checks against the manifest (`ZK-091`) |
+| The client files carry the link key, which the install patches | the relay serves its key, kept on first use | the relay could serve a key to the linker and another to the eraser. The eraser would then hold no receipt that counts, and would erase. A key in the files is a key a reader checks against the manifest (`ZK-059`) |
 | A link under no receipt that counts fails | the client links and writes the field with no receipt | a relay hostile at the link withholds the receipt, then hides the thread and gets it erased. The receipt would then hold only against a relay that turns after the link |
 | A hidden thread with no receipt that counts takes the erasure | the census counts such a thread as linked when this client read content of it | a member can seal content into a document it owns and name it with no link. Every removal would then fail, its author's own included |
 | The census checks the receipt | the check of the Murmure engine verifies it on each delta | the Logic thread would link the signature code and the pinned key. A receipt that does not count harms nothing: the census treats the thread as if it had none |

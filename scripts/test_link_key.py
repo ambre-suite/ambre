@@ -73,7 +73,7 @@ class Key(unittest.TestCase):
 
 
 class Patch(unittest.TestCase):
-    """`SRV-366`, `SRV-390`: the patch writes the key alone, or nothing."""
+    """`SRV-366`, `SRV-367`: the patch writes the key alone, or nothing."""
 
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp())
@@ -180,7 +180,7 @@ class Empty(unittest.TestCase):
 
 
 class Zero(unittest.TestCase):
-    """`ZK-091`: a patched file with its slot zeroed is the published file."""
+    """`ZK-059`: a patched file with its slot zeroed is the published file."""
 
     def test_a_zeroed_copy_has_the_digest_of_the_release(self) -> None:
         with tempfile.TemporaryDirectory() as d:
@@ -194,7 +194,7 @@ class Zero(unittest.TestCase):
 
 
 class Served(unittest.TestCase):
-    """`SRV-392`: the check reads the Sync worker the page names."""
+    """`SRV-369`: the check reads the Sync worker the page names."""
 
     def test_the_worker_comes_from_the_address_of_the_page(self) -> None:
         asked: list[str] = []
@@ -217,7 +217,7 @@ class Served(unittest.TestCase):
 
 
 class Lint(unittest.TestCase):
-    """`ZK-057`, `SRV-392`: the build, the release and the compose file."""
+    """`ZK-057`, `SRV-369`: the build, the release and the compose file."""
 
     def test_the_tree_passes(self) -> None:
         self.assertEqual(lk.check_dockerfile(DOCKERFILE), [])

@@ -100,7 +100,7 @@ spec:
       # the init image that alone carries the patch, writes the
       # `thread-link-key` of the Secret into the slot of that copy (`SRV-365`).
       # The relay signs under the seed of that key (`SRV-364`). No key, a
-      # malformed key or the development key stops the pod here (`SRV-391`).
+      # malformed key or the development key stops the pod here (`SRV-368`).
       initContainers:
         - name: web-files
           image: {{ include "ambre.image" $c }}

@@ -187,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     // The link key signs the receipt of each thread link, and the client
-    // holds its public half in its slot (`SRV-363`, `ZK-090`). A development
+    // holds its public half in its slot (`SRV-363`, `ZK-058`). A development
     // relay signs under the public dev seed, which only a development client
     // takes.
     let link_seed = match jwt::JwtSeed::link_from_env()

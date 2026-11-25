@@ -45,7 +45,7 @@ web server, so a refusal is the policy and not a broken network (`SRV-352`).
 worker that `ORIGIN` serves holds the `thread-link-key` of the Secret in its
 slot (`SRV-365`). `link-key refuse CONTEXT` then writes the development key,
 then an empty key, into the Secret and restarts the web server each time. The
-pod must stop in its init container, and its log must say why (`SRV-391`).
+pod must stop in its init container, and its log must say why (`SRV-368`).
 
 `nodes CONTEXT` runs on the same cluster before the install: each node holds
 an address inside the `networkPolicy.nodeCidrs` of the test values, or the
@@ -623,7 +623,7 @@ def probe(kubectl: list[str]) -> int:
 
 
 def link_key_faults(pods: dict, log: str, reason: str) -> list[str]:
-    """The faults of the web pods of a cluster against `SRV-391`.
+    """The faults of the web pods of a cluster against `SRV-368`.
 
     `pods` is the list of the pods of the web server, as `kubectl get -o json`
     prints it, and `log` the log of the init container of the refused pod.
@@ -654,7 +654,7 @@ def link_key_faults(pods: dict, log: str, reason: str) -> list[str]:
 
 
 # The keys a Secret plants for each refusal of `link-key refuse`, and the words
-# the log of the init container must hold (`SRV-391`).
+# the log of the init container must hold (`SRV-368`).
 REFUSALS = (
     (link_key.DEV_KEY, "names the development key"),
     ("", "is not set"),
@@ -716,7 +716,7 @@ def refused(kubectl: list[str], planted: str, reason: str) -> list[str]:
 
 
 def link_key_refuse(kubectl: list[str]) -> int:
-    """Finds the web pod stopped under the development key and under no key (`SRV-391`)."""
+    """Finds the web pod stopped under the development key and under no key (`SRV-368`)."""
     faults = [f for planted, reason in REFUSALS for f in refused(kubectl, planted, reason)]
     for fault in faults:
         print(f"chart: {fault}", file=sys.stderr)

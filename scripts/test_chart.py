@@ -408,7 +408,7 @@ LOG = f"link_key: THREAD_LINK_KEY {REASON}, under which any member signs a recei
 
 
 class LinkKeyRefusalTest(unittest.TestCase):
-    """`SRV-391`: the verdict of `chart.py link-key refuse` on a cluster."""
+    """`SRV-368`: the verdict of `chart.py link-key refuse` on a cluster."""
 
     def test_a_failed_init_whose_log_says_why_holds(self) -> None:
         self.assertEqual(chart.link_key_faults(pods(FAILED, WAITING), LOG, REASON), [])

@@ -914,7 +914,7 @@ services-down:
 selfhost := 'docker compose -f deploy/compose/compose.yml --env-file target/selfhost/.env -p ambre-selfhost-test'
 
 # Build and start the self-hosted stack under test, then wait for its page and its relay.
-# The served client must hold the link key of the `.env` in its slot (`SRV-392`).
+# The served client must hold the link key of the `.env` in its slot (`SRV-369`).
 # Each run drops the stack left by an earlier one with its volumes, then writes
 # fresh secrets: CI restores `target/` from its cache, and an `.env` kept from an
 # older `setup.sh` lacks the secrets added since.
@@ -956,7 +956,7 @@ chart-check:
 # SFU (`SRV-361`). The served client holds the link key of the Secret
 # (`SRV-365`). Last, the recipe writes the development key, then an empty key,
 # into the Secret, and the restarted web pod stops before Caddy each time
-# (`SRV-391`). The cluster is deleted on exit, and its state printed first on
+# (`SRV-368`). The cluster is deleted on exit, and its state printed first on
 # a failure.
 chart-test:
     #!/usr/bin/env bash
@@ -1007,7 +1007,7 @@ chart-test-release LIST REF SHA:
 image-provenance:
     python3 scripts/image_provenance.py check
 
-# `ZK-057`, `SRV-392`: no release build names a link key, each build of the
+# `ZK-057`, `SRV-369`: no release build names a link key, each build of the
 # web image checks that its slot is empty, the init image carries the patch,
 # and the compose web server serves the copy that `link-key` patches
 # (`scripts/link_key.py`).

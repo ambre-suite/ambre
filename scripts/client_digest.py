@@ -28,7 +28,7 @@ the wasm through `trim-paths` of the `wasm-release` profile (`Cargo.toml`).
 of an install, and a build whose slot is missing or holds a key fails here
 (`ZK-057`). An install writes its key into a copy of the files, so its Sync
 worker differs from the manifest in those 32 bytes alone. A reader zeroes them
-with `scripts/link_key.py zero`, then runs `b2sum -l 256 -c` (`ZK-091`).
+with `scripts/link_key.py zero`, then runs `b2sum -l 256 -c` (`ZK-059`).
 
 Commands, from the repository root:
 

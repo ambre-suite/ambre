@@ -111,7 +111,7 @@ fn verifies(channel_id: Id<Channel>, erasure: &ErasureEntry) -> bool {
 
 /// The 16 bytes that open the link key slot of the Sync worker. The patch of
 /// an install finds them once in the wasm, and writes its key in the 32 bytes
-/// after them (`ZK-090`, `scripts/link_key.py`). Random bytes, so no other
+/// after them (`ZK-058`, `scripts/link_key.py`). Random bytes, so no other
 /// data of the build spells them.
 const LINK_KEY_SLOT_MARKER: [u8; 16] = [
     0x46, 0x11, 0x76, 0xfb, 0x8d, 0x6a, 0xaf, 0xeb, 0x98, 0x92, 0x88, 0x04, 0x0c, 0x45, 0x91, 0xf9,
@@ -150,7 +150,7 @@ impl LinkKeySlot {
 static LINK_KEY_SLOT: LinkKeySlot = LinkKeySlot::empty();
 
 /// The link key this client counts receipts under (`SYNC-331`): the key the
-/// install patched into its slot (`ZK-090`). A development build or a test
+/// install patched into its slot (`ZK-058`). A development build or a test
 /// whose slot is empty takes the key of the public dev seed. Any other build
 /// with an empty slot takes none, so no receipt proves a link, and the client
 /// names no thread (`SYNC-332`).
@@ -179,7 +179,7 @@ fn key_of(slot: &LinkKeySlot, empty: EmptySlot) -> Option<FixedBytes<PublicKey>>
         (None, EmptySlot::TakesDevKey) => Some(ambre_protocol::thread_erasure::DEV_LINK_KEY),
         (None, EmptySlot::NamesNoKey) => {
             crate::log::warning!(
-                "[Sync] this client holds no thread link key: the install patched none into its slot (ZK-090)"
+                "[Sync] this client holds no thread link key: the install patched none into its slot (ZK-058)"
             );
             None
         }
@@ -198,7 +198,7 @@ pub(crate) fn linked(
 }
 
 /// Whether `key` signed a receipt of `receipts` over `thread` in
-/// `channel_id`. No key proves no link (`ZK-090`).
+/// `channel_id`. No key proves no link (`ZK-058`).
 fn linked_under(
     key: Option<&FixedBytes<PublicKey>>,
     channel_id: Id<Channel>,
@@ -331,7 +331,7 @@ mod tests {
         }
     }
 
-    /// `ZK-090`: the slot lays out the marker, then the 32 key bytes, with no
+    /// `ZK-058`: the slot lays out the marker, then the 32 key bytes, with no
     /// padding. The patch of an install searches for that layout.
     #[test]
     fn the_link_key_slot_is_the_marker_then_32_key_bytes() {
@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(LINK_KEY_SLOT.marker, LINK_KEY_SLOT_MARKER);
     }
 
-    /// `ZK-090`: an empty slot names no key outside a development build, and
+    /// `ZK-058`: an empty slot names no key outside a development build, and
     /// the key a patch writes is the key the client counts receipts under.
     #[test]
     fn a_patched_slot_gives_its_key_and_an_empty_one_none() {
@@ -360,7 +360,7 @@ mod tests {
         assert_eq!(key_of(&slot, EmptySlot::TakesDevKey), key);
     }
 
-    /// `ZK-090`: a client whose slot is empty counts no receipt, even one the
+    /// `ZK-058`: a client whose slot is empty counts no receipt, even one the
     /// key of the public dev seed signed, which a dev build counts.
     #[test]
     fn an_empty_slot_counts_no_receipt() {
