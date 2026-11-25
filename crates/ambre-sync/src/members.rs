@@ -1070,6 +1070,7 @@ mod tests {
 
     /// `SYNC-292`: a user search with no relay logs that it ran, and never
     /// the address it searched.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_user_search_logs_no_searched_address() {
         let (state, rx) = bare_state();

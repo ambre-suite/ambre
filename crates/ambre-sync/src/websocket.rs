@@ -2332,6 +2332,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-064`, `SYNC-098`: the worker walks its lifecycle on its own
     /// clock. A dropped socket waits out the backoff before it reopens, and a
     /// timer that fires early opens nothing. A refusal before any frame
@@ -2488,6 +2489,7 @@ mod tests {
         assert_eq!(delivered, 1, "the genuine sample reaches Logic");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-066`: a sign-out closes the socket and clears every key. A drop
     /// reported after it reopens nothing, where the same drop before it does.
     #[test]
@@ -2535,6 +2537,7 @@ mod tests {
         assert!(rx.try_iter().next().is_none(), "nothing reaches Logic");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// A socket refused for a key setup still owed is neither renewed nor
     /// retried, by a timer armed before or a renewal landing after (`SYNC-133`).
     /// Once a session with keys is stored, it reopens.
@@ -2586,6 +2589,7 @@ mod tests {
         )));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// A frame of a newer wire version reaches Logic once as an update to
     /// install, never as an error (`SYNC-137`). No timer or renewal reopens
     /// the socket.
@@ -2610,6 +2614,7 @@ mod tests {
         )));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// A hold stops reading the relay until the release, and nothing else
     /// reopens the socket meanwhile (`SYNC-059`). The reopen asks for what was
     /// missed, then sends the edit sealed during the hold.
@@ -3125,6 +3130,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-059`: holding the inbound path reports every open document
     /// disconnected. The release reopens only while documents wait, no key
     /// setup is owed and no socket is open.
@@ -3167,6 +3173,7 @@ mod tests {
         )));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `SYNC-063`: a renewal that fails with no dev identity backs off, and
     /// the socket reopens once the wait is over.
     #[test]
