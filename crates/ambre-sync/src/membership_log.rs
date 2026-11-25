@@ -1204,12 +1204,22 @@ impl Log {
         }
     }
 
-    /// The signing keys of the members the log holds present as owners: the
-    /// keys whose erasure of a thread name a census takes (`SYNC-322`).
-    pub(crate) fn owner_keys(&self) -> HashSet<FixedBytes<PublicKey>> {
-        self.held
-            .values()
-            .filter(|held| held.present && held.role == Role::Owner)
+    /// The signing keys whose erasure of a thread name a census takes
+    /// (`SYNC-322`, `SYNC-327`). These are the present owners. A log with no
+    /// owner, as a direct message holds, gives every present writer. The walk reads the
+    /// roles from signed entries, so the relay cannot drop an owner to widen
+    /// the set.
+    pub(crate) fn erasure_keys(&self) -> HashSet<FixedBytes<PublicKey>> {
+        let present = || self.held.values().filter(|held| held.present);
+        let ownerless = !present().any(|held| held.role == Role::Owner);
+        present()
+            .filter(|held| {
+                if ownerless {
+                    writing_rank(held.role).is_some()
+                } else {
+                    held.role == Role::Owner
+                }
+            })
             .map(|held| held.key)
             .collect()
     }

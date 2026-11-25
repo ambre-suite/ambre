@@ -1104,7 +1104,7 @@
   1. A codec of `ambre-core` replaces the `base64` crate. It writes the padded base64 of RFC 4648
      for the sealed values and the checksum header (`SRV-348`).
   2. A socket frame is the postcard of the tuple of the version byte and the message, so the
-     `to_extend` writer leaves the worker (`SRV-349`).
+     `to_extend` writer leaves the worker (`SRV-350`).
   3. The JSON read hands a field name to the field visitor of its struct as a string. The key read
      of `serde_json` then links once, out of line. The fields of one struct share one buffer.
   4. A request body keeps `T::serialize` alone generic.
