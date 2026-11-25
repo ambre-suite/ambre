@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-693` | `INV` | Each control of the call bubble and of the call pill MUST carry an accessible name and take the keyboard focus, and mute MUST carry its pressed state. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier: mute and hang up name themselves at both widths; structural -- the camera and the share of the bubble are the buttons of the header, which `MURMURE-624` and `MURMURE-633` hold | none | verified |
 | `MURMURE-689` | `OBS` | A sidebar entry whose channel holds a live call the page knows MUST show a call mark and the count of its participants, and no name. | this spec section 3, who is in the call; `ZK-024` | `ambre_murmure::ui::sidebar::tests::a_live_call_shows_its_count_and_leaves_once_gone`; `ambre_app::shell::murmure_regions::a_live_call_shows_its_mark_its_count_and_its_faces_on_the_channel_shown` -- wasm tier: a mark and a count, no face off the channel shown; `ambre_logic::channels::tests::a_tick_asks_who_is_in_the_live_call_of_each_held_channel` | none | verified |
 | `MURMURE-690` | `OBS` | The sidebar entry of the channel the view shows MUST show the initials of each participant of its live call. | this spec section 3, who is in the call; `ZK-024` | `ambre_app::shell::murmure_regions::a_live_call_shows_its_mark_its_count_and_its_faces_on_the_channel_shown` -- wasm tier | none | verified |
-| `MURMURE-691` | `OBS` | A sidebar entry whose channel the page never opened MUST show the live call of that channel. | this spec section 3, who is in the call; `ZK-024` | not built | unbuilt -- lands with the `Live calls of unopened channels in the sidebar` Story (`ambre-roadmap.md` V1) | unimplemented |
+| `MURMURE-691` | `OBS` | A sidebar entry whose channel the page never opened MUST show the live call of that channel. | this spec section 3, who is in the call; `ZK-024`; `ZK-056` | `ambre_logic::unopened::tests::a_channel_never_opened_shows_the_live_call_its_cue_or_the_relay_names` -- a ring cue or the relay names the call, the tick asks who is in it, and an end cue or a gone answer takes it away; `ambre_sync::call_link::tests::the_live_calls_the_relay_names_reach_the_logic_thread`; `ambre_app::shell::murmure_regions::a_live_call_shows_its_mark_its_count_and_its_faces_on_the_channel_shown` -- wasm tier: the answer draws the mark under its channel | none | verified |
 | `MURMURE-696` | `OBS` | While the page is in a call and shows no channel region of it, over the phone width it MUST show the call bubble: the channel, the time since the member entered the call, the faces, mute, the camera, the share, the way back and hang up. | this spec section 3, away from the channel of the call | `ambre_murmure::ui::call_float::tests::the_call_floats_away_from_its_channel_alone`; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier, at a desktop width | none | verified |
 | `MURMURE-697` | `OBS` | While the page is in a call and shows no channel region of it, under the phone width it MUST show the call pill under the header: the channel, the time since the member entered the call, the faces, mute and hang up. | this spec section 3, away from the channel of the call | `ambre_murmure::ui::call_float::tests::the_call_floats_away_from_its_channel_alone`; `ambre_app::shell::murmure_regions::the_call_floats_away_from_its_channel_and_brings_it_back` -- wasm tier, at a phone width: the camera, the share and the way back hide | none | verified |
 | `MURMURE-698` | `INV` | The call bubble MUST publish the part of the canvas it covers. | this spec section 3, away from the channel of the call; `1-Foundations/ambre-spec-shell.md section 2` (`CHROME-171`) | not built | unbuilt -- lands with the `The floating cover` Story (`ambre-roadmap.md` MVP) | unimplemented |
@@ -205,9 +205,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). A ring
   rides their sealed summaries, so the relay learns no ring and no decline (`MURMURE-647`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 90 `verified`, 10 `unimplemented`. The relay half holds in the database tier.
-  The engine and the two workers hold on the host, and the whole path in the browser tier, under
-  Chrome and Firefox.
+* **Verification.** 91 `verified`, 9 `unimplemented`. The relay half holds in the database tier. The
+  engine and the two workers hold on the host, and the whole path in the browser tier, under Chrome
+  and Firefox.
 
 ---
 
@@ -270,8 +270,11 @@ held segments, once per interval at most (`MURMURE-595`).
 **A live call in the sidebar.** The sidebar marks each channel whose held segments name a live
 call, with the count of its participants and no name (`MURMURE-689`). The entry of the channel the
 view shows adds their initials (`MURMURE-690`). The count comes from the same ask, so the sidebar
-asks for each live call of each held channel at the same interval. A channel never opened holds
-no call message on the page, and shows no mark yet (`MURMURE-691`).
+asks for each live call of each held channel at the same interval.
+
+A channel never opened shows its live call too (`MURMURE-691`). The ring cue of its call message
+names the call, and the end cue takes it away. Once per listing, the relay names each live call
+that started before the watch (`CALL-162`). The tick then asks for that call as for a held one.
 
 `ZK-024` holds for each such ask: the relay learns the session, the call, the channel and the
 instant, and stores none of it. An ask for a channel the view does not show tells it no more.

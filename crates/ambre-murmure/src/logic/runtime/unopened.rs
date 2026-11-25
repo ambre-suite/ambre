@@ -154,6 +154,7 @@ impl<D> Runtime<D> {
             })
             .filter_map(|(c, m)| segments.get(c).map(|s| (*m, s.clone())))
             .collect();
+        let mut watching = false;
         for (listed, documents) in unheld {
             let ChannelMeta {
                 channel_id,
@@ -174,6 +175,12 @@ impl<D> Runtime<D> {
                 meta_last: last,
                 documents,
             });
+            watching = true;
+        }
+        // A call that started before the watch sent its cue already. So the relay names the
+        // live call of each channel once per listing that watches one (`MURMURE-691`).
+        if watching {
+            self.ask(SyncCommand::FetchChannelCalls);
         }
     }
 }

@@ -990,6 +990,7 @@ impl LogicState {
                 channel,
                 members,
             } => self.route(|m| m.call_roster(call, channel, members)),
+            LogicEvent::ChannelCalls { calls } => self.route(|m| m.channel_calls(&calls)),
             LogicEvent::CallMetaAsked { call, channel } => {
                 self.route(|m| m.call_meta_asked(call, channel))
             }

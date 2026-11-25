@@ -1474,15 +1474,15 @@ async fn a_member_reads_the_live_call_of_its_own_channels_alone(pool: sqlx::PgPo
     ];
     ambre_core::order::sort_by_id(&mut want, |c| c.call);
     assert_eq!(both, want, "the quiet channel is absent");
+    assert!(both.iter().all(|c| c.channel != quiet));
     assert!(
         ask_channel_calls(&state, &dave).await.is_empty(),
         "a stranger reads none"
     );
 }
 
-/// `ZK-056`: an ask of the live calls writes nothing to the store. The key of the live call of
-/// the channel reads the same before and after the asks, and its time to live shrinks under
-/// the asks alone.
+/// `ZK-056`: an ask of the live calls writes nothing to the store. The key of the channel reads
+/// the same before and after the asks. Its time to live shrinks under the asks alone.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn an_ask_of_the_live_calls_changes_nothing_of_the_store(pool: sqlx::PgPool) {

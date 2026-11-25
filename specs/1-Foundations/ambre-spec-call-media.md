@@ -203,6 +203,7 @@ A member of the channel, in the call or not, asks the relay for the seats of a c
 | `CALL-070` | `POST` | The relay MUST answer a member of the channel with the signed join of each seat of the call, or with no state once it holds none. | this spec section 3, the roster; `ZK-022` | `ambre_server::ws::handler::call::tests::a_member_out_of_the_call_reads_the_signed_join_of_each_seat` -- database tier | none | verified |
 | `CALL-071` | `FAIL` | Given an asker who is no member of the channel, or a call of another channel, the relay MUST answer as for a call it holds no state of. | this spec section 3, the roster; `CALL-019` | `ambre_server::ws::handler::call::tests::a_stranger_or_another_channel_reads_a_running_call_as_gone` -- database tier | none | verified |
 | `CALL-072` | `FRAME` | An ask MUST NOT change the state of the call in the ephemeral store. | this spec section 3, the roster; `ZK-024` | `ambre_server::ws::handler::call::tests::an_ask_changes_nothing_of_the_store` -- database tier: the keys of the call, their fields and their expiry read the same | none | verified |
+| `CALL-162` | `POST` | The relay MUST answer an ask of the live calls with the live call of each channel of the asker, and of no other channel. | this spec section 3, the roster; `CALL-160`; `ZK-056` | `ambre_server::ws::handler::call::tests::a_member_reads_the_live_call_of_its_own_channels_alone` -- database tier: a channel with no call is absent, and a stranger reads none | none | verified |
 
 ### 1.10 Mute a call
 
@@ -271,7 +272,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 160 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 161 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -512,6 +513,10 @@ a call of another channel, read the same answer as a call the relay holds none o
 The route reads the state of the call and writes nothing (`CALL-072`, `ZK-024`). The reader
 checks each join against the membership log of the channel, as a participant does
 (`MURMURE-596`).
+
+**The live calls of a user.** `GET /api/channel-calls` names the live call of each channel of the
+asker, from the key of each channel (`CALL-160`, `CALL-162`). It reads the membership in one query
+and the keys in one read, and writes nothing (`ZK-056`).
 
 **The client of a call** runs in the Sync worker. It reads the membership log of the channel,
 then opens the call socket. The log counts only once it stands on a root of the client, as an

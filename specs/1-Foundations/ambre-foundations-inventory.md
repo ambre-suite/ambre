@@ -40,7 +40,7 @@
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
-| `call-media` | The audio and video of a call, encrypted end to end. | partial | 161 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | partial | 162 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 40 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 18 |  |
@@ -62,8 +62,8 @@
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 24 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | partial | 40 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 55 | 1 |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 56 | 1 |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 
-**50 features: 23 implemented, 25 partial, 2 design-only. 1909 contract rows, 16 loose.**
+**50 features: 23 implemented, 25 partial, 2 design-only. 1911 contract rows, 16 loose.**

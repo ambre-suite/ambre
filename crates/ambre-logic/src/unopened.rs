@@ -12,6 +12,9 @@ mod tests {
     type Segments = Vec<(Id<Document>, Option<Seq<Relay>>)>;
     use ambre_bus::{ChannelActivity, Relay, Seq};
     use ambre_core::activity::ActivityCounters;
+    use ambre_core::{Authored, Instant};
+    use ambre_murmure::message::MurmureCommand;
+    use ambre_murmure::{ChannelState, ChannelType};
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
         let (to_ui, ui_rx) = test_link();
@@ -331,5 +334,118 @@ mod tests {
             "got {sent:?}"
         );
         assert!(!state.route(|m| m.reads_channel_copy(meta.document_id())));
+    }
+
+    /// The calls each roster ask names, with its channel and its `meta`.
+    fn roster_asks(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(Id<ambre_core::id::Call>, Id<Channel>, Id<Document>)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|command| match command {
+                SyncCommand::AskCallRoster {
+                    call,
+                    channel,
+                    meta,
+                } => Some((call, channel, meta)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A channel never opened shows its live call (the Murmure calls spec). Its watch asks the
+    /// relay for the live calls once. A ring cue of its segment names the call, and so does the
+    /// answer of the relay. The tick of the shown channel asks who is in it under its `meta`. An
+    /// end cue, or an answer of no state, takes the call away.
+    #[test]
+    fn a_channel_never_opened_shows_the_live_call_its_cue_or_the_relay_names() {
+        let (mut state, ui, sync) = harness();
+        let (channel, meta, segment) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            Id::<Document>::mint(),
+        );
+        list(&mut state, &[(channel, meta)]);
+        answer(
+            &mut state,
+            &[(channel, segment, ChannelDocumentKind::Segment)],
+        );
+        let fetched = drain(&sync)
+            .into_iter()
+            .filter(|c| matches!(c, SyncCommand::FetchChannelCalls))
+            .count();
+        assert_eq!(fetched, 1, "the watch asks for the live calls once");
+
+        let shown = Id::<Channel>::mint();
+        let held = ChannelState::create(
+            shown,
+            ChannelType::Public,
+            None,
+            Instant::<Authored>::new(1),
+        )
+        .expect("create");
+        state.hold_channel(held);
+        let tick = |state: &mut LogicState, now: u64| {
+            state.handle_logic_command(LogicCommand::Channel {
+                channel_id: shown,
+                command: MurmureCommand::Tick {
+                    now: Instant::<Authored>::new(now),
+                },
+            });
+        };
+        let call = Id::<ambre_core::id::Call>::mint();
+        let cue = |kind| LogicEvent::CallCue {
+            document_id: segment,
+            cue: ambre_bus::CallCue {
+                call,
+                kind,
+                at: Instant::<Authored>::new(1),
+            },
+        };
+        state.handle_logic_event(cue(ambre_bus::CueKind::Ring));
+        tick(&mut state, 10_000);
+        assert_eq!(roster_asks(&sync), [(call, channel, meta.document_id())]);
+
+        drain(&ui);
+        state.handle_logic_event(cue(ambre_bus::CueKind::End));
+        let gone = drain(&ui).into_iter().any(|event| {
+            matches!(
+                event,
+                UiEvent::Channel {
+                    channel_id,
+                    event: ambre_murmure::message::MurmureEvent::CallMembers {
+                        members: ambre_bus::CallMembers::Gone,
+                        ..
+                    },
+                } if channel_id == channel
+            )
+        });
+        assert!(gone, "the end cue takes the mark away");
+        tick(&mut state, 20_000);
+        assert!(
+            roster_asks(&sync).is_empty(),
+            "an ended call is asked no more"
+        );
+
+        let later = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::ChannelCalls {
+            calls: vec![(channel, later), (Id::<Channel>::mint(), later)],
+        });
+        tick(&mut state, 30_000);
+        assert_eq!(
+            roster_asks(&sync),
+            [(later, channel, meta.document_id())],
+            "the relay names the call of a channel it watches alone"
+        );
+        state.handle_logic_event(LogicEvent::CallRoster {
+            call: later,
+            channel,
+            members: ambre_bus::CallMembers::Gone,
+        });
+        tick(&mut state, 40_000);
+        assert!(
+            roster_asks(&sync).is_empty(),
+            "a gone call is asked no more"
+        );
     }
 }

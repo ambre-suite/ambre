@@ -1819,6 +1819,9 @@ impl<D> Runtime<D> {
                 for held in held {
                     self.ask_call_rosters(held, now);
                 }
+                for unheld in self.unheld_call_channels() {
+                    self.ask_call_rosters(unheld, now);
+                }
             }
             MurmureCommand::Typing { now, thread } => {
                 let meta = channel.meta_id().document_id();
@@ -2247,6 +2250,7 @@ impl<D> Runtime<D> {
             .find_map(|(channel_id, closed)| closed.holds(document_id).then_some(*channel_id));
         if let Some(channel_id) = channel_id {
             self.emit(UiEvent::CallCue { channel_id, cue });
+            self.note_unheld_cue(channel_id, cue);
         }
     }
 

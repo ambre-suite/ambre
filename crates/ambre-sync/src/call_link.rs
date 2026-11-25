@@ -1616,6 +1616,26 @@ mod tests {
         ));
     }
 
+    /// The live calls the relay names reach the Logic thread, channel by
+    /// channel. A failed read names none.
+    #[test]
+    fn the_live_calls_the_relay_names_reach_the_logic_thread() {
+        let alice = Person::new(1);
+        let (state, _, _, rx) = worker_heard(&alice);
+        state.channel_calls_fetched(Err(crate::http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        )));
+        assert!(rx.try_recv().is_err(), "a failed read names no call");
+        state.channel_calls_fetched(Ok(vec![ambre_protocol::signaling::ChannelCall {
+            channel: TARGET.channel,
+            call: TARGET.call,
+        }]));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::ChannelCalls { calls }) if calls == [(TARGET.channel, TARGET.call)]
+        ));
+    }
+
     /// `CALL-149`, audit `P24`: the Logic thread holds no state of the channel of a join. The
     /// join ends before any socket opens, and the page hears the end. The relay is never asked
     /// which document is the `meta`, so no answer of it can seat the join.
