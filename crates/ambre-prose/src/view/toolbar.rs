@@ -195,8 +195,8 @@ impl ProseUiState {
     #[must_use]
     pub fn text_write(&self, write: crate::view::panel::TextWrite) -> Option<ProseCommand> {
         use crate::view::panel::TextWrite;
-        if let TextWrite::DefaultFont(family) = write {
-            return Some(ProseCommand::SetDefaultFont { family });
+        if let TextWrite::DefaultFont(font) = write {
+            return Some(ProseCommand::SetDefaultFont { font });
         }
         let (anchor, focus) = self.selection()?;
         let mark = |root: MarkRoot, raw: Option<String>| {

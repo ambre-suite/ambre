@@ -244,6 +244,9 @@ ambre_core::crdt_names! {
         FontSizePt = "font_size_pt",
         /// A multiple of the font size.
         LineHeight = "line_height",
+        /// The font of every heading. Absent means the headings follow the
+        /// body font, the version 1 rule (`PROSE-UI-266`).
+        HeadingFontFamily = "heading_font_family",
     }
 }
 
@@ -1243,6 +1246,9 @@ pub struct DocDefaults {
     pub font_size: FontSize,
     /// A multiple of the font size, never an absolute length.
     pub line_height: LineSpacingMultiple,
+    /// The font of every heading. `None` sets each heading in
+    /// [`font_family`](Self::font_family) (`PROSE-UI-266`).
+    pub heading_font_family: Option<ambre_core::FontFamily>,
 }
 
 /// The default fonts of a document, as the context panel shows them
@@ -1251,6 +1257,9 @@ pub struct DocDefaults {
 pub struct DocFonts {
     /// The font of every block no mark and no block type sets.
     pub body: ambre_core::FontFamily,
+    /// The font of every heading, or `None` when the headings follow the
+    /// body font (`PROSE-UI-266`).
+    pub heading: Option<ambre_core::FontFamily>,
 }
 
 impl DocFonts {
@@ -1259,6 +1268,7 @@ impl DocFonts {
     pub fn of(defaults: &DocDefaults) -> Self {
         Self {
             body: defaults.font_family.clone(),
+            heading: defaults.heading_font_family.clone(),
         }
     }
 }
@@ -1277,6 +1287,7 @@ impl Default for DocDefaults {
             font_family: ambre_core::FontFamily::Other("Inter".to_owned()),
             font_size: DEFAULT_FONT_SIZE,
             line_height: DEFAULT_LINE_HEIGHT,
+            heading_font_family: None,
         }
     }
 }
@@ -1310,6 +1321,9 @@ pub fn read_defaults(doc: &LoroDoc, roots: &Roots) -> DocDefaults {
         line_height: read_f32(&defaults, DefaultsKey::LineHeight)
             .and_then(LineSpacingMultiple::new)
             .unwrap_or(fallback.line_height),
+        heading_font_family: read_string(&defaults, DefaultsKey::HeadingFontFamily)
+            .filter(|name| !name.is_empty())
+            .map(|name| ambre_core::FontFamily::from_label(&name)),
     }
 }
 
@@ -1419,6 +1433,26 @@ pub(crate) fn write_default_font(
         .map(Fields::<DefaultsKey>::new)
         .ok_or(WriteError::Refused(RefusalCause::DefaultsRefused))?;
     defaults.insert(DefaultsKey::FontFamily, family.label())?;
+    Ok(())
+}
+
+/// Write the heading font of the document (`PROSE-UI-266`). `None` deletes
+/// the key, so the headings follow the body font again.
+///
+/// # Errors
+/// [`RefusalCause::DefaultsRefused`] when the document holds no defaults
+/// register, or the engine's own error when it refuses the write.
+pub(crate) fn write_heading_font(
+    doc: &LoroDoc,
+    family: Option<&ambre_core::FontFamily>,
+) -> Result<(), WriteError> {
+    let defaults = map_at(&meta(doc), MetaKey::Defaults)
+        .map(Fields::<DefaultsKey>::new)
+        .ok_or(WriteError::Refused(RefusalCause::DefaultsRefused))?;
+    match family {
+        Some(family) => defaults.insert(DefaultsKey::HeadingFontFamily, family.label())?,
+        None => defaults.delete(DefaultsKey::HeadingFontFamily)?,
+    }
     Ok(())
 }
 

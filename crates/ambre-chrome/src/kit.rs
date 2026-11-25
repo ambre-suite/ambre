@@ -231,12 +231,13 @@ fn swatch_row(
 }
 
 /// The font family of a property: the picker that shows each family in
-/// itself.
+/// itself. `default_label` renames the entry that names no family.
 #[component]
 pub fn FontField(
     property: &'static Property,
     #[prop(into)] value: Signal<Reading<Option<FontFamily>>>,
     on_write: Callback<Option<FontFamily>>,
+    #[prop(optional)] default_label: Option<&'static str>,
 ) -> impl IntoView {
     let current = Signal::derive(move || value.get().uniform().flatten());
     view! {
@@ -245,7 +246,7 @@ pub fn FontField(
             data-reach=Reach::Property(property.id).marker()
             aria-label=property_label(property)
         >
-            <crate::FontPicker current=current on_pick=on_write />
+            <crate::FontPicker current=current on_pick=on_write default_label=default_label />
             {move || mixed_hint(value.get().is_mixed())}
         </span>
     }
