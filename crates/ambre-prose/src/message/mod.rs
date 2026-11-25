@@ -745,17 +745,6 @@ pub enum TriState {
     Mixed,
 }
 
-/// One default font of the document, and the family it takes
-/// (`PROSE-UI-261`, `PROSE-UI-266`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DefaultFont {
-    /// The font of every block no mark and no block type sets.
-    Body(ambre_core::FontFamily),
-    /// The font of every heading. `None` makes the headings follow the
-    /// body font again.
-    Heading(Option<ambre_core::FontFamily>),
-}
-
 /// What a paragraph is, as the paragraph style control names it
 /// (`features/ambre-spec-prose-toolbar.md section 3`).
 ///
@@ -1621,10 +1610,10 @@ pub enum ProseCommand {
         focus: (BlockId, Pos<DocChar>),
         kind: ParagraphKind,
     },
-    /// Set the body font or the heading font of the document,
-    /// `meta/defaults` (`PROSE-UI-261`, `PROSE-UI-266`).
+    /// Set the body font of the document, `meta/defaults`
+    /// (`PROSE-UI-261`).
     SetDefaultFont {
-        font: DefaultFont,
+        family: ambre_core::FontFamily,
     },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
@@ -2002,7 +1991,7 @@ impl fmt::Debug for ProseCommand {
                 focus,
                 kind,
             } => fields!("SetSelectionKind", anchor, focus, kind),
-            Self::SetDefaultFont { font } => fields!("SetDefaultFont", font),
+            Self::SetDefaultFont { family } => fields!("SetDefaultFont", family),
             Self::FindStart { query } => fields!("FindStart", query),
             Self::FindNext => f.write_str("FindNext"),
             Self::FindPrev => f.write_str("FindPrev"),

@@ -1024,7 +1024,7 @@ impl ProseState {
                 focus,
                 kind,
             } => self.set_selection_kind(anchor, focus, kind),
-            ProseCommand::SetDefaultFont { font } => self.set_default_font(font),
+            ProseCommand::SetDefaultFont { family } => self.set_default_font(&family),
             ProseCommand::FindStart { query } => self.find_start(query),
             ProseCommand::FindNext => self.find_step(StepDirection::Forward),
             ProseCommand::FindPrev => self.find_step(StepDirection::Backward),

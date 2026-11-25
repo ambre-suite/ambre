@@ -102,11 +102,6 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
     match context.block_type {
         BlockType::Heading => {
             resolved.bold = Weight::Bold;
-            // Absent, the heading keeps the body font: the version 1 rule,
-            // so a migrated document moves no heading (`PROSE-UI-266`).
-            if let Some(family) = &defaults.heading_font_family {
-                resolved.font_family = Some(family.clone());
-            }
             let level = context.heading_level.unwrap_or(HeadingLevel::H1);
             resolved.font_size = FontSize::new(defaults.font_size.points() * heading_scale(level))
                 .map_or(defaults.font_size, |size| size.at_most(mark::FONT_SIZE_MAX));

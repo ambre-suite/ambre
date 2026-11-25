@@ -353,22 +353,6 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
                     Some(format!("body set at {} px", style.font_size.get()))
                 }
                 doc::DefaultsKey::LineHeight => Some(format!("body lines {:?}", style.line_height)),
-                // Read through the cascade, so the reading names the face a
-                // heading is set in, not the stored label alone.
-                doc::DefaultsKey::HeadingFontFamily => {
-                    let heading = crate::style::resolve(
-                        &std::collections::BTreeMap::new(),
-                        crate::style::BlockContext {
-                            block_type: crate::events::BlockType::Heading,
-                            heading_level: Some(crate::events::HeadingLevel::H1),
-                        },
-                        &defaults,
-                    );
-                    Some(format!(
-                        "headings set in {:?}",
-                        heading.font_family.as_ref()?.label()
-                    ))
-                }
             }
         }
         doc::MetaKey::DifferentFirstPage => Some(format!(
