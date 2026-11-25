@@ -2382,6 +2382,48 @@ pub(crate) mod tests {
         assert_eq!(back.cap(&bob.public()), None);
     }
 
+    /// Holds `SYNC-300` at the walk: a cap binds on a revoke alone. Alice
+    /// signs a change of Bob's role that carries a cap, then gives him his
+    /// writing role back. The walk takes both entries, and caps and
+    /// readmits nobody: Bob writes at any clock, and his snapshot stands.
+    #[test]
+    fn a_cap_on_another_act_caps_nobody() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let at = Seq::<DeltaAuthor>::new;
+        let mut log = created(&alice, &bob);
+        let next = LogHead {
+            position: place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        let draft = Draft {
+            document: DOC,
+            member: bob.id,
+            member_key: bob.public(),
+            member_exchange_key: bob.exchange(),
+            act: MembershipAct::ChangeRole,
+            role: Role::Viewer,
+            key: None,
+        };
+        log.push(sign_capped(draft, Some(at(2)), next, alice.id, &alice.key).unwrap());
+        let walked = walk(&log);
+        assert_eq!(walked.walked_head().position, place_after(log.len()));
+        assert_eq!(Writers::of(&walked).cap(&bob.public()), None);
+
+        append(
+            &mut log,
+            &alice,
+            &bob,
+            MembershipAct::ChangeRole,
+            Role::Editor,
+        );
+        let walked = walk(&log);
+        assert_eq!(walked.walked_head().position, place_after(log.len()));
+        let writers = Writers::of(&walked);
+        assert!(writers.admits_delta(&bob.public(), at(9), LogHead::EMPTY));
+        assert!(writers.admits_snapshot(&bob.public()));
+        assert_eq!(writers.proof_head(), None, "nobody readmitted");
+    }
+
     /// Holds `SYNC-306` at the walk. Carol leaves on her own and names her
     /// last clock, 3, under her signature. A delta of hers at or below it
     /// counts, one past it does not, and her snapshot stands nowhere. A cap
