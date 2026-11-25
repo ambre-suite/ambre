@@ -91,6 +91,8 @@ impl Rig {
         self.answer(ToileEvent::ViewportData(DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: Px::<Board>::new(20.0),
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),
@@ -536,6 +538,8 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: ambre_core::Seq::ZERO,
         grid_unit: Px::<Board>::new(20.0),
+        snap: crate::message::GridSnap::Free,
+        ground: crate::message::BoardGround::Theme,
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -1130,6 +1134,8 @@ fn frame_at(version: u64, nodes: Vec<DisplayNode>) -> ToileEvent {
     ToileEvent::ViewportData(DisplayViewport {
         version: ambre_core::Seq::nth(version),
         grid_unit: Px::<Board>::new(20.0),
+        snap: crate::message::GridSnap::Free,
+        ground: crate::message::BoardGround::Theme,
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -2800,6 +2806,8 @@ fn a_shared_board(peer: Id<User>) -> Rig {
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: ambre_core::Seq::ZERO,
         grid_unit: Px::<Board>::new(20.0),
+        snap: crate::message::GridSnap::Free,
+        ground: crate::message::BoardGround::Theme,
         pins: vec![crate::message::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),
@@ -3367,6 +3375,46 @@ impl Wired {
         }
         wrote
     }
+}
+
+/// `TOILE-UI-426`, `TOILE-UI-428`: on a snapping board an arrow moves the
+/// selection to the next grid line. Shift keeps the fine step of one unit.
+/// A user who hides the grid nudges free.
+#[test]
+fn a_nudge_on_a_snapping_board_reaches_the_next_grid_line() {
+    use crate::message::{BoardEdit, GridSnap};
+    let mut wired = Wired::selecting(1);
+    let out = wired
+        .state
+        .handle_command(ToileCommand::EditBoard(BoardEdit::Snap(GridSnap::Snapped)));
+    assert!(out.update.is_some(), "the snap is a write of the board");
+    let corner = |w: &mut Wired| {
+        w.rig.view.queue_viewport();
+        w.pump();
+        assert_eq!(w.rig.view.display.snap, GridSnap::Snapped);
+        crate::ui::tool::selection_bounds(&w.rig.view.selection, &w.rig.view.display)
+            .map(|b| b.origin())
+    };
+    let start = corner(&mut wired).expect("the selection is on the board");
+    let step = wired.rig.view.snap_step().expect("the board snaps").get();
+    let on_line = |x: f64| ((x / step) - (x / step).round()).abs() < 1e-9;
+    assert!(wired.rig.key(Key::ArrowRight, ModifierKeys::NONE));
+    let snapped = corner(&mut wired).expect("the selection is on the board");
+    assert!(on_line(snapped.x) && snapped.x > start.x && snapped.x - start.x <= step);
+    assert_eq!(snapped.y, start.y);
+    assert!(wired.rig.key(Key::ArrowRight, ModifierKeys::SHIFT));
+    let fine = corner(&mut wired).expect("the selection is on the board");
+    assert_eq!(fine.x, snapped.x + 1.0);
+    wired.rig.view.apply_menu_command(crate::ui::menu_bar::GRID);
+    assert!(!wired.pump(), "the grid of a user writes nothing");
+    assert_eq!(
+        wired.rig.view.snap_step(),
+        None,
+        "a hidden grid holds back the snap"
+    );
+    assert!(wired.rig.key(Key::ArrowRight, ModifierKeys::NONE));
+    let free = corner(&mut wired).expect("the selection is on the board");
+    assert_eq!(free.x, fine.x + 1.0);
 }
 
 /// The document with each empty map and empty list left out. A command may

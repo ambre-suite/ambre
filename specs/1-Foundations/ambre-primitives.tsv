@@ -2370,6 +2370,7 @@ ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_announcement() | ret | 
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&str>	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | kind_name() | ret | &'static str	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | selection_announcement() | ret | Option<String>	free-text	label, message or user text
+ambre-toile | src/ui/grid.rs | crate::ui::grid | TINTS | const | [(&str,ambre_core::Rgba);6]	free-text	the name a person reads on each background swatch of the board section
 ambre-toile | src/ui/arrow.rs | crate::ui::arrow | holds_element() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	free-text	the comment body the user typed in the panel
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text

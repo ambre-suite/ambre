@@ -112,10 +112,16 @@ enum Drag {
         ids: Vec<Id<Element>>,
         start: Point,
         last: Point,
+        /// The top-left corner of the moved box at press, and the grid step
+        /// it lands on, `None` when the move lands free (`TOILE-UI-025`).
+        snap: Option<(Point, Px<Board>)>,
     },
     Resize {
         id: Id<Element>,
         base: Rect,
+        /// The grid step the four edges land on, `None` when the resize lands
+        /// free (`TOILE-UI-025`).
+        snap: Option<Px<Board>>,
         handle: Handle,
         /// Pointer at press (world). The release compares against it: a press
         /// that moved nothing emits no command (`TOILE-UI-252`).
@@ -153,6 +159,30 @@ enum Drag {
 #[derive(Default)]
 pub struct SelectTool {
     drag: Option<Drag>,
+    /// Whether this user shows the grid, which a snap needs.
+    pub grid: super::grid::GridShown,
+}
+
+impl Drag {
+    /// The delta of a move, landed on the grid when the move snaps.
+    fn delta(start: Point, last: Point, snap: Option<(Point, Px<Board>)>) -> kurbo::Vec2 {
+        let raw = last - start;
+        snap.map_or(raw, |(corner, step)| {
+            super::grid::snap_delta(corner, raw, step)
+        })
+    }
+
+    /// The box of a resize, its edges landed on the grid when it snaps.
+    fn resized(
+        base: Rect,
+        handle: Handle,
+        at: Point,
+        rot: ambre_core::Radians,
+        snap: Option<Px<Board>>,
+    ) -> Rect {
+        let r = resize_rect_rotated(base, handle, at, rot);
+        snap.map_or(r, |step| super::grid::snap_rect(r, step))
+    }
 }
 
 impl SelectTool {
@@ -182,6 +212,7 @@ impl SelectTool {
         cam: &ViewportTransform,
         scope: Option<&Id<Element>>,
     ) -> SelectOutcome {
+        let step = super::grid::snap_step(display.snap, self.grid, cam.zoom, display.grid_unit);
         // A single-element selection exposes transform handles; test them first so
         // a handle press starts a resize/rotate rather than a move.
         if let [only] = selection
@@ -213,6 +244,7 @@ impl SelectTool {
                         self.drag = Some(Drag::Resize {
                             id,
                             base: sb,
+                            snap: step,
                             handle: h,
                             start: world,
                             rot,
@@ -244,10 +276,13 @@ impl SelectTool {
                 } else {
                     selection.to_vec()
                 };
+                let snap = step
+                    .and_then(|step| selection_bounds(&ids, display).map(|b| (b.origin(), step)));
                 self.drag = Some(Drag::Move {
                     ids: ids.clone(),
                     start: world,
                     last: world,
+                    snap,
                 });
                 if changed {
                     SelectOutcome::SelectionChanged(ids)
@@ -297,8 +332,13 @@ impl SelectTool {
             return SelectOutcome::None;
         };
         match drag {
-            Drag::Move { ids, start, last } => {
-                let delta = last - start;
+            Drag::Move {
+                ids,
+                start,
+                last,
+                snap,
+            } => {
+                let delta = Drag::delta(start, last, snap);
                 if delta.hypot2() <= f64::EPSILON {
                     SelectOutcome::None
                 } else {
@@ -311,12 +351,13 @@ impl SelectTool {
                 handle,
                 start,
                 rot,
+                snap,
                 ..
             } => {
                 if (world - start).hypot2() <= f64::EPSILON {
                     return SelectOutcome::None;
                 }
-                let new = resize_rect_rotated(base, handle, world, rot);
+                let new = Drag::resized(base, handle, world, rot, snap);
                 SelectOutcome::Command(ToileCommand::ResizeElement { id, new })
             }
             Drag::Rotate {
@@ -417,10 +458,11 @@ impl SelectTool {
                 handle,
                 rot,
                 last,
+                snap,
                 ..
             }) => vec![(
                 id.clone(),
-                resize_rect_rotated(*base, *handle, *last, *rot),
+                Drag::resized(*base, *handle, *last, *rot, *snap),
                 *rot,
             )],
             Some(Drag::Rotate {
@@ -436,8 +478,13 @@ impl SelectTool {
             // A press that has not moved yet paints where it committed, so it
             // overrides nothing and costs no content repaint (`TOILE-UI-271`).
             Some(Drag::Move { start, last, .. }) if last == start => Vec::new(),
-            Some(Drag::Move { ids, start, last }) => {
-                let delta = *last - *start;
+            Some(Drag::Move {
+                ids,
+                start,
+                last,
+                snap,
+            }) => {
+                let delta = Drag::delta(*start, *last, *snap);
                 ids.iter()
                     .filter_map(|id| {
                         element_bounds(display, id)
@@ -572,6 +619,14 @@ pub struct ToolMachine {
     /// The pick floor in world units at the press (`hit::pick_floor`). The
     /// release reuses it, so a gesture picks under one reach.
     pick: Px<Board>,
+}
+
+impl ToolMachine {
+    /// Tell the select gestures whether this user shows the grid, which a
+    /// snap needs (`TOILE-UI-025`).
+    pub fn set_grid(&mut self, grid: super::grid::GridShown) {
+        self.select.grid = grid;
+    }
 }
 
 impl Default for ToolMachine {
@@ -1445,6 +1500,8 @@ mod tests {
         DisplayViewport {
             version: ambre_core::Seq::ZERO,
             grid_unit: Px::<Board>::new(20.0),
+            snap: crate::message::GridSnap::Free,
+            ground: crate::message::BoardGround::Theme,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1727,6 +1784,74 @@ mod tests {
             }
             other => panic!("expected ResizeElement, got {other:?}"),
         }
+    }
+
+    /// A board that asks for snapping, on a unit of 20: at zoom 1 the grid
+    /// draws a step of 40.
+    fn snapping(nodes: Vec<DisplayNode>) -> DisplayViewport {
+        let mut disp = viewport(nodes);
+        disp.snap = crate::message::GridSnap::Snapped;
+        disp
+    }
+
+    /// `TOILE-UI-025`: on a snapping board a drag lands the corner of the
+    /// moved box on the drawn step, in the preview as in the commit.
+    #[test]
+    fn a_drag_on_a_snapping_board_lands_the_box_on_the_grid() {
+        let disp = snapping(vec![rect_elem("a", Rect::new(3.0, 7.0, 53.0, 47.0))]);
+        let cam = cam();
+        assert_eq!(
+            super::super::grid::grid_step(cam.zoom, super::super::grid::GridUnit::BASE),
+            Px::<Board>::new(40.0)
+        );
+        let mut tool = SelectTool::new();
+        let sel = vec![Id::<Element>::from_text("a".into())];
+        let w0 = Point::new(20.0, 20.0);
+        let _ = tool.pointer_down(w0, to_screen(&cam, w0), &sel, &disp, &cam, None);
+        let _ = tool.pointer_move(Point::new(71.0, 52.0));
+        let preview = tool.gesture_overrides(&disp);
+        assert_eq!(
+            preview.first().map(|p| p.1.origin()),
+            Some(Point::new(40.0, 40.0))
+        );
+        match tool.pointer_up(Point::new(71.0, 52.0), &disp) {
+            SelectOutcome::Command(ToileCommand::MoveElements { delta, .. }) => {
+                assert_eq!(delta, kurbo::Vec2::new(37.0, 33.0));
+            }
+            other => panic!("expected MoveElements, got {other:?}"),
+        }
+    }
+
+    /// `TOILE-UI-425`: on a snapping board a resize lands the four edges on
+    /// the drawn step; a hidden grid lands it where the pointer ends.
+    #[test]
+    fn a_resize_on_a_snapping_board_lands_its_edges_on_the_grid() {
+        let disp = snapping(vec![rect_elem("a", Rect::new(3.0, 0.0, 100.0, 100.0))]);
+        let cam = cam();
+        let sel = vec![Id::<Element>::from_text("a".into())];
+        let se = Point::new(100.0, 100.0);
+        let resize = |grid| {
+            let mut tool = SelectTool::new();
+            tool.grid = grid;
+            let _ = tool.pointer_down(se, to_screen(&cam, se), &sel, &disp, &cam, None);
+            let _ = tool.pointer_move(Point::new(150.0, 131.0));
+            let preview = tool.gesture_overrides(&disp).first().map(|p| p.1);
+            match tool.pointer_up(Point::new(150.0, 131.0), &disp) {
+                SelectOutcome::Command(ToileCommand::ResizeElement { new, .. }) => {
+                    assert_eq!(preview, Some(new), "the preview is the commit");
+                    new
+                }
+                other => panic!("expected ResizeElement, got {other:?}"),
+            }
+        };
+        assert_eq!(
+            resize(super::super::grid::GridShown::Shown),
+            Rect::new(0.0, 0.0, 160.0, 120.0)
+        );
+        assert_eq!(
+            resize(super::super::grid::GridShown::Hidden),
+            Rect::new(3.0, 0.0, 150.0, 131.0)
+        );
     }
 
     #[test]
