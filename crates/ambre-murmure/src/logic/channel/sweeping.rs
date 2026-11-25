@@ -24,6 +24,8 @@ use crate::logic::schema::{self, DocumentKind, HeaderKey};
 pub(super) struct Sweep {
     /// The thread documents the documents read so far name.
     threads: Vec<Id<Document>>,
+    /// The link receipts the documents read so far hold (`MURMURE-734`).
+    receipts: Vec<ambre_bus::LinkReceipt>,
     /// The segments read, with their amendments.
     swept: HashSet<Id<Segment>>,
     /// The document open for the sweep alone, while its bytes arrive.
@@ -73,6 +75,9 @@ pub struct Swept {
     /// The threads those name and the `meta` does not (`SYNC-321`). Only a
     /// thread may pass a listing under an owner's erasure (`SYNC-322`).
     pub threads: Vec<Id<Document>>,
+    /// The link receipts those documents hold beside their threads. A thread
+    /// under a valid one takes no erasure (`SYNC-330`, `MURMURE-734`).
+    pub receipts: Vec<ambre_bus::LinkReceipt>,
 }
 
 impl ChannelState {
@@ -118,9 +123,15 @@ impl ChannelState {
                 return SweepStep::Open(document_id);
             };
             sweep.add(threading::named_threads(doc));
+            sweep.receipts.extend(threading::named_receipts(doc));
             if let Some(id) = amendments {
                 match self.amendments.get(&segment).filter(|held| held.id == id) {
-                    Some(held) => sweep.add(amending::recorded_threads(&held.doc)),
+                    Some(held) => {
+                        sweep.add(amending::recorded_threads(&held.doc));
+                        sweep
+                            .receipts
+                            .extend(amending::recorded_receipts(&held.doc));
+                    }
                     None => {
                         let part = Part::Amendments { segment: None };
                         sweep.reading = Some(Reading::of(id, segment, part));
@@ -136,7 +147,12 @@ impl ChannelState {
             .drain(..)
             .filter(|thread| !documents.contains(thread))
             .collect();
-        SweepStep::Done(Swept { documents, threads })
+        let receipts = std::mem::take(&mut sweep.receipts);
+        SweepStep::Done(Swept {
+            documents,
+            threads,
+            receipts,
+        })
     }
 
     /// Whether `document_id` is open for the read of the threads a removal
@@ -199,7 +215,7 @@ impl ChannelState {
             .and_then(|sweep| sweep.reading.take_if(|r| r.document_id == document_id))
             .ok_or(MurmureError::NotHeld(document_id))?;
         let segment = reading.segment;
-        let (threads, next) = match reading.part {
+        let (threads, receipts, next) = match reading.part {
             Part::Segment { amendments } => {
                 let doc = schema::admit_with(
                     DocumentKind::Segment,
@@ -210,11 +226,12 @@ impl ChannelState {
                     },
                 )?;
                 let threads = threading::named_threads(&doc);
+                let receipts = threading::named_receipts(&doc);
                 let next = amendments.map(|id| {
                     let part = Part::Amendments { segment: Some(doc) };
                     Reading::of(id, segment, part)
                 });
-                (threads, next)
+                (threads, receipts, next)
             }
             Part::Amendments { segment: read } => {
                 let segment_doc = read
@@ -235,7 +252,8 @@ impl ChannelState {
                 if named != Some(segment) {
                     return Err(MurmureError::ForeignSegment(document_id));
                 }
-                (amending::recorded_threads(&doc), None)
+                let receipts = amending::recorded_receipts(&doc);
+                (amending::recorded_threads(&doc), receipts, None)
             }
         };
         let sweep = self
@@ -243,6 +261,7 @@ impl ChannelState {
             .as_mut()
             .ok_or(MurmureError::NotHeld(document_id))?;
         sweep.add(threads);
+        sweep.receipts.extend(receipts);
         let opened = next.as_ref().map(|reading| reading.document_id);
         match next {
             Some(reading) => sweep.reading = Some(reading),

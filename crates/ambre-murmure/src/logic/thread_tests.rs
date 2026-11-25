@@ -91,7 +91,7 @@ fn threaded(
         .expect("adopt")
         .expect("the header travels");
     let linked = state
-        .thread_linked(state.active_id(), root, thread)
+        .thread_linked(state.active_id(), root, thread, None)
         .expect("link");
     assert!(linked.open == crate::LinkedOpening::Open && linked.replaced.is_none());
     (thread, first, linked.root.expect("the root names it"))
@@ -150,7 +150,7 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
         )
         .expect("adopt");
     state
-        .thread_linked(state.active_id(), root, thread)
+        .thread_linked(state.active_id(), root, thread, None)
         .expect("link");
     assert_eq!(
         state.reply_target(root, NOW),
@@ -309,7 +309,7 @@ fn the_link_sets_the_root_thread_field_and_nothing_else() {
         JsonOpContent::Map(MapOp::Insert { key, .. }) if MessageKey::parse(key) == Some(MessageKey::Thread)
     ));
     let linked = state
-        .thread_linked(state.active_id(), before.id, thread)
+        .thread_linked(state.active_id(), before.id, thread, None)
         .expect("link again");
     assert!(linked.root.is_none(), "a set field takes no second write");
 }
@@ -329,7 +329,9 @@ fn two_first_replies_converge_on_the_thread_the_relay_linked() {
         panic!("Bob creates his own");
     };
     let (winner, _, alice_root) = threaded(&mut alice, root);
-    let linked = bob.thread_linked(segment, root, winner).expect("link");
+    let linked = bob
+        .thread_linked(segment, root, winner, None)
+        .expect("link");
     assert_eq!(
         (linked.open, linked.replaced),
         (crate::LinkedOpening::Open, Some(own))
@@ -475,7 +477,9 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
     let segment = alice.active_id();
     let doc = segment.document_id();
     let thread = Id::<Document>::mint();
-    let named = bob.thread_linked(segment, root, thread).expect("link");
+    let named = bob
+        .thread_linked(segment, root, thread, None)
+        .expect("link");
     alice
         .apply_signed(
             doc,
@@ -486,7 +490,7 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
         .expect("an absent field takes Bob's value");
     assert_eq!(thread_field(&alice, 0), Some(thread));
     let other = carol
-        .thread_linked(segment, root, Id::<Document>::mint())
+        .thread_linked(segment, root, Id::<Document>::mint(), None)
         .expect("link");
     assert_eq!(
         alice.apply_signed(
@@ -519,6 +523,87 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
         "no other field of the root"
     );
     assert_eq!(thread_field(&alice, 0), Some(thread));
+}
+
+/// `MURMURE-732`, `MURMURE-733`, `MURMURE-734`: the link writes the relay's
+/// receipt beside the `thread` field, in the same delta, and a removal names
+/// it with its thread. Another member writes no receipt once the field is
+/// set, and no receipt that is no signature.
+#[test]
+fn a_link_writes_its_receipt_with_the_thread_field_alone() {
+    type Receipt = ambre_core::FixedBytes<ambre_core::Signature>;
+    let (alice_user, bob_user, carol_user) =
+        (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
+    let mut alice = channel_with(&["root", "other"], alice_user);
+    let mut bob = peer_of(&alice);
+    let segment = alice.active_id();
+    let doc = segment.document_id();
+    let (root, other) = (message_at(&alice, 0).id, message_at(&alice, 1).id);
+    let thread = Id::<Document>::mint();
+    let receipt = Receipt::from_array([0x5c; 64]);
+    let named = bob
+        .thread_linked(segment, root, thread, Some(receipt))
+        .expect("link")
+        .root
+        .expect("named");
+    alice
+        .apply_signed(
+            doc,
+            Seq::<Relay>::new(10),
+            &named.delta,
+            signer(&bob, doc, bob_user),
+        )
+        .expect("the receipt rides with the thread field");
+    let crate::SweepStep::Done(swept) = alice.sweep_step() else {
+        panic!("the segment is held");
+    };
+    assert_eq!(swept.threads, [thread]);
+    assert_eq!(
+        swept.receipts,
+        [ambre_bus::LinkReceipt {
+            thread,
+            signature: receipt
+        }]
+    );
+
+    // Carol copies Alice, Bob's link included.
+    let carol = peer_of(&alice);
+    let carol_doc = carol.doc(doc).expect("held");
+    let message = |at: u32| {
+        crate::logic::schema::root_list(carol_doc, Root::Messages)
+            .get(at as usize)
+            .and_then(crate::logic::schema::fields_of)
+            .expect("a message")
+    };
+    let late = Receipt::from_array([1; 64]).to_hex();
+    let forged: [&dyn Fn(); 2] = [
+        &|| {
+            message(0)
+                .insert(MessageKey::Receipt, late.clone())
+                .expect("write");
+        },
+        &|| {
+            let map = message(1);
+            map.insert(MessageKey::Thread, Id::<Document>::mint().to_string())
+                .expect("write");
+            map.insert(MessageKey::Receipt, "zz").expect("write");
+        },
+    ];
+    for (seq, forge) in (11..).zip(forged) {
+        let before = carol_doc.oplog_vv();
+        forge();
+        assert_eq!(
+            alice.apply_signed(
+                doc,
+                Seq::<Relay>::new(seq),
+                &json_since(carol_doc, &before),
+                signer(&carol, doc, carol_user)
+            ),
+            Err(MurmureError::Refused(Refusal::ForeignMessage))
+        );
+    }
+    assert_eq!(message_at(&alice, 1).id, other);
+    assert_eq!(thread_field(&alice, 1), None);
 }
 
 /// A thread's own replies start no thread: another member may not set the
@@ -815,7 +900,9 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     let mut carol = peer_of(&alice);
     let (foreign, foreign_first, _) = threaded(&mut alice, other);
     let segment = alice.active_id();
-    let misnamed = carol.thread_linked(segment, third, foreign).expect("link");
+    let misnamed = carol
+        .thread_linked(segment, third, foreign, None)
+        .expect("link");
     assert_eq!(misnamed.open, crate::LinkedOpening::Open);
     carol
         .apply_signed(

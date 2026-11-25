@@ -885,7 +885,7 @@ mod tests {
                 )
                 .expect("adopt");
             if document_id == thread {
-                stored.thread_linked(old, root, thread).expect("link");
+                stored.thread_linked(old, root, thread, None).expect("link");
             }
         }
         // The segment turns final, so an open of the channel holds it not.
@@ -4063,11 +4063,15 @@ mod tests {
             created_threads(&sync).try_into().expect("then the thread");
         assert_eq!((segment, created), (closing, root));
 
+        // The relay's receipt waits with the root, and rides with the
+        // record of the thread.
+        let receipt = ambre_core::FixedBytes::<ambre_core::Signature>::from_array([0x5c; 64]);
         state.handle_logic_event(LogicEvent::ThreadLinked {
             channel_id,
             segment,
             root,
             thread,
+            receipt: Some(receipt),
         });
         // The root names its thread once the thread went up.
         state.grant_identity(thread);
@@ -4076,9 +4080,11 @@ mod tests {
             role: ambre_bus::Role::Owner,
         });
         let sent = drain(&sync);
+        let hex = receipt.to_hex();
         assert!(sent.iter().any(|c| matches!(c,
-            SyncCommand::SendUpdate { document_id, summary: None, .. }
-                if *document_id == amendments)));
+            SyncCommand::SendUpdate { document_id, summary: None, payload }
+                if *document_id == amendments
+                    && String::from_utf8_lossy(payload.as_bytes()).contains(&hex))));
         assert!(
             !sent.iter().any(|c| matches!(c,
                 SyncCommand::SendUpdate { document_id, .. }
@@ -4717,6 +4723,7 @@ mod tests {
             segment,
             root,
             thread,
+            receipt: None,
         });
         let sent = drain(&sync);
         assert!(sent.iter().any(|c| matches!(c,
@@ -4786,6 +4793,7 @@ mod tests {
             segment,
             root,
             thread,
+            receipt: None,
         });
         state.grant_identity(thread);
         let early = drain(&sync);
@@ -4825,6 +4833,7 @@ mod tests {
             segment,
             root,
             thread,
+            receipt: None,
         });
         state.route(|m| m.forget_murmure_session(thread));
         state.route(|m| m.name_root(thread));
@@ -4885,6 +4894,7 @@ mod tests {
             segment,
             root,
             thread,
+            receipt: None,
         });
         state.grant_identity(thread);
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -4955,6 +4965,7 @@ mod tests {
             segment,
             root,
             thread,
+            receipt: None,
         });
         state.grant_identity(thread);
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -5025,6 +5036,7 @@ mod tests {
             segment,
             root,
             thread: winner,
+            receipt: None,
         });
         assert!(drain(&sync).iter().any(|c| matches!(c,
             SyncCommand::OpenDocument { document_id, .. } if *document_id == winner)));
@@ -5076,7 +5088,7 @@ mod tests {
             .expect("adopt");
         let named = m
             .alice
-            .thread_linked(m.active, root, thread)
+            .thread_linked(m.active, root, thread, None)
             .expect("link")
             .root
             .expect("the root names it");
@@ -5143,7 +5155,9 @@ mod tests {
                 ),
             )
             .expect("adopt");
-        channel.thread_linked(closed, root, thread).expect("link");
+        channel
+            .thread_linked(closed, root, thread, None)
+            .expect("link");
         let probe = channel.snapshot(thread).expect("thread");
         state.route(|m| {
             m.record_channel_seq(
@@ -5303,7 +5317,7 @@ mod tests {
             .expect("adopt");
         let named = m
             .alice
-            .thread_linked(m.active, root, thread)
+            .thread_linked(m.active, root, thread, None)
             .expect("link")
             .root
             .expect("the root names it");

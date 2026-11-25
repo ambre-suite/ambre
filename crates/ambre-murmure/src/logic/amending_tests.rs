@@ -475,6 +475,16 @@ fn locked_thread(
     segment: Id<Segment>,
     root: Id<Message>,
 ) -> (Id<Document>, Sent) {
+    locked_thread_under(state, segment, root, None)
+}
+
+/// [`locked_thread`], with the relay's `receipt` of the link.
+fn locked_thread_under(
+    state: &mut ChannelState,
+    segment: Id<Segment>,
+    root: Id<Message>,
+    receipt: Option<ambre_core::FixedBytes<ambre_core::Signature>>,
+) -> (Id<Document>, Sent) {
     let ThreadTarget::Create(thread) = state.reply_target(root, NOW).expect("target") else {
         panic!("a root with no thread creates one");
     };
@@ -486,7 +496,9 @@ fn locked_thread(
             Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
-    let linked = state.thread_linked(segment, root, thread).expect("link");
+    let linked = state
+        .thread_linked(segment, root, thread, receipt)
+        .expect("link");
     (thread, linked.root.expect("the amendments record it"))
 }
 
@@ -507,7 +519,7 @@ fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
     assert_eq!(recorded.summary.kind, ActivityKind::Edit);
     assert!(
         alice
-            .thread_linked(segment, root, thread)
+            .thread_linked(segment, root, thread, None)
             .expect("again")
             .root
             .is_none(),
@@ -649,6 +661,67 @@ fn a_fold_carries_the_thread_of_a_locked_root() {
         alice.channel_id(),
     );
     assert_eq!(raw[0].thread.map(|head| head.document), Some(thread));
+}
+
+/// `MURMURE-732`, `MURMURE-733`, `MURMURE-734`, `MURMURE-735`: the record
+/// of a late first reply carries the relay's receipt in the same delta.
+/// Another member admits it and names it with its thread. A receipt written
+/// once the thread is recorded, or that is no signature, is refused. A fold
+/// carries the receipt into the root beside the thread.
+#[test]
+fn a_locked_record_carries_its_receipt_and_a_fold_keeps_it() {
+    use crate::logic::channel::{named_receipts, recorded_receipts};
+    type Receipt = ambre_core::FixedBytes<ambre_core::Signature>;
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["root"], author);
+    let root = alice.messages(segment).expect("held")[0].id;
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let receipt = Receipt::from_array([0x5c; 64]);
+    let (thread, recorded) = locked_thread_under(&mut alice, segment, root, Some(receipt));
+    let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
+    bob.apply_signed(
+        amendments,
+        Seq::<Relay>::new(2),
+        &recorded.delta,
+        signer(&alice, amendments, Id::<User>::mint()),
+    )
+    .expect("the receipt rides with the record");
+    let held = ambre_bus::LinkReceipt {
+        thread,
+        signature: receipt,
+    };
+    assert_eq!(
+        recorded_receipts(bob.doc(amendments).expect("held")),
+        [held]
+    );
+
+    let forge = |value: &str| {
+        let doc = bob.doc(amendments).expect("held");
+        let before = doc.oplog_vv();
+        crate::logic::schema::root_map(doc, Root::Receipts)
+            .insert(&root.to_string(), value)
+            .expect("forge");
+        json_since(doc, &before)
+    };
+    let user = Id::<User>::mint();
+    for (seq, value) in (3..).zip([Receipt::from_array([1; 64]).to_hex(), "zz".to_owned()]) {
+        assert_eq!(
+            alice.apply_signed(
+                amendments,
+                Seq::<Relay>::new(seq),
+                &forge(&value),
+                signer(&bob, amendments, user)
+            ),
+            Err(MurmureError::Refused(Refusal::ForeignMessage)),
+            "{value}"
+        );
+    }
+
+    alice.fold_in_place(segment).expect("fold");
+    assert_eq!(
+        named_receipts(alice.doc(segment.document_id()).expect("held")),
+        [held]
+    );
 }
 
 /// An edit and a delete the lock refused come back as replays. The segment

@@ -264,9 +264,11 @@ pub(crate) fn check(
                 }
                 // A message, its body and every child of it belong to the
                 // user whose PeerID created them. Its `thread` field is the
-                // one exception (`MURMURE-255`).
+                // one exception (`MURMURE-255`), with the link receipt the
+                // delta that sets it carries (`MURMURE-733`).
                 if owner(ambre_core::PeerId::new(*peer)) != Some(user) {
-                    if thread_set(&op.content, thread_of(id)) {
+                    let current = thread_of(id);
+                    if thread_set(&op.content, current) || receipt_set(&op.content, current) {
                         continue;
                     }
                     return Err(Refusal::ForeignMessage);
@@ -459,6 +461,24 @@ pub(crate) fn check_amendments(
                     };
                     let takes = Id::<Document>::parse_str(value)
                         .is_ok_and(|thread| thread_of(message).takes(thread));
+                    if !takes {
+                        return Err(Refusal::ForeignMessage);
+                    }
+                }
+                _ => return Err(Refusal::Removed),
+            },
+            // The link receipt of a recorded thread rides in the delta that
+            // records it, while no thread is named (`MURMURE-733`).
+            root if is_root(root, Root::Receipts, ContainerType::Map) => match &op.content {
+                JsonOpContent::Map(MapOp::Insert {
+                    key,
+                    value: LoroValue::String(value),
+                }) => {
+                    let Some(message) = message_key(key).filter(|m| author_of(*m).is_some()) else {
+                        return Err(Refusal::NotInSegment);
+                    };
+                    let takes = thread_of(message) == ThreadField::Unset
+                        && ambre_core::FixedBytes::<ambre_core::Signature>::from_hex(value).is_ok();
                     if !takes {
                         return Err(Refusal::ForeignMessage);
                     }
@@ -660,6 +680,23 @@ fn thread_set(content: &JsonOpContent, current: Option<ThreadField>) -> bool {
     };
     MessageKey::parse(key) == Some(MessageKey::Thread)
         && Id::<Document>::parse_str(value).is_ok_and(|thread| current.takes(thread))
+}
+
+/// Whether a write to another author's message sets its link receipt while
+/// its `thread` field is absent, as the receiver holds it (`MURMURE-733`).
+/// The delta that sets the field thus carries the receipt, and no later
+/// delta of another member replaces it.
+fn receipt_set(content: &JsonOpContent, current: Option<ThreadField>) -> bool {
+    let JsonOpContent::Map(MapOp::Insert {
+        key,
+        value: LoroValue::String(value),
+    }) = content
+    else {
+        return false;
+    };
+    current == Some(ThreadField::Unset)
+        && MessageKey::parse(key) == Some(MessageKey::Receipt)
+        && ambre_core::FixedBytes::<ambre_core::Signature>::from_hex(value).is_ok()
 }
 
 /// The `thread` field of `id` when it is a message map of `doc`, `None` for

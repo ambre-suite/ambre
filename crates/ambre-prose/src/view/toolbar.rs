@@ -155,6 +155,15 @@ impl ProseUiState {
         self.marks = Some(((anchor, focus), marks.clone()));
     }
 
+    /// The field of the format bar a press of `id` opens: the link or the
+    /// comment. `None` for any other id, and with no text selected, since
+    /// the field sits under the bar and a thread needs a range
+    /// (`PROSE-UI-282`, `PROSE-FEAT-295`).
+    #[must_use]
+    pub fn prompt(&self, id: StaticKey<Commands>) -> Option<BarPrompt> {
+        BarPrompt::of(id).filter(|_| self.toolbar().visible())
+    }
+
     /// Apply or remove one control's formatting over the whole selection
     /// (`PROSE-UI-102`).
     ///
@@ -167,7 +176,7 @@ impl ProseUiState {
     pub fn format(&self, id: StaticKey<Commands>) -> Option<ProseCommand> {
         if let Some(item) = crate::view::slash::inserted(id) {
             // A command of the creation bar lands after the block the caret
-            // sits in, as the slash menu's item does (`CHROME-180`).
+            // sits in, as the slash menu's item does (`CHROME-254`).
             return Some(item.resolve(self.cursor.as_ref()?.block_id));
         }
         let (anchor, focus) = self.selection()?;

@@ -1001,7 +1001,7 @@ mod tests {
         // The leave names what the sealed `meta` names (`SYNC-320`).
         assert!(matches!(
             drain(&sync).as_slice(),
-            [SyncCommand::LeaveChannel { channel_id: id, named, threads }]
+            [SyncCommand::LeaveChannel { channel_id: id, named, threads, .. }]
                 if *id == channel_id && *named == [segment] && threads.is_empty()
         ));
         assert!(drain(&ui).is_empty(), "nothing shows before the answer");

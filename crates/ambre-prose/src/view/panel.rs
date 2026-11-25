@@ -179,8 +179,9 @@ impl PanelKind {
     }
 
     /// The entries of the context bar for this kind (`CHROME-208`), in the
-    /// mockup's order. Over a selection, they are three marks, the link,
-    /// the paragraph style list and the comment. Over the page, none.
+    /// mockup's order. Over a selection, they are three marks, the link and
+    /// the paragraph style list. The comment is a creation command, so the
+    /// bar holds none (`CHROME-150`, `CHROME-180`). Over the page, none.
     #[must_use]
     pub fn bar(self) -> &'static [Reach] {
         match self {
@@ -190,7 +191,6 @@ impl PanelKind {
                 Reach::Command(commands::UNDERLINE),
                 Reach::Command(commands::LINK),
                 Reach::Property(KIND),
-                Reach::Command(commands::COMMENT),
             ],
             Self::Page => &[],
         }
@@ -680,11 +680,7 @@ mod tests {
         let bar: Vec<Reach> = commands::BAR_MARKS
             .iter()
             .map(|(id, _)| Reach::Command(*id))
-            .chain([
-                Reach::Command(commands::LINK),
-                Reach::Property(KIND),
-                Reach::Command(commands::COMMENT),
-            ])
+            .chain([Reach::Command(commands::LINK), Reach::Property(KIND)])
             .collect();
         assert_eq!(bar, PanelKind::Text.bar());
     }

@@ -99,11 +99,11 @@ pub const EXPORT_HTML_REVIEWED: StaticKey<Commands> =
 /// (`PROSE-FEAT-316`).
 pub const INSERT_PICTURE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.picture");
 
-/// Put a paragraph of text after the block the caret sits in (`CHROME-180`).
+/// Put a paragraph of text after the block the caret sits in (`CHROME-254`).
 pub const INSERT_TEXT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.text");
-/// Put a table after the block the caret sits in (`CHROME-180`).
+/// Put a table after the block the caret sits in (`CHROME-254`).
 pub const INSERT_TABLE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.table");
-/// Put a separator after the block the caret sits in (`CHROME-180`).
+/// Put a separator after the block the caret sits in (`CHROME-254`).
 pub const INSERT_SEPARATOR: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.insert.separator");
 
@@ -157,12 +157,13 @@ pub const CLEAR_FORMATTING: StaticKey<Commands> = StaticKey::<Commands>::new("pr
 /// Link the selection to an address, or take its link off
 /// (`PROSE-UI-188`). The press opens the address field of the bar.
 pub const LINK: StaticKey<Commands> = StaticKey::<Commands>::new("prose.format.link");
-/// Open a discussion thread over the selection. The press opens the
-/// comment field of the bar.
+/// Open a discussion thread over the selection. A thread is a new object,
+/// so the creation bar homes it (`CHROME-180`). The press opens the comment
+/// field under the format bar, which shows over a selection alone.
 pub const COMMENT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.comment.add");
 
 /// The three marks the floating bar shows, in the mockup's order. The bar
-/// adds the link, the paragraph style list and the comment after them.
+/// adds the link and the paragraph style list after them.
 pub const BAR_MARKS: [(StaticKey<Commands>, MarkRoot); 3] = [
     (BOLD, MarkRoot::Bold),
     (ITALIC, MarkRoot::Italic),
@@ -473,15 +474,6 @@ pub const COMMANDS: &[Command] = &[
         description: None,
     },
     Command {
-        id: COMMENT,
-        title: COMMENT_TITLE,
-        icon: Some(StaticKey::<Icons>::new("comment-outline")),
-        keybindings: &[],
-        category: FORMAT,
-        home: Home::ContextPanel,
-        description: None,
-    },
-    Command {
         id: SAVE_FILE,
         title: SAVE_FILE_TITLE,
         icon: Some(StaticKey::<Icons>::new("content-save")),
@@ -626,6 +618,15 @@ pub const COMMANDS: &[Command] = &[
         description: None,
     },
     Command {
+        id: COMMENT,
+        title: COMMENT_TITLE,
+        icon: Some(StaticKey::<Icons>::new("comment-outline")),
+        keybindings: &[],
+        category: INSERT,
+        home: Home::CreationBar,
+        description: None,
+    },
+    Command {
         id: EXPORT_PDF,
         title: EXPORT_PDF_TITLE,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
@@ -750,6 +751,27 @@ mod tests {
     #[test]
     fn the_table_has_no_defect() {
         assert_eq!(ambre_commands::table_defects(COMMANDS), []);
+    }
+
+    /// `CHROME-180`: the creation bar of the page offers a comment, after
+    /// the four blocks it inserts.
+    #[test]
+    fn the_creation_bar_offers_a_comment_after_the_four_inserts() {
+        let ids: Vec<StaticKey<Commands>> = COMMANDS
+            .iter()
+            .filter(|c| c.home == Home::CreationBar)
+            .map(|c| c.id)
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                INSERT_TEXT,
+                INSERT_PICTURE,
+                INSERT_TABLE,
+                INSERT_SEPARATOR,
+                COMMENT
+            ]
+        );
     }
 
     /// `PROSE-IO-028`, `PROSE-IO-027`: the save, import and export entries

@@ -30,6 +30,7 @@ amendments:header/kind = "amendments" => admitted as Amendments
 amendments:header/segment_id = {uuid} => the segment it amends
 amendments:meta/schema_version = 1 => version 1, Current
 amendments:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
+amendments:receipts/{id} = "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e" => the link receipt a removal names with its thread, by amendment
 amendments:threads/{id} = {uuid} => message 2 names its thread by amendment
 meta:channel/name = "general" => named "general"
 meta:channel/type = "public" => Public
@@ -93,6 +94,8 @@ segment:messages/*/notice = "member_added" => message 2 announces a member
 segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
 segment:messages/*/thread = {uuid} => message 1 names its thread
 segment:messages/*/thread = {uuid} => message 2 names the thread a fold carried
+segment:messages/*/thread_receipt = "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e" => message 1: the link receipt a removal names with its thread
+segment:messages/*/thread_receipt = "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e" => message 2: the link receipt a removal names with its thread
 segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms
 segment:messages/*/ts = 1700000000003 => message 2 sent at 1700000000003 ms
 segment:messages/*/ts = 1700000000004 => message 3 sent at 1700000000004 ms
