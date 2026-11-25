@@ -171,7 +171,8 @@ impl Estimate {
 /// 1. The text as typed.
 /// 2. The text with its substitutions folded back to letters, for one bit
 ///    more. A digit or a symbol folds only beside a letter.
-/// 3. The text with its separators taken out, when the rest is a pattern.
+/// 3. The text read as one run, its separators and its camel case taken
+///    out, when the rest is a pattern.
 ///
 /// A passphrase of digits alone stays under the floor (`Chars::capped`).
 fn estimate(passphrase: &Confidential<Passphrase>) -> Estimate {
@@ -209,17 +210,25 @@ impl Chars {
         }))
     }
 
-    /// The estimate of the text with its separators taken out. It counts when
-    /// the rest is one class and reads as a pattern: a common password, a
-    /// repetition or a walk. The alphabet spelled one letter at a time is
-    /// such a pattern. The separator costs its first choice. `None` when the
-    /// text holds no separator, or the rest reads as words. A phrase of words
-    /// joined reads as fewer words than it holds.
+    /// The estimate of the text read as one run: its separators taken out,
+    /// and its camel case read as one word. It counts when the rest is one
+    /// class and reads as a pattern: a common password, a repetition or a
+    /// walk. The alphabet spelled one letter at a time is such a pattern.
+    /// `None` when the rest holds two classes, or reads as words.
+    ///
+    /// A separator costs its first choice. A phrase of words joined reads as
+    /// fewer words than it holds.
+    ///
+    /// The reading also runs on a text with no separator. Without it, the
+    /// split at each capital cuts a pattern into words. Capitals spread at
+    /// random then lift a walk past the floor.
     fn joined(&self) -> Option<Estimate> {
         let text = self.0.expose();
-        if !text.iter().any(|&c| Class::of(c) == Class::Separator) {
-            return None;
-        }
+        let separator = if text.iter().any(|&c| Class::of(c) == Class::Separator) {
+            NEW_SEPARATOR
+        } else {
+            Count::ZERO
+        };
         // Sized once, as in `Chars::of`, so no prefix is left behind.
         let kept = Self(Secret::filled(|kept: &mut Vec<char>| {
             kept.reserve_exact(text.len());
@@ -242,7 +251,7 @@ impl Chars {
         let pattern = run.estimate();
         pattern
             .met
-            .map(|_| pattern.plus(Estimate::plain(NEW_SEPARATOR)))
+            .map(|_| pattern.plus(Estimate::plain(separator)))
     }
 
     /// `estimate`, held under the floor when the text is digits alone, its
@@ -1067,6 +1076,56 @@ mod tests {
         assert_eq!(bits(tie), Count::new(1_732));
         assert_eq!(estimate(&pass(tie)).bits, Count::new(1_732));
         assert_eq!(refusal(tie), Some(PassphraseWeakness::Repetition));
+    }
+
+    /// `ZK-035`: a pattern with capitals spread inside it stays under the
+    /// floor. The split at each capital no longer cuts it into words. The
+    /// walk of the three rows costs its three walks, and each capital one
+    /// bit: 25.1 and 9 bits. A text with no separator pays no separator.
+    #[test]
+    fn a_pattern_in_mixed_case_is_refused() {
+        assert_eq!(
+            estimate(&pass("QweRtyUioPasDfgHjkLzxCvbNm")).bits,
+            Count::new(3_410)
+        );
+        for (text, weakness) in [
+            ("QweRtyUioPasDfgHjkLzxCvbNm", PassphraseWeakness::Sequence),
+            (
+                "IloVeyOuSunsHinePrinCessFootBall",
+                PassphraseWeakness::CommonPassword,
+            ),
+            (
+                "PassWordQwerTyDraGonMonKeyLetMeIn",
+                PassphraseWeakness::CommonPassword,
+            ),
+        ] {
+            assert_eq!(refusal(text), Some(weakness), "{text}");
+        }
+    }
+
+    /// `ZK-035`: a row read backward past its first character goes on from
+    /// its last, as a ring. `cbazyxwvut` costs what `poiuytrewq` costs.
+    #[test]
+    fn a_row_read_backward_past_its_start_is_a_sequence() {
+        assert_eq!(bits("cbazyxwvut"), Count::new(870));
+        assert_eq!(typed("cbazyxwvut").met, Some(PassphraseWeakness::Sequence));
+    }
+
+    /// `ZK-035`: each common password of a chain costs the log of its rank
+    /// and one bit. `qwerty` is the second entry, `password` the first: two
+    /// bits and one bit.
+    #[test]
+    fn each_common_password_of_a_chain_costs_the_log_of_its_rank() {
+        assert_eq!(bits("qwertypassword"), Count::new(300));
+    }
+
+    /// `ZK-036`: two chains of one cost keep the chain found first. The walk
+    /// `qwertyuio` and `qwerty` then `uio` both cost 8.7 bits. The walk comes
+    /// first, so a refusal names a sequence.
+    #[test]
+    fn a_tie_between_two_chains_keeps_the_chain_found_first() {
+        assert_eq!(bits("qwertyuio"), Count::new(870));
+        assert_eq!(typed("qwertyuio").met, Some(PassphraseWeakness::Sequence));
     }
 
     #[test]
