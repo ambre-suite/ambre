@@ -963,7 +963,6 @@ ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as Partial
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <[u8;N] as ByteArray>::LEN | const | usize	generic	the width of a byte array, read only as the length of the role's array and of its tuple
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::as_slice() | ret | &[u8]	newtype-inner	FixedBytes newtype, its bytes borrowed
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_hex(text) | param | &str	newtype-inner	FixedBytes's own hex spelling, read back
-ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_hex_const(text) | param | &str	newtype-inner	FixedBytes's own hex spelling, read back in a const context, as a build constant names a key
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_slice(bytes) | param | &[u8]	newtype-inner	FixedBytes newtype, from bytes of its width
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::push_to(out) | param | &mut Vec<u8>	generic	the buffer of a layout that frames the value among fields of any type
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from() | ret | Option<(Self,&[u8])>	generic	the bytes of the layout after the value, which the caller reads next

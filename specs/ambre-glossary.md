@@ -151,6 +151,7 @@
 | key identifier | the hash that names a document key without revealing it | | `1-Foundations/ambre-spec-key-rotation.md` |
 | pair key | the key two exchange keys derive to seal each wrap between them | | `1-Foundations/ambre-spec-key-rotation.md` |
 | fingerprint | the readable digest of a public key | | `1-Foundations/ambre-spec-key-verification.md` |
+| link key slot | the client bytes an install fills with its link key | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | machine member | a program holding the document key, bound by its role | | `1-Foundations/ambre-spec-machine-access.md` |
 | inbox | the write-only drop box of one document | | `1-Foundations/ambre-spec-machine-access.md` |
 | inbox writer | a program that posts to an inbox and reads nothing | | `1-Foundations/ambre-spec-machine-access.md` |

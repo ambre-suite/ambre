@@ -98,21 +98,30 @@ A scraper of the metrics of the relay needs its peer in `networkPolicy.metricsFr
 ## The link key of a thread
 
 The relay signs a receipt of each thread link under the seed `thread-link-seed`, and the client
-refuses to erase a thread under a receipt its pinned key verifies (`SYNC-330`). The client pins the
-key when it is built (`ZK-057`), so the published web image counts the receipts of the deployment
-whose seed matches the key its release names. That key is `THREAD_LINK_KEY` in the release notes.
+refuses to erase a thread under a receipt its link key verifies (`SYNC-330`). The published web
+image pins no key: its client holds an empty link key slot (`ZK-057`). The web pod writes the
+`thread-link-key` of the Secret into that slot before Caddy starts, so the published images serve
+any install with no build of its own (`SRV-365`):
 
-A deployment with a seed of its own must build its own client, under `images.web`. `secret.sh`
-draws the seed and prints its public half, `thread-link-key`. Build the web target of
-`deploy/Dockerfile` with `--build-arg AMBRE_THREAD_LINK_KEY=<that key>`. A release build fails
-without the key, or with the development key. The relay checks its seed against
-`thread-link-key` and refuses to start under another key (`SRV-364`).
+1. the init container `web-files`, of the web image, copies the client into an `emptyDir`;
+2. the init container `link-key`, of the init image, writes the key into that copy;
+3. Caddy serves the copy. The web image stays as the release built it.
 
-The web image keeps the key its client pins in `/etc/ambre/thread-link-key` (`SRV-366`). Before
-Caddy starts, the init container `link-key` of the web pod compares that key with
-`thread-link-key`. Under another key, the pod stops, and the log of `link-key` names both keys
-(`SRV-365`). Read it with `kubectl logs <web pod> -c link-key`. No value of the chart turns the
-comparison off: a published web image beside a seed of its own names no thread.
+`secret.sh` draws the seed and its public half, `thread-link-key`, into the Secret. The relay checks
+its seed against that key and refuses to start under another key (`SRV-364`). The patch refuses an
+empty key, a malformed key and the development key. The pod then stops before Caddy, and the log
+says why (`SRV-391`): read it with `kubectl logs <web pod> -c link-key`. No value of the chart
+turns the patch off.
+
+A new key is a new Secret and a restart of the relay and of the web pod. Every receipt signed under
+the older key then counts as none. A browser that cached the older Sync worker keeps the older key
+until its cache drops the file.
+
+**Check the served client.** The patch changes 32 bytes of the Sync worker alone (`SRV-390`).
+Download the `ambre-sync-*_bg.wasm` the page names, then run
+`python3 scripts/link_key.py zero <file> <file>`, and check it with
+`b2sum -l 256 -c ambre-client.manifest` from the release (`ZK-091`). `link_key.py read <file>`
+prints the key the served file holds.
 
 ## Sign-in
 

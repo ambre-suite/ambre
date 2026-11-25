@@ -235,8 +235,9 @@ pub struct JwtKeys {
     /// [`JwtKeys::with_admission`] sets it: a call is then refused. It wipes itself on drop.
     admission: Option<Box<SigningKey>>,
     /// The key of one purpose that signs the link receipt of a thread, from
-    /// `THREAD_LINK_SEED` (`SRV-363`). A client build pins its public half,
-    /// so the relay cannot take back a receipt it signed. `None` until
+    /// `THREAD_LINK_SEED` (`SRV-363`). The install patches its public half
+    /// into the client (`SRV-365`), so the relay cannot take back a receipt
+    /// it signed. `None` until
     /// [`JwtKeys::with_link`] sets it: a registration then answers none.
     link: Option<Box<SigningKey>>,
 }
@@ -360,7 +361,8 @@ impl JwtKeys {
             .map(|key| ambre_core::FixedBytes::from_array(key.verifying_key().to_bytes()))
     }
 
-    /// The public half of the link key, which a client build pins
+    /// The public half of the link key, which the install patches into the
+    /// client
     /// (`SRV-363`). `None` when no link key is set.
     pub fn link_key(&self) -> Option<ambre_core::FixedBytes<ambre_core::PublicKey>> {
         self.link

@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5240 rows: 4849 shipped, of which 14 loose. 391 unbuilt.**
+**5245 rows: 4854 shipped, of which 14 loose. 391 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1828 | 583 | 1003 | 851 | 570 | 4835 |
+| `verified` | 1833 | 583 | 1003 | 851 | 570 | 4840 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 144 | 42 | 20 | 20 | 165 | 391 |
@@ -74,7 +74,7 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 31 | 31 | 31 |  |  |
 | `ambre-spec-sequencer.md` | 91 | 91 | 91 |  |  |
-| `ambre-spec-server.md` | 149 | 142 | 141 | 1 | 7 |
+| `ambre-spec-server.md` | 152 | 145 | 144 | 1 | 7 |
 | `ambre-spec-session.md` | 54 | 54 | 54 |  |  |
 | `ambre-spec-shell.md` | 101 | 97 | 97 |  | 4 |
 | `ambre-spec-sync.md` | 91 | 90 | 90 |  | 1 |
@@ -83,7 +83,7 @@
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-undo.md` | 25 | 25 | 25 |  |  |
 | `ambre-spec-user-settings.md` | 46 | 46 | 46 |  |  |
-| `ambre-spec-zero-knowledge.md` | 57 | 56 | 55 | 1 | 1 |
+| `ambre-spec-zero-knowledge.md` | 59 | 58 | 57 | 1 | 1 |
 | `ambre-spec-zoom.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
@@ -302,7 +302,7 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144,203,216,257..259,287,297 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215,259,262..264,274,276..277,284,288..290,300,307,335..336,347,349,353,359,363..364 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318,339,346,348,351..352,354..358,360..362,365..366 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..257,260..261,266,268,270,272..273,275,280..283,285..287,297..299,302,304,306,308..312,316..318,339,346,348,351..352,354..358,360..362,365..366,390..392 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236,267,278..279,291,293..296,303,319..333,337..338,340..345 |
 | `ambre-spec-shell.md` | CHROME-148..198,207..256 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191..196,248..256,261,269..271,275,277..278,281,292..296,305,318 |
@@ -369,5 +369,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064,067 |
 | `ambre-spec-undo.md` | UNDO-001..025 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..046 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..057 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..057,090..091 |
 | `ambre-spec-zoom.md` | ZOOM-001..011 |

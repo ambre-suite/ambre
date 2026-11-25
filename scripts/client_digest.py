@@ -24,6 +24,12 @@ changes the compiler flags, the target directory or the profile, and sets
 `SOURCE_DATE_EPOCH` to the commit time. The paths of the build machine leave
 the wasm through `trim-paths` of the `wasm-release` profile (`Cargo.toml`).
 
+**The link key slot.** The Sync worker holds one slot for the thread link key
+of an install, and a build whose slot is missing or holds a key fails here
+(`ZK-057`). An install writes its key into a copy of the files, so its Sync
+worker differs from the manifest in those 32 bytes alone. A reader zeroes them
+with `scripts/link_key.py zero`, then runs `b2sum -l 256 -c` (`ZK-091`).
+
 Commands, from the repository root:
 
 * `python3 scripts/client_digest.py manifest DIST` prints the manifest of
@@ -49,6 +55,10 @@ import tarfile
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import link_key  # noqa: E402  -- the slot a release publishes empty
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -205,6 +215,11 @@ def build(rev: str, into: Path) -> str:
     result = subprocess.run(["trunk", "build", "--release", "--dist", str(dist)], cwd=into, env=env, check=False)
     if result.returncode != 0:
         raise DigestError(f"the release build in {into} failed")
+    # A release publishes the link key slot empty, so no digest names a key
+    # (`ZK-057`). Each install patches its own key into a copy.
+    why = link_key.empty_refusal(dist)
+    if why:
+        raise DigestError(f"the release build in {into}: {why}")
     text = manifest(dist)
     (into / MANIFEST_NAME).write_text(text, encoding="utf-8")
     return text
