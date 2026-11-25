@@ -3560,22 +3560,27 @@ fn each_insert_of_the_creation_bar_lands_after_the_caret_block() {
 }
 
 /// `PROSE-UI-265`, `PROSE-UI-267`: each write of the context panel leaves
-/// as one command over the selection the view holds. One undo takes it back, whatever the
+/// as one command over the selection of its pick. One undo takes it back, whatever the
 /// number of blocks. A default font needs no selection.
 #[test]
 fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
-    use crate::view::panel::TextWrite;
+    use crate::view::panel::{TextValue, TextWrite};
     let mut rig = Rig::new(&["hello world", "second"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
-    let default_font = TextWrite::DefaultFont(ambre_core::FontFamily::from_label("Lora"));
+    // A pick copies the selection the view shows into its write.
+    let pick = |ui: &ProseUiState, value: TextValue| TextWrite {
+        value,
+        selection: ui.picked_selection(),
+    };
+    let default_font = TextValue::DefaultFont(ambre_core::FontFamily::from_label("Lora"));
     assert!(matches!(
-        rig.ui.text_write(default_font.clone()),
+        rig.ui.text_write(pick(&rig.ui, default_font.clone())),
         Some(ProseCommand::SetDefaultFont { .. })
     ));
     assert_eq!(
-        rig.ui.text_write(TextWrite::Font(None)),
+        rig.ui.text_write(pick(&rig.ui, TextValue::Font(None))),
         None,
-        "a write over a selection waits for one"
+        "a write over a selection needs one at its pick"
     );
     rig.ui.cursor = Some(CursorPosition {
         block_id: second,
@@ -3583,21 +3588,21 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
         anchor: Some((first, Pos::<DocChar>::new(2))),
     });
     let writes = [
-        TextWrite::Font(Some(ambre_core::FontFamily::from_label("Lora"))),
-        TextWrite::Size(ambre_core::FontSize::new(18.0)),
-        TextWrite::Colour(Some(ambre_core::Rgba::from_bits(0x2f6f_d6ff))),
-        TextWrite::Highlight(Some(ambre_core::Rgba::from_bits(0xffff_00ff))),
-        TextWrite::Link(Some(ambre_core::LinkUrl::new(
+        TextValue::Font(Some(ambre_core::FontFamily::from_label("Lora"))),
+        TextValue::Size(ambre_core::FontSize::new(18.0)),
+        TextValue::Colour(Some(ambre_core::Rgba::from_bits(0x2f6f_d6ff))),
+        TextValue::Highlight(Some(ambre_core::Rgba::from_bits(0xffff_00ff))),
+        TextValue::Link(Some(ambre_core::LinkUrl::new(
             " https://example.org ".to_owned(),
         ))),
-        TextWrite::Paragraph(crate::events::ParagraphStyle {
+        TextValue::Paragraph(crate::events::ParagraphStyle {
             align: Some(crate::events::Align::Right),
             ..crate::events::ParagraphStyle::default()
         }),
-        TextWrite::Kind(crate::message::ParagraphKind::Heading(
+        TextValue::Kind(crate::message::ParagraphKind::Heading(
             crate::message::HeadingLevel::H2,
         )),
-        TextWrite::Indent(crate::message::IndentStep::In),
+        TextValue::Indent(crate::message::IndentStep::In),
         default_font,
     ];
     // What a write may change, block by block, and the document defaults.
@@ -3612,7 +3617,8 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
             ))
         )
     };
-    for write in writes {
+    for value in writes {
+        let write = pick(&rig.ui, value);
         let before = held(&rig.logic);
         let command = rig.ui.text_write(write.clone()).expect("one command");
         if let ProseCommand::MarkSelection { anchor, focus, .. }
@@ -3635,12 +3641,80 @@ fn each_panel_write_is_one_command_over_the_selection_and_one_undo_item() {
     }
     // A link of blanks takes the link off.
     assert!(matches!(
-        rig.ui
-            .text_write(TextWrite::Link(Some(ambre_core::LinkUrl::new(
-                "  ".to_owned()
-            )))),
+        rig.ui.text_write(pick(
+            &rig.ui,
+            TextValue::Link(Some(ambre_core::LinkUrl::new("  ".to_owned())))
+        )),
         Some(ProseCommand::MarkSelection { value: None, .. })
     ));
+}
+
+/// `PROSE-UI-281`: a panel write keeps the selection of its pick. The
+/// outbox is full, and the caret moves before it frees. The write still
+/// lands on the block picked, and the other block keeps its kind.
+#[test]
+fn a_panel_write_waiting_on_the_outbox_keeps_the_selection_of_its_pick() {
+    use crate::view::panel::{TextValue, TextWrite};
+    use ambre_bus::conduit::{ChannelSlots, local};
+    use ambre_bus::{LogicCommand, Outbox, Port};
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    rig.select(first, 0, 5);
+    let write = TextWrite {
+        value: TextValue::Kind(crate::message::ParagraphKind::Heading(
+            crate::message::HeadingLevel::H2,
+        )),
+        selection: rig.ui.picked_selection(),
+    };
+    // One slot holds an edit the Logic thread has not read. The next edit
+    // waits in the outbox, so the view holds the write back.
+    let (tx, rx) =
+        local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<ChannelSlots>::of::<1>());
+    let mut outbox = Outbox::new(Port::direct(tx));
+    let document = ambre_core::id::Id::<ambre_core::id::Document>::from_bytes([7; 16]);
+    crate::ui::send_edit(&mut outbox, document, ProseCommand::Undo);
+    crate::ui::send_edit(&mut outbox, document, ProseCommand::Undo);
+    assert!(outbox.is_busy(), "the outbox holds an edit");
+    // The caret moves to the second block before the outbox frees.
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: Pos::<DocChar>::new(3),
+        anchor: None,
+    });
+    assert_eq!(
+        rig.ui.picked_selection(),
+        None,
+        "the view holds no selection now"
+    );
+    // The Logic thread reads the queue, and the outbox frees.
+    while rx.try_recv().is_ok() {
+        outbox.flush();
+    }
+    assert!(!outbox.is_busy(), "the outbox is free");
+    let command = rig.ui.text_write(write).expect("the write is not dropped");
+    assert_eq!(
+        crate::ui::send_edit(&mut outbox, document, command),
+        SendResult::Sent
+    );
+    let Ok(LogicCommand::App { command, .. }) = rx.try_recv() else {
+        panic!("the write left the outbox");
+    };
+    let untouched = rig.logic.block_type_of(&second);
+    let picked = rig.logic.block_type_of(&first);
+    assert!(
+        rig.logic.handle_command(command).update.is_some(),
+        "the write lands"
+    );
+    assert_ne!(
+        rig.logic.block_type_of(&first),
+        picked,
+        "the block picked is a heading"
+    );
+    assert_eq!(
+        rig.logic.block_type_of(&second),
+        untouched,
+        "the block the caret moved to keeps its kind"
+    );
 }
 
 /// `PROSE-UI-262`: a comment from the bar opens a thread over the part of

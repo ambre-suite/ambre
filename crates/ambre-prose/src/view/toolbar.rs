@@ -191,20 +191,32 @@ impl ProseUiState {
         })
     }
 
+    /// The selection the context panel shows, which a pick copies into its
+    /// write (`PROSE-UI-281`). `None` with no text selected.
+    #[must_use]
+    pub fn picked_selection(&self) -> Option<crate::view::panel::PickedSelection> {
+        let (anchor, focus) = self.selection()?;
+        Some(crate::view::panel::PickedSelection { anchor, focus })
+    }
+
     /// The one command a control of the context panel asks for, over the
-    /// selection the view holds (`PROSE-UI-098`). Every write over a
-    /// selection is one command, so one undo takes it back
-    /// (`CHROME-173`). A default font needs no selection.
+    /// selection the write captured at its pick (`PROSE-UI-098`,
+    /// `PROSE-UI-281`). Every write over a selection is one command, so one
+    /// undo takes it back (`CHROME-173`). A default font needs no selection.
     ///
-    /// `None` when no selection waits for a write that needs one, or when
-    /// the registry has no spelling for the value.
+    /// The view reads none of its own state, so a caret that moved since
+    /// the pick changes nothing.
+    ///
+    /// `None` when the pick held no selection for a write that needs one,
+    /// or when the registry has no spelling for the value.
     #[must_use]
     pub fn text_write(&self, write: crate::view::panel::TextWrite) -> Option<ProseCommand> {
-        use crate::view::panel::TextWrite;
-        if let TextWrite::DefaultFont(family) = write {
+        use crate::view::panel::{PickedSelection, TextValue};
+        let crate::view::panel::TextWrite { value, selection } = write;
+        if let TextValue::DefaultFont(family) = value {
             return Some(ProseCommand::SetDefaultFont { family });
         }
-        let (anchor, focus) = self.selection()?;
+        let PickedSelection { anchor, focus } = selection?;
         let mark = |root: MarkRoot, raw: Option<String>| {
             let value = match raw {
                 Some(raw) => Some(crate::mark::validate_value(&root.key(), Some(&raw)).ok()?),
@@ -218,37 +230,37 @@ impl ProseUiState {
             })
         };
         let colour = crate::mark::canonical_color;
-        match write {
-            TextWrite::Font(family) => {
+        match value {
+            TextValue::Font(family) => {
                 mark(MarkRoot::FontFamily, family.map(|f| f.label().to_owned()))
             }
-            TextWrite::Size(size) => {
+            TextValue::Size(size) => {
                 mark(MarkRoot::FontSize, size.map(crate::mark::canonical_number))
             }
-            TextWrite::Colour(rgb) => mark(MarkRoot::Ink, rgb.map(colour)),
-            TextWrite::Highlight(rgb) => mark(MarkRoot::Highlight, rgb.map(colour)),
+            TextValue::Colour(rgb) => mark(MarkRoot::Ink, rgb.map(colour)),
+            TextValue::Highlight(rgb) => mark(MarkRoot::Highlight, rgb.map(colour)),
             // An empty address takes the link off.
-            TextWrite::Link(url) => mark(
+            TextValue::Link(url) => mark(
                 MarkRoot::Link,
                 url.map(|u| u.as_str().trim().to_owned())
                     .filter(|u| !u.is_empty()),
             ),
-            TextWrite::Paragraph(style) => Some(ProseCommand::SetSelectionParagraph {
+            TextValue::Paragraph(style) => Some(ProseCommand::SetSelectionParagraph {
                 anchor,
                 focus,
                 style,
             }),
-            TextWrite::Kind(kind) => Some(ProseCommand::SetSelectionKind {
+            TextValue::Kind(kind) => Some(ProseCommand::SetSelectionKind {
                 anchor,
                 focus,
                 kind,
             }),
-            TextWrite::Indent(step) => Some(ProseCommand::IndentSelection {
+            TextValue::Indent(step) => Some(ProseCommand::IndentSelection {
                 anchor,
                 focus,
                 step,
             }),
-            TextWrite::DefaultFont(..) => None,
+            TextValue::DefaultFont(..) => None,
         }
     }
 

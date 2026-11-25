@@ -22,7 +22,7 @@ use crate::doc::{Orientation, PageFormat};
 use crate::events::{Align, ParagraphStyle, TriState};
 use crate::message::{IndentStep, ParagraphKind, SelectionValues};
 use crate::view::annotate::review_intent;
-use crate::view::panel::{self, CaretSuggestion, Margins, PanelKind, Paper, TextWrite};
+use crate::view::panel::{self, CaretSuggestion, Margins, PanelKind, Paper, TextValue};
 use crate::view::toolbar::state_of;
 
 /// The value of every list and segmented control of the panel. One value
@@ -186,11 +186,11 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 .unwrap_or_default()
         })
     });
-    let text_write = move |write: TextWrite| signals.text_write.set(Some(write));
-    let paragraph = move |style: ParagraphStyle| text_write(TextWrite::Paragraph(style));
+    let text_write = move |value: TextValue| signals.pick_text_write(value);
+    let paragraph = move |style: ParagraphStyle| text_write(TextValue::Paragraph(style));
     let write_kind = move |pick: Pick| {
         if let Pick::Kind(Some(kind)) = pick {
-            text_write(TextWrite::Kind(kind));
+            text_write(TextValue::Kind(kind));
         }
     };
     let command_buttons = move |ids: &'static [ambre_core::StaticKey<ambre_core::Commands>],
@@ -243,14 +243,14 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                 <FontField
                     property=prop(panel::FONT)
                     value=Signal::derive(move || values.with(|v| v.font_family.clone()))
-                    on_write=Callback::new(move |f| text_write(TextWrite::Font(f)))
+                    on_write=Callback::new(move |f| text_write(TextValue::Font(f)))
                 />
             </Field>
             <Field label="Size">
                 <span data-reach=Reach::Property(panel::SIZE).marker()>
                     <FontSizeSelect
                         current=size
-                        on_pick=Callback::new(move |s| text_write(TextWrite::Size(s)))
+                        on_pick=Callback::new(move |s| text_write(TextValue::Size(s)))
                         auto_label="Default"
                     />
                 </span>
@@ -263,7 +263,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     value=Signal::derive(move || values.with(|v| v.color))
                     default=Signal::stored(Rgba::from_bits(0x2924_1eff))
                     reset_label="Automatic"
-                    on_write=Callback::new(move |c| text_write(TextWrite::Colour(c)))
+                    on_write=Callback::new(move |c| text_write(TextValue::Colour(c)))
                 />
             </Field>
             <Field label="Highlight">
@@ -273,7 +273,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     value=Signal::derive(move || values.with(|v| v.highlight))
                     default=Signal::stored(Rgba::from_bits(0xffff_00ff))
                     reset_label="No highlight"
-                    on_write=Callback::new(move |c| text_write(TextWrite::Highlight(c)))
+                    on_write=Callback::new(move |c| text_write(TextValue::Highlight(c)))
                 />
             </Field>
             <Field label="Script">{command_buttons(script, Labelled::Icon)}</Field>
@@ -326,7 +326,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     icon=icon
                     label=label_of(id)
                     reach=Some(Reach::Property(id))
-                    on_press=Callback::new(move |()| text_write(TextWrite::Indent(step)))
+                    on_press=Callback::new(move |()| text_write(TextValue::Indent(step)))
                 />
             }
         };
@@ -438,7 +438,7 @@ pub fn prose_panel(signals: ProseSignals) -> PanelContent {
                     value=Signal::derive(move || Reading::Uniform(Some(fonts().body)))
                     on_write=Callback::new(move |f: Option<ambre_core::FontFamily>| {
                         if let Some(f) = f {
-                            text_write(TextWrite::DefaultFont(f));
+                            text_write(TextValue::DefaultFont(f));
                         }
                     })
                 />

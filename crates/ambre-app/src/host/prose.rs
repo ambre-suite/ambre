@@ -472,6 +472,13 @@ impl ProseView {
                 self.annotations.selection_words.set(words);
             }
         }
+        // The selection a pick of the panel copies into its write, so a
+        // later caret move leaves the write where it was picked
+        // (`PROSE-UI-281`).
+        let selection = self.state.picked_selection();
+        if self.annotations.selection.get_untracked() != selection {
+            self.annotations.selection.set(selection);
+        }
         // The page the layout was measured on, for the context panel
         // (`PROSE-UI-253`).
         let page = Some(self.state.shaped.layout.format);
