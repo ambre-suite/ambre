@@ -657,6 +657,11 @@ enum SyncEvent {
         requested: Id<Channel>,
         result: Result<Id<Channel>, http::HttpError>,
     },
+    /// The answer to an ask of the live calls of the user's channels
+    /// (`SyncCommand::FetchChannelCalls`, `CALL-162`).
+    ChannelCallsFetched {
+        result: Result<Vec<ambre_protocol::signaling::ChannelCall>, http::HttpError>,
+    },
     /// The answer to a listing of a space's public channels
     /// (`SyncCommand::ListSpaceChannels`).
     SpaceChannelsListed {
@@ -2342,6 +2347,7 @@ impl SyncState {
                 channel,
                 meta,
             } => self.ask_call_roster(call, channel, meta),
+            SyncCommand::FetchChannelCalls => self.fetch_channel_calls(),
             SyncCommand::CallDescription(description) => {
                 self.handle_call_description(description);
             }

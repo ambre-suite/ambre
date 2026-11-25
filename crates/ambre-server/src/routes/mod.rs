@@ -224,6 +224,7 @@ pub fn api_router(
             axum::routing::get(crate::ws::call_upgrade),
         )
         .route("/call-rosters/{call}", axum::routing::get(call_roster))
+        .route("/channel-calls", axum::routing::get(channel_calls))
         .layer({
             let state = state.clone();
             axum::middleware::from_fn(

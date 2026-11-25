@@ -399,6 +399,10 @@ pub enum SyncCommand {
         channel: Id<Channel>,
         meta: Id<Document>,
     },
+    /// Ask the relay for the live call of each channel of the user (`CALL-162`). Posted by
+    /// the Logic thread once per listing, for a call that started before it watched a channel
+    /// it does not hold. Answered by [`crate::LogicEvent::ChannelCalls`].
+    FetchChannelCalls,
     /// The `meta` document of the channel of a waiting join, the answer to
     /// [`crate::LogicEvent::CallMetaAsked`]. Posted by the Logic thread from the channel state
     /// it opened, whose sealed header names the channel. `None` when it holds no such state,

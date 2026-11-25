@@ -40,3 +40,18 @@ pub async fn call_roster(
     let roster = crate::redis_ops::call_roster(&state.redis, &call, &query.channel).await?;
     Ok(axum::Json(roster))
 }
+
+/// `GET /api/channel-calls`: the live call of each channel the asker is a member of
+/// (`CALL-162`). A page asks it once per listing, for a call that started before it watched the
+/// channel. The ask names no channel, so the relay learns the session and the instant alone,
+/// and it logs no ask (`ZK-056`).
+pub async fn channel_calls(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+) -> Result<impl IntoResponse, AppError> {
+    let channels = db::member_channel_ids(&state.db, &auth.user_id).await?;
+    let calls = crate::redis_ops::channel_calls(&state.redis, &channels).await?;
+    Ok(axum::Json(ambre_protocol::signaling::ChannelCalls {
+        calls,
+    }))
+}

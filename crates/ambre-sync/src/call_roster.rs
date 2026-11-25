@@ -10,7 +10,7 @@
 use ambre_bus::{CallMembers, LogicEvent};
 use ambre_core::id::{Call, Channel, Document, Id, User};
 use ambre_crypto::call::SignedJoin;
-use ambre_protocol::signaling::CallRoster;
+use ambre_protocol::signaling::{CallRoster, ChannelCall, ChannelCalls};
 
 #[cfg(target_arch = "wasm32")]
 use crate::SyncEvent;
@@ -149,6 +149,38 @@ impl SyncState {
             channel,
             members,
         });
+    }
+
+    /// Asks the relay for the live call of each channel of the user (`CALL-162`). The answer
+    /// arrives as [`crate::SyncEvent::ChannelCallsFetched`].
+    pub(crate) fn fetch_channel_calls(&self) {
+        let Some(tx) = self.event_tx.clone() else {
+            crate::log::warning!("Sync: no relay on this transport, no live calls");
+            return;
+        };
+        let url = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
+            .route("/channel-calls");
+        let auth = self.auth_context();
+        crate::spawn(async move {
+            let result = crate::http::get_json_auth::<ChannelCalls>(&url, auth)
+                .await
+                .map(|answer| answer.calls);
+            let _ = tx.send(crate::SyncEvent::ChannelCallsFetched { result });
+        });
+    }
+
+    /// The relay answered an ask of the live calls. A failed read answers nothing: the next
+    /// listing asks again.
+    pub(crate) fn channel_calls_fetched(
+        &self,
+        result: Result<Vec<ChannelCall>, crate::http::HttpError>,
+    ) {
+        match result {
+            Ok(calls) => self.send_to_logic(LogicEvent::ChannelCalls {
+                calls: calls.into_iter().map(|c| (c.channel, c.call)).collect(),
+            }),
+            Err(e) => crate::log::warning!("Sync: the live calls were not read: {e}"),
+        }
     }
 }
 

@@ -219,6 +219,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::StartCall { .. } => "StartCall",
         SyncCommand::LeaveCall => "LeaveCall",
         SyncCommand::AskCallRoster { .. } => "AskCallRoster",
+        SyncCommand::FetchChannelCalls => "FetchChannelCalls",
         SyncCommand::CallMeta { .. } => "CallMeta",
         SyncCommand::CallDescription(_) => "CallDescription",
         SyncCommand::ShareStarted => "ShareStarted",
@@ -235,6 +236,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::CallStarted { .. } => "CallStarted",
         LogicEvent::CallEnded { .. } => "CallEnded",
         LogicEvent::CallRoster { .. } => "CallRoster",
+        LogicEvent::ChannelCalls { .. } => "ChannelCalls",
         LogicEvent::CallMetaAsked { .. } => "CallMetaAsked",
         LogicEvent::SessionIdentity { .. } => "SessionIdentity",
         LogicEvent::RemoteUpdate { .. } => "RemoteUpdate",
@@ -532,6 +534,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel: chan,
             meta: doc,
         },
+        SyncCommand::FetchChannelCalls,
         SyncCommand::CallMeta {
             call: Id::<ambre_core::id::Call>::mint(),
             meta: Some(doc),
@@ -559,6 +562,9 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             call: Id::<ambre_core::id::Call>::mint(),
             channel: chan,
             members: ambre_bus::CallMembers::Live(vec![Id::<User>::mint()]),
+        },
+        LogicEvent::ChannelCalls {
+            calls: vec![(chan, Id::<ambre_core::id::Call>::mint())],
         },
         LogicEvent::CallMetaAsked {
             call: Id::<ambre_core::id::Call>::mint(),
