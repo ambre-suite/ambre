@@ -1137,13 +1137,13 @@ fn a_removal_reads_the_thread_each_segment_names() {
         .expect("kept");
     assert_eq!(bob.sweep_ready(middle.document_id()), Ok(None));
     assert!(!bob.holds(middle.document_id()), "read, then dropped");
-    let crate::SweepStep::Done(named) = bob.sweep_step() else {
+    let crate::SweepStep::Done(swept) = bob.sweep_step() else {
         panic!("every segment is read");
     };
-    for document_id in [old.document_id(), middle.document_id(), thread] {
-        assert!(named.contains(&document_id), "{named:?}");
+    for document_id in [old.document_id(), middle.document_id()] {
+        assert!(swept.documents.contains(&document_id), "{swept:?}");
     }
-    assert_eq!(named.iter().filter(|id| **id == thread).count(), 1);
+    assert_eq!(swept.threads, [thread], "each thread once, apart");
 
     let (mut carol, _) = far_copy(&alice, Some(old));
     assert_eq!(
