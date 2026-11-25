@@ -703,10 +703,11 @@ pub(crate) enum Root {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Held {
     role: Role,
-    /// The signing key the entry that added the member named.
+    /// The signing key the entry that added the member named. A revoke
+    /// keeps it, so a later entry must name it again (`SYNC-325`).
     key: FixedBytes<PublicKey>,
     /// The exchange key the entry that added the member named: the one key
-    /// a rotation wraps the next key for (`SYNC-198`).
+    /// a rotation wraps the next key for (`SYNC-198`). A revoke keeps it too.
     exchange: FixedBytes<ExchangePublicKey>,
     /// Still a member: no later valid entry removed them.
     present: bool,
@@ -1325,10 +1326,11 @@ impl Log {
         key_held_elsewhere(&self.held, member, key)
     }
 
-    /// Whether the log keeps `member` present under a signing key or an
-    /// exchange key other than `key` and `exchange`. Both keys derive from
-    /// the Master Seed, and the relay writes them once. So no honest answer
-    /// serves another pair for a present member (`SYNC-217`, `SYNC-322`).
+    /// Whether the log last bound `member`, present or revoked since, under
+    /// a signing key or an exchange key other than `key` and `exchange`.
+    /// Both keys derive from the Master Seed, and the relay writes them once.
+    /// So no honest answer serves another pair for a member the log bound
+    /// (`SYNC-217`, `SYNC-322`, `SYNC-325`, `SYNC-326`).
     pub(crate) fn holds_other_keys(
         &self,
         member: Id<User>,
@@ -1337,7 +1339,6 @@ impl Log {
     ) -> bool {
         self.held
             .get(&member)
-            .filter(|held| held.present)
             .is_some_and(|held| !held.names(key, exchange))
     }
 
@@ -1431,24 +1432,20 @@ fn allowed(
     self_join: SelfJoinRule,
 ) -> bool {
     let author = held.get(&entry.author).filter(|held| held.present);
-    let target = held.get(&entry.member).filter(|held| held.present);
+    let bound = held.get(&entry.member);
+    let target = bound.filter(|held| held.present);
     let author_rank = author.and_then(|held| held.role.document_rank());
     let granted = entry.role.document_rank();
     let permitted = match entry.act {
         MembershipAct::Create => false,
         // An editor or an owner adds a member at or below their own rank.
         // Only an owner re-invites a present member, as the relay checks
-        // (`SRV-266`). The re-invite names the keys the log holds. The keys
-        // derive from the Master Seed and never change, so another pair is
-        // a key the relay chose (`SYNC-217`).
+        // (`SRV-266`).
         MembershipAct::Invite => match (author_rank, granted) {
             (Some(by), Some(role)) => {
                 by >= DocumentRank::Editor
                     && role <= by
-                    && target.is_none_or(|held| {
-                        by == DocumentRank::Owner
-                            && held.names(&entry.member_key, &entry.member_exchange_key)
-                    })
+                    && target.is_none_or(|_| by == DocumentRank::Owner)
             }
             _ => false,
         },
@@ -1460,8 +1457,7 @@ fn allowed(
             target.is_some()
                 && (entry.author == entry.member || author_rank == Some(DocumentRank::Owner))
         }
-        // A self-join signs under the key it names itself, so it never
-        // replaces a present member's keys (`SYNC-217`).
+        // A self-join never names a present member (`SYNC-217`).
         MembershipAct::SelfJoin => {
             entry.author == entry.member
                 && target.is_none()
@@ -1474,11 +1470,17 @@ fn allowed(
     // deltas from the directory (audit `P58`).
     let binds = matches!(entry.act, MembershipAct::Invite | MembershipAct::SelfJoin);
     let taken = binds && key_held_elsewhere(held, entry.member, &entry.member_key);
+    // The keys derive from the Master Seed and never change, so a binding
+    // entry names the pair the log last bound to its member. That holds
+    // after a revoke too: another pair is a key the relay chose
+    // (`SYNC-217`, `SYNC-325`).
+    let replaced = binds
+        && bound.is_some_and(|held| !held.names(&entry.member_key, &entry.member_exchange_key));
     let key = match entry.act {
         MembershipAct::SelfJoin => Some(&entry.member_key),
         _ => author.map(|held| &held.key),
     };
-    permitted && !taken && key.is_some_and(|key| signed_by(entry, key))
+    permitted && !taken && !replaced && key.is_some_and(|key| signed_by(entry, key))
 }
 
 /// Whether `entry` continues `last`, the valid entry before it. A
@@ -3201,6 +3203,98 @@ pub(crate) mod tests {
             );
             assert!(view.heads().holds(view.next()), "{case}");
         }
+    }
+
+    /// Holds `SYNC-325`: a revoke keeps the pair the log last bound to its
+    /// member. Owner Alice revokes Bob. Each entry below adds Bob again under
+    /// another pair. These are three owner's re-invites, an editor's
+    /// re-invite and a self-join the rule admits. Each one stops the walk,
+    /// and Bob stays revoked. An owner's
+    /// re-invite under the pair the log last bound lands.
+    #[test]
+    fn a_revoked_member_returns_under_the_pair_the_log_last_bound() {
+        let (alice, bob, carol, mallory) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(9),
+        );
+        let mut base = created(&alice, &bob);
+        append(
+            &mut base,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(&mut base, &alice, &bob, MembershipAct::Revoke, Role::Editor);
+        let re_invite = |by: &Person, key, exchange| {
+            let mut log = base.clone();
+            let mut swapped = draft(&bob, MembershipAct::Invite, Role::Editor);
+            swapped.member_key = key;
+            swapped.member_exchange_key = exchange;
+            append_draft(&mut log, by, swapped);
+            log
+        };
+        let mut joined = base.clone();
+        let mut forged = draft(&bob, MembershipAct::SelfJoin, Role::Editor);
+        forged.member_key = mallory.public();
+        forged.member_exchange_key = mallory.exchange();
+        let next = LogHead {
+            position: place_after(joined.len()),
+            previous: joined.last().and_then(digest),
+        };
+        joined.push(sign(forged, next, bob.id, &mallory.key).unwrap());
+        let refused = [
+            (
+                "an owner's re-invite under another pair",
+                re_invite(&alice, mallory.public(), mallory.exchange()),
+            ),
+            (
+                "an owner's re-invite under another exchange key",
+                re_invite(&alice, bob.public(), mallory.exchange()),
+            ),
+            (
+                "an owner's re-invite under another signing key",
+                re_invite(&alice, mallory.public(), bob.exchange()),
+            ),
+            (
+                "an editor's re-invite under another pair",
+                re_invite(&carol, mallory.public(), mallory.exchange()),
+            ),
+            ("a self-join under another pair", joined),
+        ];
+        for (case, log) in &refused {
+            let view = Log::walk(DOC, anchor(log), log, |_| true);
+            assert_eq!(
+                view.walked_head().position,
+                place_after(base.len()),
+                "{case}: the walk stops"
+            );
+            assert_eq!(
+                view.standing(bob.id).0,
+                MemberStanding::Revoked,
+                "{case}: Bob stays revoked"
+            );
+            assert!(
+                view.holds_other_keys(bob.id, &mallory.public(), &mallory.exchange()),
+                "{case}"
+            );
+            assert!(
+                !view.signers().unwrap().contains(&mallory.public()),
+                "{case}"
+            );
+        }
+        let kept = re_invite(&alice, bob.public(), bob.exchange());
+        let view = walk(&kept);
+        assert_eq!(
+            view.walked_head().position,
+            place_after(kept.len()),
+            "the re-invite lands"
+        );
+        assert_eq!(view.present_key(bob.id), Some(bob.public()));
+        assert_eq!(view.exchange_key(bob.id), Some(bob.exchange()));
+        assert!(!view.holds_other_keys(bob.id, &bob.public(), &bob.exchange()));
     }
 
     /// Holds `SYNC-217`: no entry replaces the keys of a present member.

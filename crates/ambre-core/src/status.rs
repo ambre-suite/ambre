@@ -414,9 +414,10 @@ pub enum LocalFailure {
     /// sealed `meta` names, so a removal would leave that document uncapped
     /// (`SYNC-320`).
     ChannelDocumentHidden,
-    /// The relay served keys for a present member other than the ones the
-    /// membership log signs. Both keys derive from the Master Seed and never
-    /// change, so the relay answered keys of its own (`SYNC-322`).
+    /// The relay served keys for a member other than the ones the membership
+    /// log last bound to them, present or revoked since. Both keys derive
+    /// from the Master Seed and never change, so the relay answered keys of
+    /// its own (`SYNC-322`, `SYNC-326`).
     KeyReplaced(crate::id::Id<crate::id::User>),
 }
 

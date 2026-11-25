@@ -340,8 +340,9 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **A fresh invite is the way back.** Signed under the confirmed key, it hands a copy of the key
   in force, and the next rotation wraps for that member (`SYNC-286`). A document older than the log
   has no footing for that invite, so every member but the rotator loses it at the first rotation.
-  A present member whose row serves another key than the log holds gets no invite. That key is
-  a relay fault, and the invite refuses it (`ambre-spec-membership.md`, `SYNC-322`).
+  A member whose row serves another key than the log last bound gets no invite, present or revoked.
+  That key is a relay fault, and the invite refuses it (`ambre-spec-membership.md`, `SYNC-322`,
+  `SYNC-326`).
 * **A key rotated away still opens on the client.** An inbound sealed envelope opens with the key it
   names, and a cached previous key is one of them (`SYNC-045`). That is the in-flight tolerance the
   cache exists for. Refusing a delta under the key a removal left behind is the relay's job
