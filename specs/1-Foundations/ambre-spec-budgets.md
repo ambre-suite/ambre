@@ -402,6 +402,12 @@
   type. It took 468 826 raw bytes and 125 603 brotli off Main. It also slows every change of the
   shape of a view, and the gain is one download that the cache then keeps. So the cfg stays off,
   and the Main ceiling stays at 10 860 000.
+* **The ceiling of Main went up to 10 900 000 on 2026-11-25.** The hinter of Swash puts the
+  bars and the cap height of a glyph on pixel rows (`CANVAS-099`). Over `main` at `4af51fc`, it took Main
+  from 10 849 494 to 10 880 512 raw bytes. Brotli went from 2 922 430 to 2 931 225. No cut
+  fits: Swash has no feature that leaves the hinter out. The new ceiling also holds the second step
+  of the interface language, by the Main ceiling has room for hinted text Story
+  (`ambre-roadmap.md`).
 * **The figures of the cfg.** `just size` on the session container, over `main` at `f2f601d`, by
   the Win back room in Main Story (`ambre-roadmap.md`).
 

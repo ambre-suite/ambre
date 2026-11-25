@@ -709,6 +709,9 @@ pub(super) fn rasterize(
         &mut scale_cx
             .builder(font)
             .size(size.get())
+            // The hinter puts the cap height, the baseline and each bar on a
+            // pixel row, as the browser draws its own text (`CANVAS-099`).
+            .hint(true)
             .normalized_coords(normalized_coords)
             .build(),
         glyph.get(),
@@ -821,6 +824,31 @@ mod tests {
     }
 
     /// Rasterize the glyph `ch` of a shipped face at `size` device pixels.
+    /// A hinted outline puts its horizontal edges on pixel rows
+    /// (`CANVAS-099`). The H of the body face has a flat top and a flat foot.
+    /// The first and the last row of each stem are then as dark as its middle.
+    /// Unhinted at 11 pt, the cap height falls inside a row, and the top row
+    /// of each stem is half as dark.
+    #[test]
+    fn a_hinted_glyph_puts_its_horizontal_edges_on_pixel_rows() {
+        // 11 pt at densities 1, 1.25 and 2, in device pixels.
+        for size in [14.667, 18.333, 29.333] {
+            let h = raster_of("NotoSans-Regular.ttf", 'H', size);
+            let (w, rows) = (h.size.width.get() as usize, h.size.height.get() as usize);
+            let at = |x: usize, y: usize| u32::from(h.data[y * w + x]);
+            let middle = rows / 4;
+            let stem = (0..w).max_by_key(|&x| at(x, middle)).expect("a stem");
+            let solid = at(stem, middle);
+            for (row, name) in [(0, "top"), (rows - 1, "foot")] {
+                assert!(
+                    at(stem, row) * 10 >= solid * 9,
+                    "{name} row {} against {solid} at {size}",
+                    at(stem, row)
+                );
+            }
+        }
+    }
+
     fn raster_of(file: &str, ch: char, size: f32) -> Raster {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         let bytes = std::fs::read(format!("{dir}{file}")).expect("a shipped face");

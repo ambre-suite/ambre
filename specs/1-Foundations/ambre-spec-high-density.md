@@ -27,6 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-044` | `INV` | A physical size MUST NOT cross the boundary into a view. | this spec section 2 | type-level -- `SurfaceSize::physical` is crate-private, and `resize` takes the logical size | none | verified |
 | `CANVAS-033` | `OBS` | A glyph MUST be rasterized at the physical resolution of the display, never at the logical one. | this spec section 2 | `ambre_canvas::render::surface::tests::a_glyph_is_rasterized_at_the_physical_size` -- the raster size and the box the surface asks for; `ambre_canvas::render::atlas::tests::a_dense_raster_has_the_physical_resolution` -- the texels of the raster itself | none | verified |
 | `CANVAS-098` | `OBS` | An upright glyph bitmap MUST land on whole device pixels, so each texel covers one pixel. | this spec section 2 | `ambre_canvas::render::surface::tests::an_upright_glyph_lands_on_whole_device_pixels` -- the four edges of the quad from fractional pens, at densities 1, 1.25, 1.5 and 2 | none | verified |
+| `CANVAS-099` | `OBS` | A glyph outline MUST be hinted, so its horizontal edges fall on whole pixel rows. | this spec section 2 | `ambre_canvas::render::atlas::tests::a_hinted_glyph_puts_its_horizontal_edges_on_pixel_rows` -- the top and the foot row of each stem of an 11 pt H, at densities 1, 1.25 and 2 | none | verified |
 
 ### 1.2 The display density changes
 
@@ -46,9 +47,9 @@ through a query that fires once and then stops matching.
   `ambre-spec-budgets.md section 6`, charged where they are budgeted. No row here adds a figure.
 * **Boundary.** none: the display density is read from the browser and never leaves the client. It
   is a fingerprinting signal the page already carries, and nothing here sends it anywhere.
-* **Verification.** 11 `verified`. A browser test raises the density watch and observes the resize
+* **Verification.** 12 `verified`. A browser test raises the density watch and observes the resize
   and the re-arm. A host test counts the texels of a dense raster. Another places glyphs from
-  fractional pens.
+  fractional pens, and a third reads the rows of a hinted glyph.
 ---
 
 ## 2. MODEL
@@ -80,7 +81,7 @@ That value carries both sizes. Only the logical one is readable outside `ambre-c
 |---|---|
 | the drawing buffer | sized in physical pixels: `canvas.width` is the CSS width times the density |
 | the projection | `QuadRenderer::begin_frame` maps the logical size onto the whole buffer |
-| the glyphs | rasterized at the font size times the density, and drawn back over their logical box (`CANVAS-033`). An upright bitmap is placed on the nearest device pixel, because a bitmap between two pixels is sampled from two texels and blurs (`CANVAS-098`) |
+| the glyphs | rasterized at the font size times the density, and drawn back over their logical box (`CANVAS-033`). An upright bitmap is placed on the nearest device pixel, because a bitmap between two pixels is sampled from two texels and blurs (`CANVAS-098`). The outline is hinted, so its bars and its cap height fall on pixel rows (`CANVAS-099`) |
 | the vector paths | flattened at a tolerance divided by the density, so a curve stays smooth |
 | the scroll copy | a view shifts in `Px<View>`, and `SurfaceSize::on_device` hands the renderer a plan in `Px<Device>`, so no shift reaches the copy unscaled. One that lands between two device pixels repaints in full (`CANVAS-071`) |
 
