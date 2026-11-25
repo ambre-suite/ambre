@@ -419,6 +419,10 @@ pub enum LocalFailure {
     /// from the Master Seed and never change, so the relay answered keys of
     /// its own (`SYNC-324`, `SYNC-326`).
     KeyReplaced(crate::id::Id<crate::id::User>),
+    /// The relay listed the documents of a channel without a thread that no
+    /// link receipt proves, and the owner has not confirmed its erasure. The
+    /// removal posts nothing until the owner does (`SYNC-333`).
+    ThreadsUnproven,
 }
 
 impl fmt::Display for LocalFailure {
@@ -468,6 +472,9 @@ impl fmt::Display for LocalFailure {
                     f,
                     "the relay served another key for {user} than the members signed"
                 )
+            }
+            Self::ThreadsUnproven => {
+                f.write_str("a thread of the channel has no proof: confirm its erasure first")
             }
         }
     }

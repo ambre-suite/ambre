@@ -969,6 +969,67 @@ mod tests {
         );
     }
 
+    /// `SYNC-333`, the Murmure threads spec: a census that set a thread apart
+    /// reaches the view as a question that names it. A confirmation that names none
+    /// of the threads set apart runs nothing. One that names it runs the
+    /// revoke again under its id, which erases that thread alone.
+    #[test]
+    fn a_confirmed_erasure_runs_the_revoke_again_with_its_threads_alone() {
+        let (mut state, ui, sync) = harness();
+        let (_, stored, old, thread) = threaded_channel();
+        let channel_id = stored.channel_id();
+        let meta = stored.meta_id().document_id();
+        let id = revoke_without(&mut state, &sync, &stored, old);
+        serve(&mut state, &stored, old.document_id());
+        let user_id = drain(&sync)
+            .into_iter()
+            .find_map(|c| match c {
+                SyncCommand::RevokeFromChannel { user_id, erase, .. } if erase.is_empty() => {
+                    Some(user_id)
+                }
+                _ => None,
+            })
+            .expect("the first revoke erases nothing");
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::ThreadsUnproven {
+            channel_id,
+            removal: ambre_bus::ChannelRemoval::Revoke {
+                id,
+                document_id: meta,
+                user_id,
+            },
+            threads: vec![thread],
+        });
+        assert!(
+            drain(&ui).iter().any(|e| matches!(
+                e,
+                UiEvent::Channel { channel_id: c, event: MurmureEvent::ThreadsUnproven { threads } }
+                    if *c == channel_id && *threads == [thread]
+            )),
+            "the view asks the owner"
+        );
+        let stray = Id::<Document>::mint();
+        let confirm = |threads| LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::EraseUnproven { threads },
+        };
+        state.handle_logic_command(confirm(vec![stray]));
+        assert!(drain(&sync).is_empty(), "no thread set apart, nothing runs");
+        state.handle_logic_command(confirm(vec![stray, thread]));
+        for _ in 0..2 {
+            serve(&mut state, &stored, old.document_id());
+        }
+        let after = drain(&sync);
+        assert!(
+            after.iter().any(|c| matches!(
+                c,
+                SyncCommand::RevokeFromChannel { id: i, user_id: u, erase, .. }
+                    if *i == id && *u == user_id && *erase == [thread]
+            )),
+            "{after:?}"
+        );
+    }
+
     /// `SYNC-321`, fail closed: a segment the read needs fails to open. The
     /// view hears the revoke failed, and nothing leaves for the Sync worker.
     #[test]

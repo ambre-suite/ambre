@@ -939,6 +939,11 @@ impl LogicState {
                 self.route(|m| m.channel_deleted(channel_id))
             }
             LogicEvent::ChannelLeft { channel_id } => self.route(|m| m.channel_left(channel_id)),
+            LogicEvent::ThreadsUnproven {
+                channel_id,
+                removal,
+                threads,
+            } => self.route(|m| m.threads_unproven(channel_id, removal, threads)),
             LogicEvent::DirectMessageOpened {
                 requested,
                 channel_id,

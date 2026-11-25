@@ -40,7 +40,7 @@ use ambre_chrome::{
     CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, PaletteKey,
     Pressed, ShellAction, ShellRegion, Toasts,
 };
-use ambre_core::id::{Channel, Id, Space, User};
+use ambre_core::id::{Channel, Document, Id, Space, User};
 use ambre_core::{Css, Name, Point, Px, StepDirection, Validated};
 use leptos::prelude::*;
 
@@ -408,6 +408,9 @@ pub struct MurmureRelay {
     /// The send the author cancelled, until its region takes the draft back
     /// (`MURMURE-558`).
     returned: RwSignal<Option<AskedAll>>,
+    /// The threads a removal from a channel set apart, which the dialog asks
+    /// the owner to erase or keep (`MURMURE-737`). `None` once answered.
+    pub unproven: RwSignal<Option<(Id<Channel>, Vec<Id<Document>>)>>,
     /// The drafts the device keeps. A lost channel takes its own, and a
     /// sign-out takes them all (`MURMURE-215`, `MURMURE-216`).
     drafts: StoredValue<DraftShelf, LocalStorage>,
@@ -563,6 +566,7 @@ impl MurmureRelay {
             editing: RwSignal::new(None),
             asking_all: RwSignal::new(None),
             returned: RwSignal::new(None),
+            unproven: RwSignal::new(None),
             keys: RwSignal::new(ambre_chrome::Openness::Closed),
             drafts: StoredValue::new_local(DraftShelf::default()),
             picking: RwSignal::new(None),
@@ -710,6 +714,17 @@ impl MurmureRelay {
         let asked = self.asking_all.get_untracked()?;
         self.asking_all.set(None);
         Some(asked.command(now))
+    }
+
+    /// The erasure the owner confirmed, and the dialog closed
+    /// (`MURMURE-738`). `None` with none asked.
+    pub fn confirm_unproven(&self) -> Option<LogicCommand> {
+        let (channel_id, threads) = self.unproven.get_untracked()?;
+        self.unproven.set(None);
+        Some(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::EraseUnproven { threads },
+        })
     }
 
     /// The author cancelled the send: the dialog closes, and the draft waits
@@ -1049,6 +1064,13 @@ impl MurmureRelay {
                     members: *members,
                     held: held.clone(),
                 }));
+                Vec::new()
+            }
+            UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::ThreadsUnproven { threads },
+            } => {
+                self.unproven.set(Some((*channel_id, threads.clone())));
                 Vec::new()
             }
             UiEvent::Channel {
@@ -2069,6 +2091,58 @@ pub fn ChannelMentionConfirm(
                 </button>
                 <button class="ambre-btn-primary murmure-all-confirm" on:click=confirm>
                     "Send"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
+    }
+}
+
+/// The dialog a removal opens when it set threads apart (`MURMURE-737`). It
+/// names each thread, and says the relay holds no proof of its link.
+/// Nothing leaves before Erase. Keep, Escape and the backdrop send nothing,
+/// and the removal stays undone (`MURMURE-738`).
+#[component]
+pub fn UnprovenThreadsConfirm(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
+    Effect::new(move |_| {
+        open.set(ambre_chrome::Openness::from_bool(
+            relay.unproven.with(Option::is_some),
+        ))
+    });
+    let keep = move || relay.unproven.set(None);
+    let threads = move || {
+        relay.unproven.with(|unproven| {
+            unproven
+                .iter()
+                .flat_map(|(_, threads)| threads.iter().map(|t| view! { <li>{t.to_string()}</li> }))
+                .collect::<Vec<_>>()
+        })
+    };
+    let confirm = move |_| {
+        if let Some(command) = relay.confirm_unproven() {
+            send.run(command);
+        }
+    };
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            on_close=Callback::new(move |()| keep())
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-unproven")}
+            label="Threads with no proof"
+        >
+            <h2>"Erase these threads to finish the removal?"</h2>
+            <p>
+                "The relay did not list these threads, and holds no proof that it linked them. "
+                "A member may have named them, or the relay may hide them. "
+                "Erase loses their history. Keep leaves the member in the channel."
+            </p>
+            <ul class="murmure-unproven-threads">{threads}</ul>
+            // Keep comes first, so the focus the dialog opens on is never the
+            // irreversible choice.
+            <div class="ambre-dialog-actions">
+                <button class="murmure-unproven-keep" on:click=move |_| keep()>"Keep"</button>
+                <button class="ambre-btn-danger murmure-unproven-erase" on:click=confirm>
+                    "Erase"
                 </button>
             </div>
         </ambre_chrome::Dialog>

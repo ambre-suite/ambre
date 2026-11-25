@@ -6555,6 +6555,7 @@ mod tests {
             meta,
             hidden: vec![phantom],
             receipts: Vec::new(),
+            confirmed: vec![phantom],
             footing: footing_of(meta, &log),
             rule: LogRule::document(),
             author,
@@ -6606,6 +6607,83 @@ mod tests {
         let refused = http::HttpError::Local(LocalFailure::UnexpectedAnswer);
         let http = FakeHttp::new(vec![Ok(members), Ok(none), Err(refused)]);
         assert!(erase_hidden(&http, params(author())).await.is_err());
+    }
+
+    /// `SYNC-333`: a hidden thread under no proof and no erasure is set
+    /// apart until the owner confirms its erasure, and nothing posts. The
+    /// set apart is the hidden threads alone, less those a held erasure
+    /// covers. A confirmation erases those it names among them alone, and a
+    /// thread it names past them takes no erasure.
+    #[tokio::test]
+    async fn an_owner_erases_no_thread_with_no_proof_before_confirming() {
+        use crate::erasure::{Cleared, ErasureEntry, ErasureParams, erase_hidden, sign_erasure};
+        let (owner_xk, _) = keypair(1);
+        let meta = Id::<Document>::mint();
+        let channel_id = Id::<Channel>::mint();
+        let (phantom, other, held, stray) = (
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+        );
+        let (log, own) = log_inviting(meta, &author(), &owner_xk, &[]);
+        let members = serde_json::json!({ "members": [own], "log": log });
+        let params = |confirmed| ErasureParams {
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            channel_id,
+            meta,
+            hidden: vec![phantom, other, held],
+            receipts: Vec::new(),
+            confirmed,
+            footing: footing_of(meta, &log),
+            rule: LogRule::document(),
+            author: author(),
+        };
+        let listed = serde_json::json!({ "erasures": [ErasureEntry {
+            thread: held,
+            signer: author().public(),
+            signature: sign_erasure(&author(), channel_id, held),
+        }] });
+
+        for (confirmed, apart) in [
+            (Vec::new(), vec![phantom, other]),
+            (vec![phantom, stray], vec![other]),
+        ] {
+            let http = FakeHttp::new(vec![Ok(members.clone()), Ok(listed.clone())]);
+            assert_eq!(
+                erase_hidden(&http, params(confirmed)).await.ok(),
+                Some(Cleared::Unproven(apart))
+            );
+            assert_eq!(http.calls().len(), 2, "nothing posts before the word");
+        }
+
+        let erased = |t: Id<Document>| Ok(serde_json::json!({ "thread": t.to_string() }));
+        let http = FakeHttp::new(vec![
+            Ok(members),
+            Ok(listed),
+            erased(phantom),
+            erased(other),
+        ]);
+        assert_eq!(
+            erase_hidden(&http, params(vec![other, stray, phantom]))
+                .await
+                .ok(),
+            Some(Cleared::All)
+        );
+        let posted: Vec<String> = http
+            .calls()
+            .iter()
+            .filter_map(|call| match call {
+                Call::Post(_, body) => body["thread"].as_str().map(str::to_owned),
+                Call::Get(_) | Call::Delete(..) | Call::Patch(..) => None,
+            })
+            .collect();
+        assert_eq!(
+            posted,
+            [phantom.to_string(), other.to_string()],
+            "the confirmed and hidden alone"
+        );
     }
 
     /// `SYNC-329`: a thread a valid revoke of the log caps stood in the
@@ -6661,13 +6739,14 @@ mod tests {
             .unwrap();
         assert!(walked.log().caps_document(linked), "the revoke walks");
         let members = serde_json::json!({ "members": [own], "log": log });
-        let params = |hidden| ErasureParams {
+        let params = |hidden: Vec<Id<Document>>| ErasureParams {
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             channel_id,
             meta,
-            hidden,
+            hidden: hidden.clone(),
             receipts: Vec::new(),
+            confirmed: hidden,
             footing: footing_of(meta, &log),
             rule: LogRule::document(),
             author: author(),
@@ -6720,6 +6799,7 @@ mod tests {
         };
         let relay = SigningKey::from_bytes(&[0x4c; 32]);
         let params = |receipts| ErasureParams {
+            confirmed: vec![thread],
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             channel_id,
@@ -6820,6 +6900,7 @@ mod tests {
                 meta,
                 hidden: vec![phantom],
                 receipts: Vec::new(),
+                confirmed: vec![phantom],
                 footing: footing_of(meta, log),
                 rule: LogRule::document(),
                 author,

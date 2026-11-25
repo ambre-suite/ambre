@@ -22,7 +22,8 @@ use ambre_core::index::Pos;
 use ambre_core::{Point, Px, View};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
-    MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, SpaceList, coverage,
+    MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, SpaceList,
+    UnprovenThreadsConfirm, coverage,
 };
 use ambre_murmure::message::{
     CatalogueEntry, ChannelMatches, DirectMessageEvent, HeldReply, HeldSend, MemberView, MessageAt,
@@ -1856,6 +1857,73 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         None,
         "a send gives nothing back"
     );
+    root.remove();
+}
+
+/// The question of a removal that set threads apart names each thread, and
+/// Keep sends nothing (`MURMURE-737`). Erase sends the erasure of the
+/// threads it named, once (`MURMURE-738`).
+#[wasm_bindgen_test]
+async fn the_unproven_threads_question_erases_on_erase_and_keeps_on_keep() {
+    use wasm_bindgen::JsCast;
+    let (_owner, relay, direct) = shown_direct();
+    let sent = RwSignal::new(Vec::<LogicCommand>::new());
+    let send = Callback::new(move |command| sent.update(|all| all.push(command)));
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let _handle = leptos::mount::mount_to(mount, move || {
+        view! { <UnprovenThreadsConfirm relay=relay send=send /> }
+    });
+    let dialog: web_sys::HtmlDialogElement = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    let click = |class: &str| {
+        let button = root.query_selector(&format!(".{class}")).unwrap().unwrap();
+        button.dyn_into::<web_sys::HtmlElement>().unwrap().click();
+    };
+    let threads = vec![Id::<Document>::mint(), Id::<Document>::mint()];
+    let ask = Event::Channel {
+        channel_id: direct,
+        event: MurmureEvent::ThreadsUnproven {
+            threads: threads.clone(),
+        },
+    };
+
+    relay.absorb(&ask);
+    settle().await;
+    assert!(dialog.open(), "the question opens");
+    let named: Vec<String> = (0..2)
+        .map(|i| {
+            root.query_selector_all(".murmure-unproven-threads li")
+                .unwrap()
+                .item(i)
+                .unwrap()
+                .text_content()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(named, [threads[0].to_string(), threads[1].to_string()]);
+    let closed = next_close(&dialog);
+    click("murmure-unproven-keep");
+    closed.await.unwrap();
+    assert!(sent.get_untracked().is_empty(), "keep sends nothing");
+
+    relay.absorb(&ask);
+    settle().await;
+    let closed = next_close(&dialog);
+    click("murmure-unproven-erase");
+    closed.await.unwrap();
+    assert!(matches!(
+        &sent.get_untracked()[..],
+        [LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::EraseUnproven { threads: t },
+        }] if *channel_id == direct && *t == threads
+    ));
     root.remove();
 }
 

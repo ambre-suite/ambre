@@ -1194,6 +1194,11 @@ impl SyncState {
                 );
             }
             SyncEvent::CensusPlanned { removal, result } => self.census_planned(removal, result),
+            SyncEvent::CensusUnproven {
+                removal,
+                channel_id,
+                threads,
+            } => self.census_unproven(removal, channel_id, threads),
             SyncEvent::ChannelLeft { channel_id, result } => {
                 self.channel_answered(
                     channel_id,
