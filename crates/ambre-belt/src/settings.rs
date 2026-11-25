@@ -104,8 +104,8 @@ mod tests {
     use crate::relay::Relay;
 
     /// `SETTINGS-012`, `SETTINGS-041`: a theme switched on one device of an
-    /// account shows on the other, through the relay, and a switch back on
-    /// the second shows on the first. The side of the panel follows the
+    /// account shows on the other, through the relay. A switch back on the
+    /// second shows on the first. The side of the panel follows the
     /// account in every application, and its fold in one application alone.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
