@@ -293,6 +293,13 @@ impl PageWalk<'_> {
         let data = block.run.data();
         let placed = &block.placed;
         surface.push_clip(placed.clip);
+        // A highlight mark is the text's own colour, so it goes under the
+        // glyphs, as a selection does (`PROSE-UI-117`).
+        for (span, fill) in data.highlight_spans() {
+            for rect in data.range_boxes(span) {
+                surface.fill_rect(to_rect(placed, &rect), packed(fill));
+            }
+        }
         draw_run(
             surface,
             self.runs,
@@ -481,7 +488,6 @@ fn draw_run<S: DrawSurface>(
     insertions: &[Insertion],
 ) {
     let data: &ParleyRunData = run.data();
-    let brush = Brush::Solid(color);
     // The glyph runs of a line follow each other in the order of its items,
     // so one walk of the items reaches them all. Parley walks a line from
     // its start to reach any item. A reach per glyph run then costs the
@@ -508,6 +514,8 @@ fn draw_run<S: DrawSurface>(
             else {
                 continue;
             };
+            let color = ink_of(&glyphs, color);
+            let brush = Brush::Solid(color);
             let mut cuts = insertions
                 .iter()
                 .filter(|cut| cut.line == at.line)
@@ -538,6 +546,16 @@ fn draw_run<S: DrawSurface>(
             }
             slice(surface, from, band, shift);
         }
+    }
+}
+
+/// The colour a glyph run is drawn in: the ink of its mark, or `page`
+/// (`PROSE-UI-210`). The default brush is transparent and means no mark, so a
+/// fully transparent ink draws in the page ink.
+fn ink_of(glyphs: &parley::GlyphRun<'_, ambre_draw::ParleyBrush>, page: Color) -> Color {
+    match glyphs.style().brush {
+        Brush::Solid(ink) if ink != Color::TRANSPARENT => ink,
+        _ => page,
     }
 }
 
@@ -596,7 +614,6 @@ pub(crate) fn draw_shape<S: DrawSurface>(
     at: Point,
     color: Color,
 ) {
-    let brush = Brush::Solid(color);
     let data = shape.data();
     for index in Span::from_len(Pos::<RunLine>::ZERO, data.line_count()) {
         let Some((line, shift)) = data.line(index) else {
@@ -606,6 +623,8 @@ pub(crate) fn draw_shape<S: DrawSurface>(
         let origin = at + (0.0, f64::from(shift.get()));
         for item in line.items() {
             if let PositionedLayoutItem::GlyphRun(glyphs) = item {
+                let color = ink_of(&glyphs, color);
+                let brush = Brush::Solid(color);
                 surface.draw_glyphs(&glyphs, text, &brush, run_at(&glyphs, origin));
                 draw_lines(surface, &glyphs, origin, color);
             }

@@ -6,8 +6,8 @@
 > the remote carets and the inline highlights, painted from runs the engine shaped once. The same
 > drawing code produces the exported PDF.
 
-Nothing painted here is shared state: the runs come from the document, the colours come from the
-theme, and a repaint writes nothing back. There is no two-peer table below.
+Nothing painted here is shared state. The runs come from the document, and the colours come from
+the theme, the paper and the marks. A repaint writes nothing back. There is no two-peer table below.
 
 ---
 
@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | `ambre_prose::view::cache::tests::the_run_painted_least_recently_is_the_one_dropped`; `ambre_prose::view::paint::tests::the_run_cache_stays_bounded_over_a_long_scroll` | none | verified |
 | `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | `ambre_prose::view::paint::tests::a_long_document_builds_only_the_pages_around_the_canvas` | none | verified |
 | `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built | unbuilt -- lands with the `One repaint contract` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens or from the paper; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | `ambre_prose::view::paint::tests::every_colour_comes_from_the_palette_or_a_peer` | none | verified |
+| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens, from the paper or from a colour the document stores; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | `ambre_prose::view::paint::tests::every_colour_comes_from_the_palette_or_a_peer` | none | verified |
 | `PROSE-UI-255` | `INV` | A page MUST be drawn on the same paper, with the same ink and rules, in either theme and in a print, so a theme switch MUST NOT change what a page prints or exports; the ink MUST read on that paper at the AA ratio for body text. | this spec section 3 | `ambre_prose::view::walk::tests::the_paper_is_the_same_on_screen_in_either_theme_and_in_print` -- a page built from any theme colours and the print palette share the paper, and the ink reads at 4.5 to 1 or more; type-level -- the constructor of a page palette takes the theme colours alone, so no theme value reaches the sheet, its ink or its rules | none | verified |
 | `PROSE-UI-115` | `OBS` | A visible page MUST be drawn with its sheet, the blocks the layout places on it, and the header, the footer and the footnote band the layout carries for it. | this spec section 2 | `ambre_prose::view::paint::tests::a_page_carries_its_bands_and_its_footnotes_below_a_separator` | none | verified |
 | `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | `ambre_prose::view::paint::tests::a_block_split_across_two_pages_is_drawn_on_both` | none | verified |
@@ -36,7 +36,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | `ambre_prose::view::paint::tests::a_remote_caret_is_painted_after_every_glyph_of_its_page` | none | verified |
 | `PROSE-UI-207` | `OBS` | A bold or italic mark MUST reach the glyphs of the text it covers. | this spec section 2 | `ambre_prose::logic::marks::tests::a_bold_or_italic_mark_reaches_the_glyphs` | none | verified |
 | `PROSE-UI-209` | `OBS` | An underline or strike-through mark MUST be drawn across the text it covers. | this spec section 2 | `ambre_prose::view::paint::tests::an_underline_and_a_strike_through_are_drawn_across_their_text` | none | verified |
-| `PROSE-UI-210` | `OBS` | A size, font or colour mark MUST reach the glyphs of the text it covers. | this spec section 2 | not built | unbuilt -- lands with the `The format bar's other controls` Story (`ambre-roadmap.md` MVP) | unimplemented |
+| `PROSE-UI-210` | `OBS` | A size, font or colour mark MUST reach the glyphs of the text it covers. | this spec section 2 | `ambre_prose::logic::marks::tests::a_size_or_a_font_mark_reaches_the_glyphs` -- a size, a serif and a monospace face each change the width of the run, and the removal restores it; `ambre_prose::view::paint::tests::an_ink_and_a_highlight_mark_are_drawn_on_their_text` -- the inked word is drawn in its ink, the next word in the page ink | none | verified |
+| `PROSE-UI-280` | `OBS` | A highlight mark MUST be drawn under the glyphs of the text it covers, in the colour the mark stores. | this spec section 2; this spec section 3 | `ambre_prose::view::paint::tests::an_ink_and_a_highlight_mark_are_drawn_on_their_text` -- the fill of the highlight colour comes before every glyph run of the block | none | verified |
 
 ### 1.2 Paint a page
 
@@ -60,7 +61,7 @@ status values are normative in `ambre-spec-template.md`.
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 23 `verified`, 2 `unimplemented`. Every verified row is a host test in
+* **Verification.** 25 `verified`, 1 `unimplemented`. Every verified row is a host test in
   `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
   also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` is held in
   `crates/ambre-logic`: the Logic thread shapes, and the view draws what the bus hands it.
@@ -70,7 +71,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ## 2. MODEL
 
-**Containers.** None. Every colour is the theme's and every run is derived.
+**Containers.** None. Every run is derived, and a colour is the theme's, the paper's or a mark's.
 
 **The shaped run, and what makes it crossable.** The engine shapes a block once, on the Logic
 thread, to measure it. It keeps the result and hands it over by move with the layout. Both threads
@@ -153,7 +154,8 @@ The steps, per page built:
 1. paint the soft shadow and the sheet, at the page origin the viewport resolves;
 2. walk the blocks the layout places on that page, continuations of split blocks included;
 3. for each block, clip to its fragment and take its drawing state from the cache;
-4. paint the selection rectangles under the glyphs, then the glyphs, then the inline highlights;
+4. paint the selection rectangles and the highlight marks under the glyphs, then the glyphs, then
+   the inline highlights;
 5. paint the header, the footer and the footnote band from the runs the layout carries;
 6. paint the remote carets last, so a collaborator never hides local text.
 
@@ -184,6 +186,7 @@ is on it. What is drawn, and where each colour comes from:
 | the page sheet | the paper | full |
 | the shadow of a sheet | the canvas `shadow`, over six one-pixel rings | three hundredths a ring |
 | body text, headers, footers, footnotes | the paper's ink, or the block's own colour mark | full |
+| a highlight mark, under its glyphs | the colour the mark stores | full |
 | a table border or a footnote separator with no colour of its own | the paper's rule | full |
 | the text caret | `accent` | full |
 | the local selection | `accent` | a fifth |
@@ -194,7 +197,8 @@ is on it. What is drawn, and where each colour comes from:
 | a spelling error | the `error` status, as a wavy underline | full |
 
 Each of those names a generated token, read at paint time from the constants
-`ambre-spec-design-tokens.md` declares and `ambre-spec-frame.md section 2` consumes, but the paper.
+`ambre-spec-design-tokens.md` declares and `ambre-spec-frame.md section 2` consumes. The paper and
+the colours a mark stores are the two exceptions.
 That is what `PROSE-UI-014` asks for, and what a table of literal colours cannot give.
 
 **The paper is the document's, not the theme's.** The ground around the pages is chrome, and it

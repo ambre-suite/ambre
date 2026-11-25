@@ -1835,6 +1835,45 @@ mod tests {
         assert!(strike.2 < under.2, "the strike sits above the underline");
     }
 
+    /// `PROSE-UI-210`: a colour mark draws the glyphs it covers in its ink,
+    /// and the rest of the text keeps the page ink. A highlight mark fills
+    /// the box of its text before the glyphs are drawn.
+    #[test]
+    fn an_ink_and_a_highlight_mark_are_drawn_on_their_text() {
+        let (mut state, _) = laid_out(1, 2);
+        let block = *state.root_blocks().last().expect("a block");
+        for (key, value, range) in [("fg", "#ff0000", 0..4), ("bg", "#ffff00", 5..9)] {
+            state.handle_command(ProseCommand::ApplyMark {
+                block_id: block,
+                range: Span::<DocChar>::from_usize_range(range),
+                key: key.into(),
+                value: Some(crate::mark::test_value(value)),
+            });
+        }
+        let mut ui = ProseUiState::default();
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
+        ui.apply_layout(state.shaped_layout());
+        let surface = paint(&mut ui);
+        let red = Color::from_rgba8(255, 0, 0, 255);
+        let yellow = Color::from_rgba8(255, 255, 0, 255);
+        let text = palette().text;
+        let ops = surface.ops();
+        let glyphs_in = |ink: Color| {
+            ops.iter()
+                .position(|op| matches!(op, DrawOp::Glyphs { color, .. } if *color == Some(ink)))
+        };
+        let inked = glyphs_in(red).expect("the first word is drawn in its ink");
+        let plain = glyphs_in(text).expect("the second word keeps the page ink");
+        let fill = ops
+            .iter()
+            .position(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == yellow))
+            .expect("the second word is highlighted");
+        assert!(
+            fill < inked && fill < plain,
+            "the highlight goes under the glyphs"
+        );
+    }
+
     /// `PROSE-UI-208`: a draft typed right after an underlined word is
     /// drawn underlined, one line running from the word through the draft.
     #[test]
