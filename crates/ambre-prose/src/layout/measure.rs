@@ -37,8 +37,9 @@ const MAX_SEGMENTS: Len<RunSegment> = Len::<RunSegment>::new(16);
 
 /// A byte range of a block's text and the inline marks the shaper reads on
 /// it. A mark changes the glyphs (`PROSE-UI-207`, `PROSE-UI-210`), draws a
-/// line across them (`PROSE-UI-209`) or fills the box under them.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// line across them (`PROSE-UI-209`), or fills the box under them
+/// (`PROSE-UI-280`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MarkedSpan {
     pub start: Pos<Byte>,
     pub end: Pos<Byte>,
@@ -46,13 +47,13 @@ pub struct MarkedSpan {
     pub italic: ambre_core::Slant,
     pub underline: ambre_core::Underline,
     pub strike: ambre_core::Strikethrough,
-    /// The size the span is set in, over the block's own.
+    /// The size the span is set in, over the size of its block.
     pub size: Option<ambre_core::FontSize>,
-    /// The shipped face the span's family label resolves to (`PROSE-108`).
+    /// The shipped face the family of the span resolves to (`PROSE-108`).
     pub family: Option<BundledFamily>,
-    /// The colour the span's glyphs are drawn in, over the page ink.
+    /// The colour of the glyphs, over the ink of the page.
     pub ink: Option<ambre_core::Rgba>,
-    /// The colour filled under the span's glyphs.
+    /// The colour of the box under the glyphs.
     pub highlight: Option<ambre_core::Rgba>,
 }
 
@@ -74,8 +75,8 @@ impl MarkedSpan {
 /// The text of a block and the spans of it that carry a mark the shaper
 /// reads, in one walk over its runs.
 ///
-/// A value that fails its grammar reads as no mark, as in the cascade
-/// (`PROSE-FEAT-022`). The write path refused it, so another build wrote it.
+/// A value that fails its grammar is dropped: the write path refused it
+/// already (`PROSE-FEAT-022`), so it came from a build that wrote it wrong.
 #[must_use]
 pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
     let mut out = String::new();
@@ -822,10 +823,13 @@ fn build(
         if let Some(family) = span.family {
             builder.push_family(family, range);
         }
-        // The glyph run carries its ink as its brush. The painter draws a
-        // run with the default brush in the page ink (`PROSE-UI-210`).
+        // The glyph run carries its ink as its brush, and the painter draws
+        // it in that colour (`PROSE-UI-210`).
         if let Some(ink) = span.ink {
-            builder.push(StyleProperty::Brush(ink_brush(ink)), range);
+            builder.push(
+                StyleProperty::Brush(ambre_draw::Brush::Solid(ambre_draw::list::color_of(ink))),
+                range,
+            );
         }
     }
     // The first-line indent is an empty box ahead of the text, so the line
@@ -845,13 +849,6 @@ fn build(
     layout.break_all_lines(width.map(Px::<Doc>::get));
     layout.align(alignment_of(style.align), AlignmentOptions::default());
     layout
-}
-
-/// The brush a glyph run of ink `rgba` carries.
-#[must_use]
-pub fn ink_brush(rgba: ambre_core::Rgba) -> ParleyBrush {
-    let [r, g, b, a] = rgba.channels();
-    ParleyBrush::Solid(ambre_draw::Color::from_rgba8(r, g, b, a))
 }
 
 /// The floor an `AtLeast` line height sets, in pixels.

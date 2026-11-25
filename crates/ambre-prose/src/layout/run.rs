@@ -511,17 +511,6 @@ impl ParleyRunData {
             .unwrap_or_default()
     }
 
-    /// The code-point range and the colour of each highlight mark the text
-    /// was shaped with, in the order of the text.
-    pub fn highlight_spans(&self) -> impl Iterator<Item = (Span<RunChar>, Rgba)> + '_ {
-        self.marks.iter().filter_map(|span| {
-            let fill = span.highlight?;
-            let from = self.offset_of_byte(span.start);
-            let to = self.offset_of_byte(span.end);
-            Some((Span::new(from, to), fill))
-        })
-    }
-
     /// The marked spans the text was shaped with, in bytes.
     #[must_use]
     pub fn marks(&self) -> &[MarkedSpan] {

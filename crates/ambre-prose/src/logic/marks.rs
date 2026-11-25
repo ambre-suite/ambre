@@ -774,14 +774,14 @@ pub(crate) mod tests {
         }
     }
 
-    /// `PROSE-UI-210`: a size or a font mark reaches the glyphs it covers on
-    /// the next layout, and leaves them when it is removed.
+    /// `PROSE-UI-210`: a size or a font mark reaches the glyphs it covers
+    /// on the next layout, and leaves them when it is removed.
     #[test]
-    fn a_size_or_a_font_mark_reaches_the_glyphs() {
+    fn a_size_or_font_mark_reaches_the_glyphs() {
         let (mut state, block) = document_with_text("mmmm mmmm");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let plain = laid_width(&mut state, block);
-        for (key, value) in [("fs", "30"), ("ff", "Serif"), ("ff", "Monospace")] {
+        for (key, value) in [("fs", "24"), ("ff", "Serif"), ("ff", "Monospace")] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: Span::<DocChar>::from_usize_range(0..4),
