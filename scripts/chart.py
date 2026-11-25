@@ -18,8 +18,13 @@ the stores in the cluster, the stores outside it, and the stack under test of
   of `deploy/compose/` names for the same service (`ARCH-087`);
 * a pod off the network of its node that a NetworkPolicy leaves open in
   either direction, or whose policies admit a flow the table of `FLOWS` does
-  not name, or refuse one it names (`SRV-351`);
+  not name, or refuse one it names (`SRV-351`). The web server reaches the
+  signalling port of the SFU on the blocks of `networkPolicy.nodeCidrs`
+  alone, so a rule with no peer on that port is a fault (`SRV-361`);
 * with `--release`, an image of Ambre that names no digest (`SRV-308`).
+
+`check` also renders the chart under `NODE_REFUSALS`: no block of nodes, and
+blocks as wide as an address family. Each render must fail (`SRV-362`).
 
 `check` also reads `.github/workflows/release.yml`: a release builds and
 pushes the relay, the SFU and the client, pins each digest into the chart,
@@ -33,12 +38,17 @@ table names nowhere try each port of the stores and of the relay, and a
 refused connection is the pass. The pod outside the release also reaches the
 web server, so a refusal is the policy and not a broken network (`SRV-352`).
 
+`nodes CONTEXT` runs on the same cluster before the install: each node holds
+an address inside the `networkPolicy.nodeCidrs` of the test values, or the
+web server cannot reach the signalling of the SFU (`SRV-361`).
+
 The renders and the workflow are read with PyYAML, which the Python of the
 CI runner ships as `python3-yaml`. Run: `just chart-check`. It writes nothing.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import subprocess
@@ -66,7 +76,17 @@ DIGEST = re.compile(r"@sha256:[0-9a-f]{64}$")
 SECRET_NAME = re.compile(r"(PASSWORD|SECRET|SEED|TOKEN|ADMISSION_KEY)$|^DATABASE_URL$|^REDIS_URL$")
 # A value that reads a variable the pod got from the Secret is no secret in clear.
 REFERENCE = re.compile(r"\$\([A-Z_]+\)")
-BASE = ["--set", "domain=ambre.example.org,tls=admin@example.org,existingSecret=ambre"]
+# The address blocks of the nodes in the two renders outside the test values.
+NODE_CIDRS = ["192.0.2.0/24", "2001:db8::/64"]
+BASE = [
+    "--set",
+    "domain=ambre.example.org,tls=admin@example.org,existingSecret=ambre",
+    "--set-json",
+    "networkPolicy.nodeCidrs=" + json.dumps(NODE_CIDRS),
+]
+# Blocks of nodes the chart must refuse to render (`SRV-362`): none, or one
+# that reopens the signalling port of the SFU on the internet.
+NODE_REFUSALS = ([], ["0.0.0.0/0"], ["::/0"], ["10.0.0.0/7"], ["fc00::/31"], ["10.0.0.0"])
 # The addresses of the stores outside the cluster, in the render that names them.
 EXTERNAL_STORES = [{"to": [{"ipBlock": {"cidr": "192.0.2.10/32"}}], "ports": [{"port": 5432}, {"port": 6379}]}]
 EXTERNAL = [
@@ -100,6 +120,17 @@ def render(*args: str) -> list[dict]:
     if out.returncode != 0:
         raise SystemExit(f"helm template failed:\n{out.stderr}")
     return [doc for doc in yaml.safe_load_all(out.stdout) if doc]
+
+
+def rendered(*args: str) -> bool:
+    """Whether `helm template` renders the chart under these values."""
+    out = subprocess.run(
+        ["helm", "template", "ambre", str(CHART), "--kube-version", KUBE_VERSION, *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return out.returncode == 0
 
 
 def pod_of(obj: dict) -> dict | None:
@@ -203,21 +234,24 @@ def check_images(objects: list[dict], compose: dict[str, str], release: bool) ->
     return faults
 
 
-def flows_table(present: set[str], acme: bool, external: bool) -> set[tuple[str, str, str, str]]:
+def flows_table(
+    present: set[str], acme: bool, external: bool, nodes: list[str]
+) -> set[tuple[str, str, str, str]]:
     """The flow table of `ambre-spec-server.md` section 3, for the stores a render runs.
 
     Each flow reads (pod, direction, peer, port). `public` is every address
     but the private ranges of `PRIVATE`, and `dns` the resolver of the cluster.
+    `nodes` holds the address blocks of the nodes that the render names.
     """
     flows = {
         ("web", "ingress", ANYWHERE, "TCP/8080"),
         ("web", "ingress", ANYWHERE, "TCP/8443"),
         ("web", "egress", "relay", "TCP/3000"),
-        # The SFU listens on the address of its node, which no pod selector names.
-        ("web", "egress", ANYWHERE, "TCP/3480"),
         ("relay", "ingress", "web", "TCP/3000"),
         ("relay", "egress", "public", "TCP/443"),
     }
+    # The SFU listens on the address of its node, which no pod selector names.
+    flows |= {("web", "egress", f"ipBlock {cidr}", "TCP/3480") for cidr in nodes}
     for pod in ("web", "relay"):
         flows |= {(pod, "egress", "dns", "UDP/53"), (pod, "egress", "dns", "TCP/53")}
     if acme:
@@ -398,6 +432,8 @@ def check(release: bool) -> int:
     )
     faults = [] if lint.returncode == 0 else [f"helm lint failed:\n{lint.stdout}{lint.stderr}"]
     compose = compose_images()
+    test_nodes = yaml.safe_load(TEST_VALUES.read_text())["networkPolicy"]["nodeCidrs"]
+    nodes = {"stores in the cluster": NODE_CIDRS, "stores outside it": NODE_CIDRS, "the stack under test": test_nodes}
     renders = {
         "stores in the cluster": render(*BASE),
         "stores outside it": render(*EXTERNAL),
@@ -407,8 +443,11 @@ def check(release: bool) -> int:
         under_test = name == "the stack under test"
         faults += [f"{name}: {f}" for f in check_objects(objects, compose, release and not under_test)]
         present = {component(o) for o in objects if pod_of(o) is not None}
-        table = flows_table(present, acme=not under_test, external=name == "stores outside it")
+        table = flows_table(present, acme=not under_test, external=name == "stores outside it", nodes=nodes[name])
         faults += [f"{name}: {f}" for f in check_network(objects, table)]
+    for cidrs in NODE_REFUSALS:
+        if rendered(*BASE, "--set-json", "networkPolicy.nodeCidrs=" + json.dumps(cidrs)):
+            faults.append(f"the chart renders under networkPolicy.nodeCidrs={json.dumps(cidrs)}")
     if not release:
         faults += [f"release.yml: {f}" for f in check_release(yaml.safe_load(RELEASE.read_text()))]
     for fault in faults:
@@ -509,11 +548,39 @@ def probe(kubectl: list[str]) -> int:
     return 0
 
 
+def nodes_outside(cidrs: list[str], addresses: list[str]) -> list[str]:
+    """The faults of the nodes against the blocks of the test values (`SRV-361`)."""
+    if not addresses:
+        return ["the cluster lists no address of a node"]
+    blocks = [ipaddress.ip_network(c) for c in cidrs]
+    return [
+        f"node address {a} lies outside networkPolicy.nodeCidrs {cidrs}"
+        for a in addresses
+        if not any(ipaddress.ip_address(a) in b for b in blocks)
+    ]
+
+
+def nodes(kubectl: list[str]) -> int:
+    """Checks the nodes of the cluster of `just chart-test` against the test values."""
+    cidrs = yaml.safe_load(TEST_VALUES.read_text())["networkPolicy"]["nodeCidrs"]
+    path = '{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\\n"}{end}'
+    addresses = kube(kubectl, "get", "nodes", "-o", f"jsonpath={path}").split()
+    faults = nodes_outside(cidrs, addresses)
+    for fault in faults:
+        print(f"chart: {fault}", file=sys.stderr)
+    if faults:
+        return 1
+    print(f"chart: {len(addresses)} node addresses lie inside {cidrs}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if argv[:1] == ["check"]:
         return check(release=argv[1:] == ["--release"])
     if argv[:1] == ["probe"]:
         return probe(argv[1:] or PROBE_KUBECTL)
+    if argv[:1] == ["nodes"]:
+        return nodes(argv[1:] or PROBE_KUBECTL)
     if argv[:1] == ["pin"] and len(argv) >= 2:
         return pin(argv[1], argv[2:])
     print(__doc__, file=sys.stderr)

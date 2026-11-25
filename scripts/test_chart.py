@@ -228,13 +228,77 @@ class NetworkTest(unittest.TestCase):
         self.assertNotIn("sfu", " ".join(chart.check_network(network(), TABLE)))
 
     def test_the_table_of_a_render_follows_its_stores(self) -> None:
-        inside = chart.flows_table({"web", "relay", "postgres", "redis", "garage"}, acme=True, external=False)
-        outside = chart.flows_table({"web", "relay"}, acme=False, external=True)
+        stores = {"web", "relay", "postgres", "redis", "garage"}
+        inside = chart.flows_table(stores, acme=True, external=False, nodes=chart.NODE_CIDRS)
+        outside = chart.flows_table({"web", "relay"}, acme=False, external=True, nodes=chart.NODE_CIDRS)
         self.assertIn(("postgres", "ingress", "relay", "TCP/5432"), inside)
         self.assertIn(("web", "egress", "public", "TCP/443"), inside)
         self.assertNotIn(("web", "egress", "public", "TCP/443"), outside)
         self.assertIn(("relay", "egress", "ipBlock 192.0.2.10/32", "TCP/5432"), outside)
         self.assertFalse({f for f in outside if "postgres" in f})
+
+
+def signalling(rule: dict) -> list[dict]:
+    """A web server whose policy opens the signalling port of the SFU under `rule`."""
+    web = {"matchLabels": labelled("web")["spec"]["template"]["metadata"]["labels"]}
+    return [
+        labelled("web"),
+        sfu(),
+        policy(web, ["Ingress", "Egress"], egress=[{**rule, "ports": [{"protocol": "TCP", "port": 3480}]}]),
+    ]
+
+
+SIGNAL = {("web", "egress", "ipBlock 192.0.2.0/24", "TCP/3480")}
+
+
+class SignallingTest(unittest.TestCase):
+    """`SRV-361`: the web server reaches the signalling of the SFU on the nodes alone."""
+
+    def test_the_blocks_of_the_nodes_alone_hold(self) -> None:
+        objects = signalling({"to": [{"ipBlock": {"cidr": "192.0.2.0/24"}}]})
+        self.assertEqual(chart.check_network(objects, SIGNAL), [])
+
+    def test_the_port_open_on_every_address_fails(self) -> None:
+        faults = chart.check_network(signalling({}), SIGNAL)
+        self.assertIn("web: its egress admits anywhere on TCP/3480, which the flow table does not name", faults)
+        self.assertIn("web: its egress refuses ipBlock 192.0.2.0/24 on TCP/3480, which the flow table names", faults)
+
+    def test_the_port_open_on_the_internet_fails(self) -> None:
+        public = [{"ipBlock": {"cidr": cidr, "except": sorted(ex)}} for cidr, ex in chart.PRIVATE.items()]
+        faults = chart.check_network(signalling({"to": public}), SIGNAL)
+        self.assertIn("web: its egress admits public on TCP/3480, which the flow table does not name", faults)
+
+    def test_a_block_wider_than_the_nodes_fails(self) -> None:
+        faults = chart.check_network(signalling({"to": [{"ipBlock": {"cidr": "192.0.0.0/8"}}]}), SIGNAL)
+        self.assertIn("web: its egress admits ipBlock 192.0.0.0/8 on TCP/3480, which the flow table does not name", faults)
+
+    def test_the_table_names_each_block_of_the_nodes(self) -> None:
+        table = chart.flows_table({"web", "relay"}, acme=False, external=False, nodes=chart.NODE_CIDRS)
+        ports = {f for f in table if f[3] == "TCP/3480"}
+        self.assertEqual(ports, {("web", "egress", f"ipBlock {c}", "TCP/3480") for c in chart.NODE_CIDRS})
+
+    def test_the_refusals_name_no_block_and_each_whole_family(self) -> None:
+        self.assertIn([], chart.NODE_REFUSALS)
+        self.assertIn(["0.0.0.0/0"], chart.NODE_REFUSALS)
+        self.assertIn(["::/0"], chart.NODE_REFUSALS)
+
+
+class NodesTest(unittest.TestCase):
+    def test_a_node_inside_the_blocks_holds(self) -> None:
+        self.assertEqual(chart.nodes_outside(["172.16.0.0/12"], ["172.18.0.2"]), [])
+
+    def test_a_node_outside_the_blocks_fails(self) -> None:
+        self.assertEqual(
+            chart.nodes_outside(["172.16.0.0/12"], ["192.168.49.2"]),
+            ["node address 192.168.49.2 lies outside networkPolicy.nodeCidrs ['172.16.0.0/12']"],
+        )
+
+    def test_a_cluster_with_no_node_address_fails(self) -> None:
+        self.assertEqual(chart.nodes_outside(["172.16.0.0/12"], []), ["the cluster lists no address of a node"])
+
+    def test_the_test_values_name_a_block_of_nodes(self) -> None:
+        values = chart.yaml.safe_load(chart.TEST_VALUES.read_text())
+        self.assertTrue(values["networkPolicy"]["nodeCidrs"])
 
 
 class ProbeTest(unittest.TestCase):

@@ -178,8 +178,8 @@ jobs:
       # What the chart deploys: no root, no capability, no secret in a value,
       # the SFU on the network of its node, the store images of the compose
       # file, the flow table of the NetworkPolicies, and a release that pins
-      # each image by digest (`SRV-308`, `SRV-351`, `CALL-141`). The runner
-      # image ships Helm and PyYAML.
+      # each image by digest (`SRV-308`, `SRV-351`, `SRV-361`, `SRV-362`,
+      # `CALL-141`). The runner image ships Helm and PyYAML.
       - run: just chart-check
       # Where each released image comes from: each job that pushes one attests
       # its digest and alone holds the signing token, and the chart test of a
