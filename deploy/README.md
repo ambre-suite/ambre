@@ -98,14 +98,23 @@ directory: name it here.
 ## The link key of a thread
 
 The relay signs a receipt of each thread link under `THREAD_LINK_SEED`, and the client refuses to
-erase a thread under a receipt that its pinned key verifies (`SYNC-330`). `setup.sh` draws the seed
-and writes its public half as `THREAD_LINK_KEY`. The client of `web` pins that key when it is built,
-and the relay refuses to start under a seed of another key (`SRV-364`). A client that pins no key
-names no thread, so keep the pair together.
+erase a thread under a receipt that its link key verifies (`SYNC-330`). `setup.sh` draws the seed
+and writes its public half as `THREAD_LINK_KEY`. The relay refuses to start under a seed of
+another key (`SRV-364`).
+
+The web image pins no key: its client holds an empty link key slot (`ZK-057`). At each start, the
+one-shot service `web-files` copies the client into the volume `webfiles`. The one-shot service
+`link-key`, of the init image, then writes `THREAD_LINK_KEY` into that copy, and `web` serves it
+(`SRV-392`). The patch refuses an empty key, a malformed key and the development key, and `web`
+then never starts: `docker compose logs link-key` says why. A client with an empty slot names no
+thread, so keep the pair together.
 
 An `.env` written before the link key lacks both values, and `docker compose` then stops. Draw a
-pair as `setup.sh` does, add both lines, and run `docker compose up -d --build`: the client must be
-built again for the new key.
+pair as `setup.sh` does, add both lines, and run `docker compose up -d`. A new key needs no new
+build: the next start patches it. Every receipt signed under the older key then counts as none.
+
+To check the served client against the release manifest, set its key bytes to zero first with
+`python3 scripts/link_key.py zero <file> <file>` (`ZK-091`).
 
 ## Web embeds
 

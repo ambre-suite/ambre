@@ -171,7 +171,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-327` | `FAIL` | Given a removal on the log of a channel's `meta` that holds no present owner, as a direct message holds, the census MUST take an erasure of a hidden thread that a present writer of that log signed for that channel, and that writer's client MUST sign and post it as an owner's does (`SYNC-323`). A log that holds a present owner MUST take no erasure of another member. | this spec section 3; `SYNC-322`, `SYNC-323`, `SRV-349`, `SRV-175` | `ambre_sync::sharing::tests::a_writer_of_a_direct_message_erases_a_hidden_thread` -- under the log a direct message posts, the leaver posts its own erasure when the relay lists none, one by a key the log holds as no writer, or one under a forged signature, another writer's held erasure posts nothing, a stranger to the log and an editor of a log that holds an owner post nothing and fail, and an answer that names another thread fails the removal | none | verified |
 | `SYNC-329` | `FAIL` | Given a removal on the log of a channel's `meta` whose listing leaves out a thread that a valid revoke of that log caps, the census MUST fail the removal before it posts, and MUST take no erasure of that thread, held or its own. | this spec section 3; `SYNC-322`, `SYNC-323`, `SYNC-311`; `ambre-spec-server.md`, `SRV-358` | `ambre_sync::sharing::tests::a_thread_a_signed_revoke_caps_takes_no_erasure` -- under a log whose revoke caps a thread, a listing that hides it fails the census with a held erasure of the owner and with none, and reads or posts no erasure, while a thread no revoke caps still takes the owner's erasure | none | verified |
 | `SYNC-330` | `FAIL` | Given a removal on the log of a channel's `meta` whose listing leaves out a thread under a link receipt that counts (`SYNC-331`), the census MUST fail the removal before any request, and MUST take no erasure of that thread, held or its own. | this spec section 3; `SYNC-322`, `SYNC-329`; `ambre-spec-sequencer.md`, `SRV-363`; `5-Murmure/features/ambre-spec-murmure-threads.md`, `MURMURE-734` | `ambre_sync::sharing::tests::a_thread_under_a_link_receipt_takes_no_erasure` -- under a receipt of the relay, a listing that hides the thread fails the census with a held erasure of the owner and with none, and no request leaves | none | verified |
-| `SYNC-331` | `FAIL` | Given a link receipt that the link key this build pins did not sign over that channel and that thread, the census MUST count it as no receipt. | this spec section 3; `SYNC-330`; `ambre-spec-sequencer.md`, `SRV-363` | `ambre_sync::sharing::tests::a_thread_under_a_link_receipt_takes_no_erasure` -- a receipt over another channel, of another thread, or by another key proves nothing, and the owner erases the thread as before | none | verified |
+| `SYNC-331` | `FAIL` | Given a link receipt that the link key of this client did not sign over that channel and that thread, the census MUST count it as no receipt. | this spec section 3; `SYNC-330`; `ambre-spec-sequencer.md`, `SRV-363` | `ambre_sync::sharing::tests::a_thread_under_a_link_receipt_takes_no_erasure` -- a receipt over another channel, of another thread, or by another key proves nothing, and the owner erases the thread as before | none | verified |
 | `SYNC-332` | `FAIL` | Given a thread registration whose answer carries no link receipt that counts (`SYNC-331`), the client MUST write no `thread` field on its root. | this spec section 3; `SYNC-330`, `SYNC-331`; `ambre-spec-sequencer.md`, `SRV-363` | `ambre_sync::sharing::tests::a_link_under_no_receipt_that_counts_names_no_thread` -- an answer with no receipt, a receipt that is no signature, one over another thread or another channel, or one by another key fails the link, and a lost registration deletes its own document first; `ambre_sync::sharing::tests::a_lost_registration_deletes_the_thread_it_created` -- a receipt of the link key passes through to the root | none | verified |
 | `SYNC-333` | `FAIL` | Given a root whose `thread` field holds no link receipt that counts, a client that replies in that thread MUST first write beside the field a receipt that counts. | this spec section 3; `SYNC-330`, `SYNC-332`; `5-Murmure/features/ambre-spec-murmure-threads.md`, `MURMURE-733` | not built | unbuilt -- lands with the `A thread named with no receipt that counts gets one` Story (`ambre-roadmap.md` V1) | unimplemented |
 | `SYNC-303` | `FAIL` | Given a document of a Murmure channel that applied a delta past the cap of a revoke, the client MUST end the whole channel, erase the local copy of each of its documents and open the channel again. | this spec section 3; `SYNC-300`, `SYNC-233` | `ambre_logic::channels::tests::a_channel_read_again_drops_each_copy_and_opens_anew` -- each document closes in Sync and leaves the store, the channel then asks the relay again, and a document no channel holds reads nothing | none | verified |
@@ -749,16 +749,18 @@ the thread (`SRV-363`). The link writes it sealed beside the `thread` field, in 
 The relay cannot take back a receipt it signed. So a hidden thread whose receipt counts was linked,
 and no erasure covers it, held or new (`SYNC-330`). The census fails the removal before any request.
 
-A receipt counts under the link key this build pins, over that channel and that thread alone
-(`SYNC-331`). A release build names the key when it is built, and the relay holds its seed. A
-development build pins the key of a public seed, which a development relay signs under. Any other
-build pins none, so no receipt counts there, and an erasure works as before. A member cannot forge
+A receipt counts under the link key of this client, over that channel and that thread alone
+(`SYNC-331`). The install writes that key into the link key slot of the client, and its relay holds
+the seed (`ambre-spec-zero-knowledge.md`, `ZK-090`). A development build with an empty slot takes
+the key of a public seed, which a development relay signs under. Any other client with an empty
+slot holds no key, so no receipt counts there, and an erasure works as before. A member cannot forge
 a receipt, so a phantom thread still takes the erasure.
 
 **A link under no receipt names no thread.** A relay hostile at the link could answer it with no
 receipt, then hide the thread and get it erased. So a client names a thread only under a receipt
 that counts (`SYNC-332`). It fails the link otherwise, and the relay gains nothing by withholding
-the receipt. A release build pins one key and never the development key (`ZK-057`).
+the receipt. A release publishes the slot empty (`ZK-057`), and the patch of an install refuses
+the development key (`ambre-spec-server.md`, `SRV-366`).
 
 **A direct message has no owner, so each writer erases.** The log of a direct message invites each
 member as an editor, then lowers its creator to editor (`SRV-175`). Nobody can sign as an owner
@@ -877,7 +879,7 @@ authority: the role here hides what the relay would refuse anyway.
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 | A link receipt the relay signs proves a thread | a link entry the first replier signs into the root | any member can sign such an entry for a thread the relay never linked. A phantom would then fail every removal, and its author could never be removed. Only the relay can tell what it linked |
 | A link receipt the relay signs proves a thread | a link entry signed into the `meta` | the relay could serve the root that names the thread and withhold the delta of the `meta`. The receipt rides in the delta that names the thread, so a census that reads the name holds the proof |
-| The build pins the link key | the relay serves its key, kept on first use | the relay could serve a key to the linker and another to the eraser. The eraser would then hold no receipt that counts, and would erase |
+| The client files carry the link key, which the install patches | the relay serves its key, kept on first use | the relay could serve a key to the linker and another to the eraser. The eraser would then hold no receipt that counts, and would erase. A key in the files is a key a reader checks against the manifest (`ZK-091`) |
 | A link under no receipt that counts fails | the client links and writes the field with no receipt | a relay hostile at the link withholds the receipt, then hides the thread and gets it erased. The receipt would then hold only against a relay that turns after the link |
 | A hidden thread with no receipt that counts takes the erasure | the census counts such a thread as linked when this client read content of it | a member can seal content into a document it owns and name it with no link. Every removal would then fail, its author's own included |
 | The census checks the receipt | the check of the Murmure engine verifies it on each delta | the Logic thread would link the signature code and the pinned key. A receipt that does not count harms nothing: the census treats the thread as if it had none |
@@ -926,11 +928,10 @@ authority: the role here hides what the relay would refuse anyway.
   code of its own, under no receipt or a false one, leaves the thread with no proof. No later
   writer can add one (`MURMURE-733`), so a relay that hides that thread gets it erased. The same
   holds for a field written before `SYNC-332`. `SYNC-333` binds the fix.
-* **A published client pins the link key of one deployment.** A release pins its key at build
-  time (`ZK-057`). Its client counts the receipts of the relay that holds the seed of that key
-  alone. A deployment with a seed of its own builds its own client, as one with its own issuer
-  does. The relay checks its seed against the key its deployment names (`SRV-364`), never
-  against the client it serves.
+* **A client counts the receipts of one link key.** Each install patches the key of its relay
+  into the client (`ambre-spec-server.md`, `SRV-365`). A new key is a new patch and a restart,
+  and every receipt signed under the older key then counts as none. The relay checks its seed
+  against the key its deployment names (`SRV-364`), and the patch writes that same key.
 * **A removal opens each segment of the channel twice.** The Logic thread reads it for its threads,
   then the census opens it again for its clocks (`SYNC-312`). The read opens one document at a
   time, so its wait grows with the history of the channel.

@@ -95,37 +95,37 @@ spec:
         checksum/caddyfile: {{ printf "%s%s%s" $domain $tls (toJson .Values.garage.enabled) | sha256sum }}
     spec:
       {{- include "ambre.podSecurity" (dict "uid" 1000) | nindent 6 }}
-      # The client counts the receipts of the one link key its build pins
-      # (`ZK-057`), and the relay signs under the seed of `thread-link-key`
-      # (`SRV-364`). Under another key, the pod stops here and names both
-      # (`SRV-365`). An image with no pinned key stops too.
+      # The web image serves a client whose link key slot is empty (`ZK-057`).
+      # The first init container copies its files into `site`. The second, of
+      # the init image that alone carries the patch, writes the
+      # `thread-link-key` of the Secret into the slot of that copy (`SRV-365`).
+      # The relay signs under the seed of that key (`SRV-364`). No key, a
+      # malformed key or the development key stops the pod here (`SRV-391`).
       initContainers:
-        - name: link-key
+        - name: web-files
           image: {{ include "ambre.image" $c }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           {{- include "ambre.containerSecurity" . | nindent 10 }}
-          env:
-            {{- include "ambre.secretEnv" (dict "root" . "name" "THREAD_LINK_KEY" "key" "thread-link-key") | nindent 12 }}
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -eu
-              file=/etc/ambre/thread-link-key
-              if [ ! -s "$file" ]; then
-                echo "link key: the web image pins no key in $file; build it from deploy/Dockerfile" >&2
-                exit 1
-              fi
-              pinned=$(tr -d '[:space:]' < "$file" | tr 'A-F' 'a-f')
-              named=$(printf '%s' "$THREAD_LINK_KEY" | tr -d '[:space:]' | tr 'A-F' 'a-f')
-              if [ "${#pinned}" -ne 64 ] || [ "$pinned" != "$named" ]; then
-                echo "link key: the client pins $pinned, and thread-link-key of the Secret names $named; build the web image with --build-arg AMBRE_THREAD_LINK_KEY=$named" >&2
-                exit 1
-              fi
-              echo "link key: the client pins $pinned, the key of thread-link-key"
+          command: ["/bin/sh", "-c", "cp -R /srv/ambre/. /site/"]
           {{- with .Values.web.resources }}
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
+          volumeMounts:
+            - name: site
+              mountPath: /site
+        - name: link-key
+          image: {{ include "ambre.image" (dict "root" . "component" "init") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          command: ["python3", "/opt/ambre/link_key.py", "patch", "/site"]
+          env:
+            {{- include "ambre.secretEnv" (dict "root" . "name" "THREAD_LINK_KEY" "key" "thread-link-key") | nindent 12 }}
+          {{- with .Values.web.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: site
+              mountPath: /site
       containers:
         - name: web
           image: {{ include "ambre.image" $c }}
@@ -144,6 +144,9 @@ spec:
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
+            - name: site
+              mountPath: /srv/ambre
+              readOnly: true
             - name: caddyfile
               mountPath: /etc/caddy/Caddyfile
               subPath: Caddyfile
@@ -155,6 +158,8 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: site
+          emptyDir: {}
         - name: caddyfile
           configMap:
             name: {{ include "ambre.name" $c }}

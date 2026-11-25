@@ -32,7 +32,7 @@ pub fn erasure_transcript(channel_id: Id<Channel>, thread: Id<Document>) -> Sign
 pub const LINK_DOMAIN: &[u8] = b"ambre-thread-link-v1";
 
 /// The public half of the link key a development relay signs under, from a
-/// seed of `0x4c` bytes that anyone knows. Only a development build pins it:
+/// seed of `0x4c` bytes that anyone knows. Only a development build takes it:
 /// a member could forge a receipt under it (`SYNC-331`).
 pub const DEV_LINK_KEY: FixedBytes<PublicKey> = FixedBytes::from_array([
     0x92, 0x73, 0x08, 0xf5, 0x3d, 0x67, 0x65, 0x50, 0x3d, 0x2b, 0x64, 0xc1, 0x03, 0xab, 0x5a, 0xa4,

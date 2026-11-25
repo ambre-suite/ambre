@@ -963,7 +963,6 @@ ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as Partial
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <[u8;N] as ByteArray>::LEN | const | usize	generic	the width of a byte array, read only as the length of the role's array and of its tuple
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::as_slice() | ret | &[u8]	newtype-inner	FixedBytes newtype, its bytes borrowed
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_hex(text) | param | &str	newtype-inner	FixedBytes's own hex spelling, read back
-ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_hex_const(text) | param | &str	newtype-inner	FixedBytes's own hex spelling, read back in a const context, as a build constant names a key
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_slice(bytes) | param | &[u8]	newtype-inner	FixedBytes newtype, from bytes of its width
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::push_to(out) | param | &mut Vec<u8>	generic	the buffer of a layout that frames the value among fields of any type
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from() | ret | Option<(Self,&[u8])>	generic	the bytes of the layout after the value, which the caller reads next
@@ -5124,3 +5123,7 @@ ambre-murmure | src/logic/delta.rs | crate::logic::delta | receipt_set() | ret |
 ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | LINK_DOMAIN | const | &[u8]	generic	domain-separation tag of the link receipt transcript
 ambre-sync | src/erasure.rs | crate::erasure | holds() | ret | bool	generic	predicate answer: whether a signature verifies, selects no mode
 ambre-sync | src/erasure.rs | crate::erasure | linked() | ret | bool	generic	predicate answer: whether a link receipt proves the thread, selects no mode
+ambre-sync | src/erasure.rs | crate::erasure | linked_under() | ret | bool	generic	predicate answer: whether a key signed a receipt of the thread, selects no mode
+ambre-sync | src/erasure.rs | crate::erasure | LINK_KEY_SLOT_MARKER | const | [u8;16]	foreign-api	the bytes the patch of scripts/link_key.py searches the wasm for; a FixedBytes guarantees no byte layout
+ambre-sync | src/erasure.rs | crate::erasure | LinkKeySlot.marker | field | [u8;16]	foreign-api	the marker in the repr(C) layout the patch of scripts/link_key.py reads in the wasm; no code reads it
+ambre-sync | src/erasure.rs | crate::erasure | LinkKeySlot.key | field | [AtomicU8;32]	foreign-api	the std atomic, so no optimisation folds the bytes a patch writes; key() types them as FixedBytes<PublicKey>

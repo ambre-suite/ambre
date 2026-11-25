@@ -30,8 +30,9 @@ openssl genpkey -algorithm ed25519 -outform DER -out "$key" 2>/dev/null
 admission_seed=$(tail -c 32 "$key" | tohex)
 admission_key=$(openssl pkey -inform DER -in "$key" -pubout -outform DER | tail -c 32 | tohex)
 # The link key of a thread: the relay signs each link with the seed, and the
-# client build pins the public key (`ZK-057`, `SRV-364`). A stack that already
-# drew the pair, as the chart test does, passes both in the environment.
+# web pod writes the public key into the client (`SRV-364`, `SRV-365`). A
+# stack that already drew the pair, as the chart test does, passes both in
+# the environment.
 if [ -n "${THREAD_LINK_SEED:-}" ] && [ -n "${THREAD_LINK_KEY:-}" ]; then
     link_seed=$THREAD_LINK_SEED
     link_key=$THREAD_LINK_KEY
@@ -40,7 +41,7 @@ else
     link_seed=$(tail -c 32 "$key" | tohex)
     link_key=$(openssl pkey -inform DER -in "$key" -pubout -outform DER | tail -c 32 | tohex)
 fi
-echo "secret.sh: the client of this deployment must pin AMBRE_THREAD_LINK_KEY=$link_key" >&2
+echo "secret.sh: the web pod writes the link key $link_key into the client" >&2
 
 cat <<YAML
 apiVersion: v1

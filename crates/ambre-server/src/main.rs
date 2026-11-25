@@ -186,9 +186,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("CALL_ADMISSION_SEED must be set (64 hex chars) outside DEV_MODE".into());
         }
     };
-    // The link key signs the receipt of each thread link, which a client
-    // build pins (`SRV-363`). A development relay signs under the public dev
-    // seed, which only a development client pins.
+    // The link key signs the receipt of each thread link, and the client
+    // holds its public half in its slot (`SRV-363`, `ZK-090`). A development
+    // relay signs under the public dev seed, which only a development client
+    // takes.
     let link_seed = match jwt::JwtSeed::link_from_env()
         .map_err(|_| "THREAD_LINK_SEED must be 32 bytes in hex (64 hex chars)")?
     {

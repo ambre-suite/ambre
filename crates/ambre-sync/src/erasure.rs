@@ -18,6 +18,7 @@
 //! take back (`SYNC-330`).
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use ambre_bus::LinkReceipt;
 use ambre_core::id::{Channel, Document, Id};
@@ -108,45 +109,80 @@ fn verifies(channel_id: Id<Channel>, erasure: &ErasureEntry) -> bool {
     holds(&erasure.signer, &transcript, &erasure.signature)
 }
 
-/// The link key a build names in `AMBRE_THREAD_LINK_KEY`, read as the crate
-/// compiles (`ZK-057`). An empty name names none, as a build argument left
-/// empty does. A name that spells no key fails the build, and so does
-/// the development key, under which any member forges a receipt. Each panic
-/// runs in the compiler alone: a const item never evaluates at run time.
-const NAMED_LINK_KEY: Option<FixedBytes<PublicKey>> = match option_env!("AMBRE_THREAD_LINK_KEY") {
-    None => None,
-    Some(text) if text.is_empty() => None,
-    Some(text) => {
-        let Some(key) = FixedBytes::<PublicKey>::from_hex_const(text) else {
-            panic!("AMBRE_THREAD_LINK_KEY must name 32 bytes in 64 hex digits");
-        };
-        let (mut named, mut dev): (&[u8], &[u8]) = (
-            key.as_array(),
-            ambre_protocol::thread_erasure::DEV_LINK_KEY.as_array(),
-        );
-        let mut same = true;
-        while let ([one, named_rest @ ..], [other, dev_rest @ ..]) = (named, dev) {
-            same &= *one == *other;
-            (named, dev) = (named_rest, dev_rest);
-        }
-        assert!(
-            !same,
-            "AMBRE_THREAD_LINK_KEY names the development link key"
-        );
-        Some(key)
-    }
-};
+/// The 16 bytes that open the link key slot of the Sync worker. The patch of
+/// an install finds them once in the wasm, and writes its key in the 32 bytes
+/// after them (`ZK-090`, `scripts/link_key.py`). Random bytes, so no other
+/// data of the build spells them.
+const LINK_KEY_SLOT_MARKER: [u8; 16] = [
+    0x46, 0x11, 0x76, 0xfb, 0x8d, 0x6a, 0xaf, 0xeb, 0x98, 0x92, 0x88, 0x04, 0x0c, 0x45, 0x91, 0xf9,
+];
 
-/// The link key this build pins (`SYNC-331`). A release build names it at
-/// build time (`ZK-057`). A development build or a test pins the key of the
-/// public dev seed. Any other build pins none, so no receipt proves a link.
-fn link_key() -> Option<FixedBytes<PublicKey>> {
-    match NAMED_LINK_KEY {
-        Some(key) => Some(key),
-        None if cfg!(any(test, feature = "dev-login")) => {
-            Some(ambre_protocol::thread_erasure::DEV_LINK_KEY)
+/// The link key slot: the marker, then the 32 bytes of the key, in this order
+/// and with no padding. A release publishes the key bytes as zeros, which
+/// name no key (`ZK-057`). The key bytes are atomics, so the compiler holds
+/// the global as mutable. No optimisation then folds the zeros of the build
+/// into the code that reads them, and a patch of the bytes takes effect.
+#[repr(C)]
+struct LinkKeySlot {
+    marker: [u8; 16],
+    key: [AtomicU8; 32],
+}
+
+impl LinkKeySlot {
+    /// The slot as a build writes it: the marker, and no key.
+    const fn empty() -> Self {
+        Self {
+            marker: LINK_KEY_SLOT_MARKER,
+            key: [const { AtomicU8::new(0) }; 32],
         }
-        None => None,
+    }
+
+    /// The key the slot holds, or `None` when its 32 bytes are zero.
+    fn key(&self) -> Option<FixedBytes<PublicKey>> {
+        let bytes = self.key.each_ref().map(|b| b.load(Ordering::Relaxed));
+        (bytes != [0; 32]).then(|| FixedBytes::from_array(bytes))
+    }
+}
+
+/// The one link key slot of the build. `#[used]` keeps the static whole in
+/// the data of the wasm, so the marker stays beside the key bytes it opens.
+#[used]
+static LINK_KEY_SLOT: LinkKeySlot = LinkKeySlot::empty();
+
+/// The link key this client counts receipts under (`SYNC-331`): the key the
+/// install patched into its slot (`ZK-090`). A development build or a test
+/// whose slot is empty takes the key of the public dev seed. Any other build
+/// with an empty slot takes none, so no receipt proves a link, and the client
+/// names no thread (`SYNC-332`).
+fn link_key() -> Option<FixedBytes<PublicKey>> {
+    let empty = if cfg!(any(test, feature = "dev-login")) {
+        EmptySlot::TakesDevKey
+    } else {
+        EmptySlot::NamesNoKey
+    };
+    key_of(&LINK_KEY_SLOT, empty)
+}
+
+/// What an empty slot gives.
+#[derive(Clone, Copy)]
+enum EmptySlot {
+    /// No key: a release the install did not patch.
+    NamesNoKey,
+    /// The key of the public dev seed: a development build or a test.
+    TakesDevKey,
+}
+
+/// The key `slot` gives, or what `empty` gives when it holds none.
+fn key_of(slot: &LinkKeySlot, empty: EmptySlot) -> Option<FixedBytes<PublicKey>> {
+    match (slot.key(), empty) {
+        (Some(key), _) => Some(key),
+        (None, EmptySlot::TakesDevKey) => Some(ambre_protocol::thread_erasure::DEV_LINK_KEY),
+        (None, EmptySlot::NamesNoKey) => {
+            crate::log::warning!(
+                "[Sync] this client holds no thread link key: the install patched none into its slot (ZK-090)"
+            );
+            None
+        }
     }
 }
 
@@ -158,13 +194,24 @@ pub(crate) fn linked(
     thread: Id<Document>,
     receipts: &[LinkReceipt],
 ) -> bool {
-    let Some(key) = link_key() else {
+    linked_under(link_key().as_ref(), channel_id, thread, receipts)
+}
+
+/// Whether `key` signed a receipt of `receipts` over `thread` in
+/// `channel_id`. No key proves no link (`ZK-090`).
+fn linked_under(
+    key: Option<&FixedBytes<PublicKey>>,
+    channel_id: Id<Channel>,
+    thread: Id<Document>,
+    receipts: &[LinkReceipt],
+) -> bool {
+    let Some(key) = key else {
         return false;
     };
     let transcript = ambre_protocol::thread_erasure::link_transcript(channel_id, thread);
     receipts
         .iter()
-        .any(|r| r.thread == thread && holds(&key, &transcript, &r.signature))
+        .any(|r| r.thread == thread && holds(key, &transcript, &r.signature))
 }
 
 /// The threads of `hidden` that no erasure covers. An erasure covers a
@@ -282,6 +329,55 @@ mod tests {
             signer: by.public(),
             signature: sign_erasure(by, channel_id, thread),
         }
+    }
+
+    /// `ZK-090`: the slot lays out the marker, then the 32 key bytes, with no
+    /// padding. The patch of an install searches for that layout.
+    #[test]
+    fn the_link_key_slot_is_the_marker_then_32_key_bytes() {
+        assert_eq!(core::mem::size_of::<LinkKeySlot>(), 48);
+        assert_eq!(core::mem::offset_of!(LinkKeySlot, marker), 0);
+        assert_eq!(core::mem::offset_of!(LinkKeySlot, key), 16);
+        assert_eq!(LINK_KEY_SLOT.marker, LINK_KEY_SLOT_MARKER);
+    }
+
+    /// `ZK-090`: an empty slot names no key outside a development build, and
+    /// the key a patch writes is the key the client counts receipts under.
+    #[test]
+    fn a_patched_slot_gives_its_key_and_an_empty_one_none() {
+        let slot = LinkKeySlot::empty();
+        assert_eq!(key_of(&slot, EmptySlot::NamesNoKey), None);
+        assert_eq!(
+            key_of(&slot, EmptySlot::TakesDevKey),
+            Some(ambre_protocol::thread_erasure::DEV_LINK_KEY)
+        );
+        let named = [0x5a; 32];
+        for (byte, value) in slot.key.iter().zip(named) {
+            byte.store(value, Ordering::Relaxed);
+        }
+        let key = Some(FixedBytes::<PublicKey>::from_array(named));
+        assert_eq!(key_of(&slot, EmptySlot::NamesNoKey), key);
+        assert_eq!(key_of(&slot, EmptySlot::TakesDevKey), key);
+    }
+
+    /// `ZK-090`: a client whose slot is empty counts no receipt, even one the
+    /// key of the public dev seed signed, which a dev build counts.
+    #[test]
+    fn an_empty_slot_counts_no_receipt() {
+        let (channel_id, thread) = (Id::<Channel>::mint(), Id::<Document>::mint());
+        let relay = ed25519_dalek::SigningKey::from_bytes(&[0x4c; 32]);
+        let transcript = ambre_protocol::thread_erasure::link_transcript(channel_id, thread);
+        let receipt = LinkReceipt {
+            thread,
+            signature: FixedBytes::from_array(
+                ed25519_dalek::Signer::sign(&relay, transcript.as_bytes()).to_bytes(),
+            ),
+        };
+        let empty = LinkKeySlot::empty();
+        let dev = key_of(&empty, EmptySlot::TakesDevKey);
+        assert!(linked_under(dev.as_ref(), channel_id, thread, &[receipt]));
+        let none = key_of(&empty, EmptySlot::NamesNoKey);
+        assert!(!linked_under(none.as_ref(), channel_id, thread, &[receipt]));
     }
 
     /// `SYNC-322`: a hidden thread passes under an erasure an owner signed for
