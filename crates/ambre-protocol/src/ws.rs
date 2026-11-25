@@ -321,8 +321,12 @@ impl ambre_core::PayloadKind for WireFrame {
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
 pub fn encode_client_msg(msg: &WsClientMsg) -> Payload<WireFrame> {
-    let buf = vec![CURRENT_VERSION.get()];
-    Payload::new(postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg"))
+    // A tuple is its fields back to back and a `u8` is its one byte, so
+    // the frame is the version byte, then the message. The `Vec` writer is
+    // the one the rest of the worker links (`SYNC-xxx`).
+    Payload::new(
+        postcard::to_allocvec(&(CURRENT_VERSION.get(), msg)).expect("postcard encode WsClientMsg"),
+    )
 }
 
 /// Decode a client message from the wire.
@@ -354,8 +358,12 @@ pub fn decode_client_msg(frame: &Payload<WireFrame>) -> Result<WsClientMsg, Wire
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
 pub fn encode_server_msg(msg: &WsServerMsg) -> Payload<WireFrame> {
-    let buf = vec![CURRENT_VERSION.get()];
-    Payload::new(postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg"))
+    // A tuple is its fields back to back and a `u8` is its one byte, so
+    // the frame is the version byte, then the message. The `Vec` writer is
+    // the one the rest of the worker links (`SYNC-xxx`).
+    Payload::new(
+        postcard::to_allocvec(&(CURRENT_VERSION.get(), msg)).expect("postcard encode WsServerMsg"),
+    )
 }
 
 /// Decode a server message from the wire.

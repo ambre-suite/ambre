@@ -29,9 +29,6 @@ testing = []
 fixed-hash-key = []
 
 [dependencies]
-# The sealed bytes of `encoded` travel as URL-safe base64, decoded when the
-# body is read so a malformed one is refused there (`SRV-178`).
-base64 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 # The ciphertext of the envelope (`envelope`) keeps the wire form
 # `ambre-protocol` gave it: a length-prefixed byte string, not a sequence of
@@ -60,6 +57,9 @@ foldhash  = { workspace = true }
 getrandom = { workspace = true }
 
 [dev-dependencies]
+# The base64 codec of `src/base64.rs` writes and refuses as this crate does,
+# held by a property test. The crate stays out of every shipped build.
+base64 = { workspace = true }
 # The properties of the zoom engine (`src/zoom.rs`, `ambre-spec-zoom.md`).
 proptest = { workspace = true }
 postcard = { workspace = true }

@@ -113,7 +113,7 @@ impl<'de, D: Deserializer<'de>> Deserializer<'de> for Objects<D> {
         _fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, D::Error> {
-        self.0.deserialize_map(Objects(visitor))
+        self.0.deserialize_map(Struct(visitor))
     }
 
     fn deserialize_enum<V: Visitor<'de>>(
@@ -258,7 +258,90 @@ impl<'de, V: Visitor<'de>> DeserializeSeed<'de> for StructBody<V> {
     type Value = V::Value;
 
     fn deserialize<D: Deserializer<'de>>(self, value: D) -> Result<V::Value, D::Error> {
-        value.deserialize_map(Objects(self.0))
+        value.deserialize_map(Struct(self.0))
+    }
+}
+
+/// The visitor of a struct, which `serde_json` hands the map of its fields.
+struct Struct<V>(V);
+
+impl<'de, V: Visitor<'de>> Visitor<'de> for Struct<V> {
+    type Value = V::Value;
+
+    fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.expecting(f)
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<V::Value, A::Error> {
+        self.0.visit_map(Fields {
+            map,
+            name: String::new(),
+        })
+    }
+}
+
+/// The map of the fields of one struct.
+///
+/// A field name is a JSON string. The access reads it into `name` through one
+/// read of a string, then hands the text to the field visitor of the struct. The key read of `serde_json` is then built once, not once per
+/// struct, and the fields of one struct share one buffer.
+struct Fields<A> {
+    map: A,
+    name: String,
+}
+
+impl<'de, A: de::MapAccess<'de>> Fields<A> {
+    /// Reads the name of the next field into `name`. `false` past the last
+    /// field. It stays out of line, so the structs share one copy.
+    #[inline(never)]
+    fn next_name(&mut self) -> Result<bool, A::Error> {
+        self.map
+            .next_key_seed(NameInto(&mut self.name))
+            .map(|read| read.is_some())
+    }
+}
+
+impl<'de, A: de::MapAccess<'de>> de::MapAccess<'de> for Fields<A> {
+    type Error = A::Error;
+
+    fn next_key_seed<S: DeserializeSeed<'de>>(
+        &mut self,
+        seed: S,
+    ) -> Result<Option<S::Value>, A::Error> {
+        if !self.next_name()? {
+            return Ok(None);
+        }
+        seed.deserialize(de::value::StrDeserializer::<A::Error>::new(&self.name))
+            .map(Some)
+    }
+
+    fn next_value_seed<S: DeserializeSeed<'de>>(&mut self, seed: S) -> Result<S::Value, A::Error> {
+        self.map.next_value_seed(Objects(seed))
+    }
+}
+
+/// The read of one field name into the buffer of its struct.
+struct NameInto<'a>(&'a mut String);
+
+impl<'de> DeserializeSeed<'de> for NameInto<'_> {
+    type Value = ();
+
+    fn deserialize<D: Deserializer<'de>>(self, value: D) -> Result<(), D::Error> {
+        value.deserialize_str(self)
+    }
+}
+
+impl<'de> Visitor<'de> for NameInto<'_> {
+    type Value = ();
+
+    fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("a field name")
+    }
+
+    fn visit_str<E: de::Error>(self, name: &str) -> Result<(), E> {
+        self.0.clear();
+        self.0.push_str(name);
+        Ok(())
     }
 }
 
@@ -424,5 +507,24 @@ mod tests {
         let ours = from_slice::<Name>(br#""x" y"#).expect_err("trailing characters");
         let theirs = serde_json::from_slice::<Name>(br#""x" y"#).expect_err("trailing characters");
         assert_eq!(ours.to_string(), theirs.to_string());
+    }
+
+    /// Each body reads, or fails, as `serde_json` reads it: a field name with
+    /// an escape, an unknown field, a repeated field, a wrong type.
+    #[test]
+    fn a_field_name_reads_as_serde_json_reads_it() {
+        let bodies: [&[u8]; 6] = [
+            br#"{"name":"a","n":1,"flag":true}"#,
+            br#"{"na\u006de":"a","\u006e":1,"flag":true}"#,
+            br#"{"name":"a","n":1,"flag":true,"other":[1,{"x":2}]}"#,
+            br#"{"name":"a","name":"b","n":1,"flag":true}"#,
+            br#"{"name":"a","n":"1","flag":true}"#,
+            br#"{"name":"a","n":1}"#,
+        ];
+        for body in bodies {
+            let ours = from_slice::<Leaf>(body).map_err(|e| e.to_string());
+            let theirs = serde_json::from_slice::<Leaf>(body).map_err(|e| e.to_string());
+            assert_eq!(ours, theirs, "{}", String::from_utf8_lossy(body));
+        }
     }
 }
