@@ -77,6 +77,10 @@ lint-wasm:
     # of the visual system, which no release carries.
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --lib --tests --features ambre-app/dev-login,ambre-app/chrome-gallery
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
+    # The canvas tests run on the host, but their `cfg` gates name the wasm
+    # target. This line compiles them for wasm, so a gate that drops a helper
+    # the tests still call fails here, and not on the next wasm test run.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-canvas --all-targets
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over
