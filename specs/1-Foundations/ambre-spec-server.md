@@ -58,6 +58,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-308` | `INV` | A release MUST publish the relay, the SFU and the client as container images, each named by its digest. | this spec section 3 | ci-gate -- `scripts/chart.py`, run by `just chart-check` in the CI `lint` job, reads `.github/workflows/release.yml`. It refuses a release that builds no relay, SFU or client image, pushes none, or pushes a chart before it pins each digest and checks the pinned chart, under which every image of Ambre names a digest. The tests of `scripts/test_chart.py` plant each one | none | verified |
 | `SRV-309` | `INV` | The chart of the repository MUST deploy a stack against which the browser tier passes on a local Kubernetes cluster. | this spec section 3; `SRV-308` | `ambre_belt::prose::tests::the_self_hosted_stack_serves_two_members_one_document` -- browser tier, through the web server on port 443 of the stack that `just chart-test` deploys from `deploy/chart/` on a kind cluster, in the CI `selfhost` job: the page is cross-origin isolated, and two members edit one document; ci-gate -- `scripts/chart.py`, run by `just chart-check` in the CI `lint` job: no pod runs as root, keeps a capability or writes its root filesystem, and no value spells a secret out | none | verified |
 | `SRV-310` | `INV` | The self-hosting compose file of the repository MUST deploy, on one host, a stack against which the browser tier passes. | this spec section 3; `SRV-308` | `ambre_belt::prose::tests::the_self_hosted_stack_serves_two_members_one_document` -- browser tier, through the TLS front on port 443 of the stack that `just selfhost-test` builds and starts, in the CI `selfhost` job: the page is cross-origin isolated, and two members edit one document; `ambre_belt::murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp` -- the same stack: a call between two members decodes on both, and the one peer of each page is the media port of the SFU | none | verified |
+| `SRV-349` | `INV` | Each pod of the chart off the network of its node MUST accept and open only the flows of the table of this spec section 3. | README pillar "Security"; this spec section 3, the network of the chart; `SRV-309` | ci-gate -- `scripts/chart.py`, run by `just chart-check` in the CI `lint` job, renders the chart under three sets of values. It reads each NetworkPolicy, and fails a pod no policy isolates in either direction, a flow the table does not name and a flow of the table the policies refuse. The `NetworkTest` tests of `scripts/test_chart.py` plant each one | none | verified |
+| `SRV-350` | `INV` | On a cluster that enforces NetworkPolicy, a pod the flow table does not name MUST NOT reach a store or the relay of the chart. | this spec section 3, the network of the chart; `SRV-349` | ci-gate -- `scripts/chart.py probe`, run by `just chart-test` in the CI `selfhost` job on the kind cluster of the stack: a pod outside the release and a pod of the release under no component of the table each find every port of the stores and of the relay refused, and the first one reaches the web server. The `ProbeTest` tests of `scripts/test_chart.py` hold the verdict | none | verified |
 
 ### 1.2 A request is classified and limited
 
@@ -201,7 +203,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 129 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+* **Verification.** 131 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -479,6 +481,28 @@ takes a public address with no load balancer in front (`CALL-141`). The relay ne
 later (`SRV-241`), an S3-compatible object store and its metrics port kept private (`SRV-257`). The
 configuration of one hosting provider lives outside this repository.
 
+**The network of the chart admits its flows and no other** (`SRV-349`). A pod that an attacker
+takes reaches only what its own row names, so the web server never reaches the database. One
+NetworkPolicy selects every pod of the release and admits nothing, in or out. One policy per
+component then admits its rows:
+
+| Pod | Accepts | Opens |
+|---|---|---|
+| web server | anyone, on 8080 and 8443 | the resolver; the relay on 3000; Garage on 3900; 3480, the signalling of the SFU, on any address; 443 on a public address, for an ACME authority alone |
+| relay | the web server on 3000; the scrapers of `networkPolicy.metricsFrom` on 9100 | the resolver; Postgres on 5432; Redis on 6379; Garage on 3900 and 3903; 443 on a public address; the stores outside the cluster that `networkPolicy.externalStores` names |
+| Postgres | the relay on 5432 | nothing |
+| Redis | the relay on 6379 | nothing |
+| Garage | the relay on 3900 and 3903; the web server on 3900 | nothing |
+
+A public address is any address outside the private, shared, link-local and loopback ranges. So
+the relay reaches the identity provider and never the metadata service of a cloud. The SFU runs on
+the network of its node, which no NetworkPolicy governs (`CALL-141`). The firewall of the node
+bounds it, and a selector cannot name it: the web server reaches its port on any address. A store
+outside the cluster needs its rule, and the chart renders nothing without one.
+
+A NetworkPolicy binds only a cluster whose network plugin enforces it. The kind cluster of the
+chart test enforces it, and two probe pods find each store and the relay refused there (`SRV-350`).
+
 **One address serves the page and TURN.** A host with one address has one port 443, and TURN over
 TCP needs that port on networks that open nothing else (`CALL-042`). The compose file puts one TLS
 front before both, and the front routes each connection by its server name. A second address for
@@ -593,6 +617,8 @@ threads appear: `meta` and amendments carry no message a member reads.
 | Any writer settles an owed rotation | the owner alone | the relay refuses every wire message under the old key until the rotation lands, so a channel whose owner is away would stop for everyone |
 | One set of unflushed documents, marked once per drained list | one set per bucket of documents, each with a hash tag of its own | the mark is one `SADD` per list that was empty, not one per delta, so the one set is not the hot key of a cluster. Buckets add keys and a read per bucket to every flush cycle, for a load no measure shows |
 | The metrics are a crate of the workspace | the official Prometheus client, or the `metrics` facade | each one takes a label value as a runtime text, so one call with an identifier copies the membership graph into the store. A closed `enum` makes that call unwritable. The format is a few lines, and each crate adds a registry and a lock for nothing more |
+| The relay opens 443 on any public address | a rule per host of the identity provider | a NetworkPolicy names an address and never a name, and the addresses of a provider change without notice. The private ranges stay refused, so the cluster and the metadata service of a cloud stay out of reach |
+| A probe pod of the chart test tries each refused port | a `helm test` hook of the chart | the hook ships with every release, and runs a pod in each deployment. The probe belongs to the test cluster alone |
 | The scrape answers no token, on the loopback by default | a bearer token on a public port | a token is one more secret to rotate, for figures that name no one. The loopback, or a private network the operator names, keeps the scrape off the internet |
 | The page carries its content policy in a meta its build writes | a header of the server that serves the page | the deployment's server is outside the repository, so no test reads its header, and the digest of each inline script changes with each build. The build writes the headers a meta cannot carry into `_headers`: the policy of a worker, and a refusal to be framed (`SRV-281`, `SRV-282`) |
 | The headers file names each worker script by its exact path | a pattern such as `/ambre-*.js` | a pattern reaches a file that is no worker script, and the hook knows each hashed name when it writes the file |

@@ -45,6 +45,13 @@ it renders nothing.
 * **The web server holds the certificate.** Caddy obtains it from the ACME account `tls`, or
   `tls=internal` gives a certificate of its own authority. The Service keeps the address of each
   client, which the relay limits by.
+* **Each pod reaches only the services it names** (`SRV-349`). One NetworkPolicy denies every
+  flow of the release, and one per component admits the flows of the table of
+  `specs/1-Foundations/ambre-spec-server.md`, section 3. The network plugin of the cluster must
+  enforce NetworkPolicy, or nothing is isolated. The SFU runs on the network of its node, outside
+  every policy.
+* **The policies name the resolver of the cluster.** `networkPolicy.dns` names the CoreDNS of
+  `kube-system` by default. A node-local cache needs its own peer there.
 * **No pod runs as root.** Every container drops each capability, escalates nothing and writes no
   root filesystem. `just chart-check` holds these rules on every push.
 
@@ -59,6 +66,19 @@ address to the Secret:
 | `postgres.enabled=false` | `database-url` |
 | `redis.enabled=false` | `redis-url`, of Redis 7.4 or later (`SRV-241`) |
 | `garage.enabled=false`, with `s3.endpoint` and `s3.publicEndpoint` | `s3-access-key-id` and `s3-secret-access-key` keep their names |
+
+A store outside the cluster also needs an egress rule of the relay in `networkPolicy.externalStores`,
+or the chart renders nothing. The relay already reaches port 443 of any public address, so an
+object store on a public HTTPS endpoint needs none:
+
+```yaml
+networkPolicy:
+  externalStores:
+    - to: [{ipBlock: {cidr: 10.0.4.0/24}}]
+      ports: [{port: 5432}, {port: 6379}]
+```
+
+A scraper of the metrics of the relay needs its peer in `networkPolicy.metricsFrom` (`SRV-257`).
 
 ## Sign-in
 
