@@ -85,7 +85,7 @@ impl CommandHandler for ProseHandler {
         // A command of the creation bar that inserts a block lands there
         // too, and the view resolves it at the caret (`CHROME-254`). The
         // comment of the bar lands there as well, and the view opens its
-        // field over a selection alone (`CHROME-180`, `PROSE-UI-287`).
+        // field over a selection alone (`CHROME-180`, `PROSE-UI-282`).
         if formats_selection(id)
             || crate::view::slash::inserted(id).is_some()
             || crate::view::toolbar::BarPrompt::of(id).is_some()

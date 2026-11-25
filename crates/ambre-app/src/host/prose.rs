@@ -327,7 +327,7 @@ impl ProseView {
         self.annotations.format.set(None);
         // The link and the comment open a field of the bar, which writes
         // once the user confirms it. With no text selected, no bar shows
-        // and the press opens nothing (`PROSE-UI-287`).
+        // and the press opens nothing (`PROSE-UI-282`).
         if ambre_prose::view::toolbar::BarPrompt::of(id).is_some() {
             self.annotations.prompt.set(self.state.prompt(id));
             return;

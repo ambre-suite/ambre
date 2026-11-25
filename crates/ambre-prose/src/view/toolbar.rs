@@ -158,7 +158,7 @@ impl ProseUiState {
     /// The field of the format bar a press of `id` opens: the link or the
     /// comment. `None` for any other id, and with no text selected, since
     /// the field sits under the bar and a thread needs a range
-    /// (`PROSE-UI-287`, `PROSE-FEAT-295`).
+    /// (`PROSE-UI-282`, `PROSE-FEAT-295`).
     #[must_use]
     pub fn prompt(&self, id: StaticKey<Commands>) -> Option<BarPrompt> {
         BarPrompt::of(id).filter(|_| self.toolbar().visible())

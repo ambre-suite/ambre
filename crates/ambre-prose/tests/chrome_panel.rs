@@ -1104,7 +1104,7 @@ async fn the_heading_font_picker_names_the_body_font_and_hands_each_pick() {
     root.remove();
 }
 
-/// `CHROME-180`, `PROSE-UI-287`: the comment of the creation bar lands where
+/// `CHROME-180`, `PROSE-UI-282`: the comment of the creation bar lands where
 /// a control of the format bar leaves its id, and sends nothing itself. The
 /// view then opens its field over a selection alone.
 #[wasm_bindgen_test]

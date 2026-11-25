@@ -1523,7 +1523,7 @@ fn the_bar_shows_over_a_selection_and_goes_with_it() {
     assert!(!rig.ui.toolbar().visible());
 }
 
-/// `CHROME-180`, `PROSE-UI-287`: the comment of the creation bar opens the
+/// `CHROME-180`, `PROSE-UI-282`: the comment of the creation bar opens the
 /// comment field over a selection. With a caret alone, it opens nothing,
 /// and a command that is no field opens nothing either.
 #[test]
