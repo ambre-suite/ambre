@@ -459,7 +459,7 @@ pub(crate) struct MemoryShared {
 pub(crate) enum Vault {
     /// In memory, on a host build.
     #[cfg_attr(
-        target_arch = "wasm32",
+        all(target_arch = "wasm32", not(test)),
         expect(dead_code, reason = "the worker keeps its session in IndexedDB")
     )]
     Memory(Rc<MemoryShared>),

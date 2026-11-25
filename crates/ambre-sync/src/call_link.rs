@@ -166,6 +166,7 @@ const LEAVE_WAIT: ambre_core::TimeSpan<ambre_core::Ms> = ambre_core::TimeSpan::n
 impl CallLink {
     /// The client of the call.
     #[cfg(test)]
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) const fn client(&self) -> &CallClient {
         &self.client
     }
@@ -791,10 +792,16 @@ mod tests {
     use std::cell::RefCell;
 
     use ambre_core::id::{Call, Channel, Document, Id};
-    use ambre_core::{Count, Role, Sec, TimeSpan, Validated};
+    use ambre_core::{Role, Sec, TimeSpan};
     use ambre_protocol::MembershipAct;
-    use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg, VideoChoice};
-    use ambre_protocol::ws::WsServerMsg;
+    use ambre_protocol::signaling::CallServerMsg;
+    // The tests that read the frames sent run on the native mock transport alone.
+    #[cfg(not(target_arch = "wasm32"))]
+    use {
+        ambre_core::{Count, Validated},
+        ambre_protocol::signaling::{CallClientMsg, SfuMsg, VideoChoice},
+        ambre_protocol::ws::WsServerMsg,
+    };
 
     use super::{CallPort, Rc};
     use crate::call_client::{CallTarget, Opening};
@@ -907,6 +914,7 @@ mod tests {
         Log::walk(DOC, entries.first().and_then(digest), entries, no_self_join)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-136`: the owner revokes Eve from the channel during the call. The relay pushes
     /// neither a change of the members nor a rotation. The revoke this client signed still
     /// reads the log of the call again.
@@ -935,6 +943,7 @@ mod tests {
         assert_eq!(reads, Some(Count::new(2)), "the join read, then the revoke");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-137`: Eve is revoked, and the relay pushes no frame of it to Alice. A sample on
     /// the channel carries the head past the log of the call, and the revoke the owner
     /// signed. The call reads its log again. A head the log holds, or an entry no member
@@ -1033,6 +1042,7 @@ mod tests {
         assert_eq!(kept, Some(head), "the newer log left the held one in place");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-062`: a join reads the log of the channel first, then opens the call socket with
     /// the token. The admission opens the socket of the SFU with the admission first. The join
     /// is announced, and the key of the session leaves on the port. A second join while
@@ -1092,6 +1102,7 @@ mod tests {
         assert!(state.call.is_none(), "a lost call ends");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Audit `N25`: each renewal the relay sends a seated session reaches the socket of the
     /// SFU as an admission, after the first one. So the SFU keeps the seat. A renewal before
     /// the seat reaches nothing.
@@ -1128,6 +1139,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-156`, audit `P60`: a fresh TURN credential the SFU answers a renewal with reaches
     /// the UI thread as TURN servers, each one, after the first. So the page restarts ICE
     /// with it. The Sync worker sends the SFU nothing back for it.
@@ -1169,6 +1181,7 @@ mod tests {
         assert_eq!(link.sent.sfu.len(), 4, "the admission, then three renewals");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-060`: a change of the members of the channel of the call, or a rotation of its
     /// key, reads the log again. A change of another document reads nothing.
     #[test]
@@ -1200,6 +1213,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-106`, `CALL-107`, `ZK-032`: the start of a share goes to the socket of the SFU
     /// alone. The command writes one frame there, after the offer, and nothing on the call socket
     /// of the relay. With no call, it writes nothing. The word of the SFU that a later share took
@@ -1250,6 +1264,7 @@ mod tests {
         ));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-132`: a choice of videos the page posts reaches the socket of the SFU, after the
     /// frames before it, and never the relay.
     #[test]
@@ -1298,6 +1313,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-132`: a choice the page posts before its first offer waits for that offer, and the
     /// latest one alone leaves. The SFU closes a socket that sends anything else first.
     #[test]
@@ -1349,6 +1365,7 @@ mod tests {
         assert_eq!(link.sent.sfu.len(), 3, "the latest choice alone");
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// `CALL-065`, `CALL-029`, `CALL-149`: a command of the bus joins the call it names. It
     /// waits until the Logic thread names the `meta` of its channel, and asks no relay route. The keys leave on the port that came with the command. The SFU's TURN servers reach the UI thread, and its description
     /// waits for the SFU. A leave hands the call worker the end of the call, and the UI
@@ -1447,6 +1464,7 @@ mod tests {
         });
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// The Sync half: a start sends the start frame,
     /// and the Logic thread hears the start once the relay seats it, never before. A leave the
     /// relay counts as the last tells the Logic thread to write the end. A join refused as
@@ -1569,6 +1587,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Who is in a call reaches the Logic thread once the log of the channel checks it. A
     /// roster with no log names no one. A member the log does not hold drops the log, so the
     /// next ask reads it again.
@@ -1702,6 +1721,7 @@ mod tests {
     }
 
     /// The log of a channel whose owner invited each of `people`.
+    #[cfg(not(target_arch = "wasm32"))]
     fn log_of_all(people: &[&Person]) -> Log {
         let owner = Person::new(90);
         let mut entries = Vec::new();
@@ -1729,6 +1749,7 @@ mod tests {
         )
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Once a participant left, the switch timer moves the session to its fresh key, and the
     /// call worker seals under it.
     #[test]

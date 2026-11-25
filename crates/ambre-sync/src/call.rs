@@ -561,6 +561,8 @@ impl CallKeys {
     }
 }
 
+// The reference model runs on `proptest`, which does not build on wasm32.
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 #[path = "call_tests.rs"]
 mod tests;

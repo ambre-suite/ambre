@@ -2326,6 +2326,7 @@ mod tests {
         assert_eq!(unwrapped.len(), 1);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     proptest::proptest! {
         /// Holds `SYNC-198` over any mix of rows. A copy goes to a row exactly
         /// when the log signs the key it serves, or when the row is this

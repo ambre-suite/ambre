@@ -262,7 +262,9 @@ impl<'de, V: Visitor<'de>> DeserializeSeed<'de> for StructBody<V> {
     }
 }
 
+// The properties run on `proptest`, which does not build on wasm32.
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::read_whole;
 
