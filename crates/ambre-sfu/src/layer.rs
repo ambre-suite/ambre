@@ -204,6 +204,8 @@ fn cost(candidate: &Candidate, offered: &Offered) -> Bitrate {
 #[derive(Debug)]
 pub struct Meter {
     since: Instant,
+    /// When the last packet arrived.
+    last: Instant,
     bytes: Count<Octets>,
     rate: Bitrate,
 }
@@ -211,18 +213,30 @@ pub struct Meter {
 /// The length of one window of the meter.
 const WINDOW: Duration = Duration::from_millis(500);
 
+/// How long a camera layer may send nothing before it leaves the layer choice, from the SFU
+/// layer expiry row of `ambre-spec-budgets.md section 3` (`CALL-162`). Two windows: a still
+/// camera still sends a picture well inside that time.
+pub const SILENCE: Duration = Duration::from_secs(1);
+
 impl Meter {
     /// A meter that has seen nothing since `now`.
     pub fn new(now: Instant) -> Self {
         Self {
             since: now,
+            last: now,
             bytes: Count::ZERO,
             rate: Bitrate::bps(0),
         }
     }
 
     /// Counts a packet of a payload of `size` that arrived at `now`.
+    ///
+    /// A packet after a silence starts the meter again, as a new layer starts. The windows of
+    /// the silence would otherwise weigh the rate of the layer down for seconds.
     pub fn count(&mut self, now: Instant, size: Count<Octets>) {
+        if self.live_rate(now).is_none() {
+            *self = Self::new(now);
+        }
         let elapsed = now.saturating_duration_since(self.since);
         if elapsed >= WINDOW {
             let measured = Bitrate::from(self.bytes.get() as f64 * 8.0 / elapsed.as_secs_f64());
@@ -236,11 +250,19 @@ impl Meter {
             self.bytes = Count::ZERO;
         }
         self.bytes = self.bytes.plus(size);
+        self.last = now;
     }
 
-    /// The last bitrate measured.
+    /// The last bitrate measured, whatever time passed since the last packet.
     pub fn rate(&self) -> Bitrate {
         self.rate
+    }
+
+    /// The last bitrate measured, or none once the layer sent nothing for [`SILENCE`] at `now`.
+    /// A layer that stops then leaves the choice, and the receiver gets a layer that still
+    /// sends (`CALL-162`).
+    pub fn live_rate(&self, now: Instant) -> Option<Bitrate> {
+        (now.saturating_duration_since(self.last) < SILENCE).then_some(self.rate)
     }
 }
 

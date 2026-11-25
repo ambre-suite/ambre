@@ -175,6 +175,7 @@ The downlink estimate of a receiver falls below what the SFU forwards it.
 | `CALL-038` | `POST` | Given a receiver whose downlink estimate falls below what it receives, the SFU MUST forward it a lower layer within the delay of `ambre-spec-budgets.md section 3`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_capped_receiver_drops_a_layer_within_the_budget` -- eight seeded runs at 150 ms of round trip and 2 % loss; `ambre_sfu::congestion::tests::the_target_falls_under_a_new_cap_within_a_second` -- the controller alone | none | verified |
 | `CALL-043` | `FRAME` | A layer drop for one receiver MUST NOT change the layer another receiver gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_layer_drop_for_one_receiver_leaves_another_receiver_on_its_layer` -- eight seeded runs | none | verified |
 | `CALL-044` | `FRAME` | A random loss of 10 % or less on the downlink of a receiver MUST NOT lower the layer it gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_of_twenty_keeps_the_top_layer_up_to_ten_percent_loss` -- a call of twenty at 150 ms of round trip, 2 % and 10 % of loss; `ambre_sfu::congestion::tests::the_target_holds_under_random_loss_up_to_ten_percent` -- a modelled link at 2 %, 5 % and 10 % | none | verified |
+| `CALL-162` | `POST` | Given a camera layer that sends no packet for the silence of the SFU layer expiry row of `ambre-spec-budgets.md section 3`, the SFU MUST forward each of its receivers a layer that still sends, within the delay of that row. | this spec section 3, the SFU; `CALL-039` | `ambre_sfu::sim::tests::a_top_layer_that_stops_hands_its_receivers_the_layer_below` -- eight seeded runs at 150 ms of round trip and 2 % loss: the speaker stops its top layer, and both receivers get its middle layer; `ambre_sfu::layer::tests::a_silent_layer_has_no_live_rate_until_it_sends_again` -- the meter alone | none | verified |
 
 ### 1.7 Raise a layer again
 
@@ -271,7 +272,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 161 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 162 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -945,6 +946,10 @@ that holds no whole header, since the next packet could complete it under anothe
   audio slot moves at the next packet. The SFU shifts the fields the same way (`CALL-048`).
 * The receiver reads the sender of each chunk from its key identifier. So no signal names the
   sender of a slot.
+* A camera layer that sends no packet for 1 s leaves the layer choice (`CALL-162`). A browser
+  short of CPU stops its top layer, and a receiver on it would see a frozen picture. The layer
+  comes back with its next packet, measured again from nothing. The screen keeps its one
+  layer, since a still screen sends nothing for seconds.
 * A switch to a lower layer of the same track stops the current layer at once. Its packets would
   queue in the pacer of the congested downlink, ahead of the lower layer, for seconds.
 * The stopped layer resumes on a keyframe alone, when the switch no longer goes down. It missed
