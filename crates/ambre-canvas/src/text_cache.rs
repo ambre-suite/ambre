@@ -849,7 +849,9 @@ mod tests {
     /// its context misses, and each new cache arms none either (`PDF-019`).
     ///
     /// The count of the thread is the spy. A fetching cache on the same thread
-    /// is the control, so the count does not read zero by construction.
+    /// is the control, so the count does not read zero by construction. The
+    /// count exists on the host only: a wasm build arms a real fetch instead.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_cache_over_held_faces_arms_no_fetch() {
         let armed = crate::fonts::fetches_armed_on_this_thread;
