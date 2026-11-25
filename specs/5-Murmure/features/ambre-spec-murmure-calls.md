@@ -605,8 +605,9 @@ video, and a second press folds it (`MURMURE-699`):
 The render runtime draws the picture through the box, never an element over the canvas
 (`CALL-015`). The host draws it over the overlay of every application alike. Only Murmure
 verifies it end to end today, since a call ends with a switch of application (`MURMURE-726`). The
-overlay repaints at each frame the picture shows, and the content keeps its paint. The pill
-shows no video.
+overlay repaints at each frame the picture shows, and the content keeps its paint. On
+2026-11-25, the two video tests of the browser tier read the same paint time on one build, with
+the bubble and with the region. The pill shows no video.
 
 **Present a document.** A screen share of an Ambre document sends pixels of what every member
 could open. Present opens the document itself for each participant who is a member of it, and
