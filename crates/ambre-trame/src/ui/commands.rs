@@ -77,6 +77,9 @@ const PAGE: StaticKey<Categories> = StaticKey::<Categories>::new("page");
 /// The rows and columns that stay on screen while the rest scrolls
 /// (`TRAME-UI-029`).
 const VIEW: StaticKey<Categories> = StaticKey::<Categories>::new("view");
+/// The commands that add a new object to the sheet, homed in the creation bar
+/// (`CHROME-152`).
+const INSERT: StaticKey<Categories> = shared::INSERT;
 /// Commands that belong to the application shell rather than the document.
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 
@@ -137,6 +140,7 @@ commands! {
     UNFREEZE = StaticKey::<Commands>::new("trame.view.unfreeze"), "Unfreeze rows and columns", None, &[], VIEW, ContextPanel;
     ZOOM_TO_SELECTION = StaticKey::<Commands>::new("trame.view.zoom_to_selection"), "Zoom to selection", None, &[], VIEW, StatusBar;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL, AmbreMenu;
+    INSERT_FUNCTION = StaticKey::<Commands>::new("trame.insert.function"), "Insert a function", Some(StaticKey::<Icons>::new("function-variant")), &[], INSERT, CreationBar;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame

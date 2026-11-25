@@ -94,7 +94,10 @@ const OBJECT: StaticKey<Categories> = StaticKey::<Categories>::new("object");
 const REACTION: StaticKey<Categories> = StaticKey::<Categories>::new("reaction");
 const SELECTION: StaticKey<Categories> = StaticKey::<Categories>::new("selection");
 const VIEW: StaticKey<Categories> = StaticKey::<Categories>::new("view");
-const TOOL: StaticKey<Categories> = StaticKey::<Categories>::new("tool");
+/// The tools of the pointer, homed in the creation bar (`CHROME-152`).
+const TOOL: StaticKey<Categories> = shared::TOOL;
+/// The commands that insert a new object, homed in the creation bar.
+const INSERT: StaticKey<Categories> = shared::INSERT;
 const PRESENT: StaticKey<Categories> = StaticKey::<Categories>::new("present");
 const FIND_REPLACE: StaticKey<Categories> = StaticKey::<Categories>::new("find");
 /// Bringing a file onto the board, and taking the board out as one.
@@ -163,8 +166,6 @@ describe! {
     POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], ACCOUNT, AvatarMenu;
     PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT, StatusBar;
     IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(StaticKey::<Icons>::new("file-import-outline")), &[], FILE, AmbreMenu;
-    EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", Some(StaticKey::<Icons>::new("web")), &[], OBJECT, CreationBar;
-    EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", Some(StaticKey::<Icons>::new("file-document-outline")), &[], OBJECT, CreationBar;
     LINK_SET: menu_bar::LINK_SET, "Link...", Some(StaticKey::<Icons>::new("link-variant")), &[], OBJECT, ContextPanel;
     LINK_CLEAR: menu_bar::LINK_CLEAR, "Remove link", Some(StaticKey::<Icons>::new("link-variant-off")), &[], OBJECT, ContextPanel;
     SAVE_FILE: menu_bar::SAVE_FILE, "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], FILE, AmbreMenu;
@@ -185,6 +186,8 @@ describe! {
     TOOL_COMMENT: palette::TOOL_COMMENT, "Comment", Some(StaticKey::<Icons>::new("comment-outline")), &[letter(KeyChar::M)], TOOL, CreationBar;
     TOOL_LASER: palette::TOOL_LASER, "Highlighter", Some(StaticKey::<Icons>::new("cursor-pointer")), &[letter(KeyChar::L)], TOOL, CreationBar => "Point at the board for the other members; the trail fades";
     TOOL_HAND: palette::TOOL_HAND, "Hand", Some(StaticKey::<Icons>::new("hand-back-right")), &[letter(KeyChar::H)], TOOL, CreationBar => "Drag to move the view of the board";
+    EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", Some(StaticKey::<Icons>::new("web")), &[], INSERT, CreationBar;
+    EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", Some(StaticKey::<Icons>::new("file-document-outline")), &[], INSERT, CreationBar;
     FIND_OPEN: FIND, "Find", None, &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE, AmbreMenu;
     COMMENTS_OPEN: menu_bar::COMMENTS, "Comments", Some(StaticKey::<Icons>::new("comment-multiple-outline")), &[], VIEW, ContextPanel;
     PALETTE_OPEN: PALETTE, "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL, AmbreMenu;

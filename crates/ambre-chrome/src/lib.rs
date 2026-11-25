@@ -23,6 +23,7 @@
 //   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
 //   - context_panel -- the one frame of the context panel: sections, rail, dock
 //   - controls     -- the control primitives of the visual system, none generic
+//   - creation     -- the creation bar, one bar of what a page can add
 //   - gallery      -- the test page of every primitive in each state (feature `gallery`)
 //   - kit          -- the typed widgets a panel section is written from
 //   - menu         -- the key map every menu shares, and two-state ARIA values
@@ -46,6 +47,7 @@ mod context_panel;
 mod controls;
 /// Each floating surface measures what it covers of the canvas (`CHROME-171`).
 pub mod cover;
+mod creation;
 mod debounce;
 mod dialog;
 mod font;
@@ -81,6 +83,7 @@ pub use controls::{
     ChoiceRow, ChoiceView, ColorSwatch, ControlSize, IconButton, IconLook, Readout, SegmentBar,
     Select, Slider, Stepper,
 };
+pub use creation::{CreationBar, CreationSlot, creation_entries};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, Dismissal, ModalHold};
 pub use font::{FONT_FAMILIES, FamilyChoice, FontPicker};

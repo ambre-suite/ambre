@@ -293,9 +293,7 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")]
         if let Some(id) = self.view_cmd.get_untracked() {
             self.view_cmd.set(None);
-            if id == crate::chrome::ZOOM_TO_SELECTION {
-                self.zoom_to_selection();
-            }
+            self.run_view_command(id);
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -695,6 +693,18 @@ impl TrameView {
         self.pending_viewport
             .coalesce(self.state.scroll_viewport_cmd());
         true
+    }
+
+    /// Perform a command the grid view owns. A zoom to the selection frames
+    /// it (`ZOOM-007`). The function of the creation bar opens the editor of
+    /// the active cell on the sign of a formula (`CHROME-255`). Any other id
+    /// does nothing.
+    pub fn run_view_command(&mut self, id: ambre_core::StaticKey<ambre_core::Commands>) {
+        if id == crate::ui::commands::ZOOM_TO_SELECTION {
+            self.zoom_to_selection();
+        } else if id == crate::ui::commands::INSERT_FUNCTION {
+            self.begin_edit(String::from("="));
+        }
     }
 
     /// Zoom so the selection shows whole (`ZOOM-007`), clear of the floating
