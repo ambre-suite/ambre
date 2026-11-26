@@ -1027,6 +1027,36 @@ fn a_removal_closes_the_older_key_of_a_sender_whose_fresh_wrap_is_withheld() {
     assert!(matches!(handoffs.as_slice(), [KeyHandoff::Open { .. }]));
 }
 
+/// `CALL-157`: Eve is removed, and Roger opens the fresh key of Alice before her older wrap
+/// arrives. The fresh key clears the epochs of Alice from its own up, never an older one. So a
+/// replay of the older wrap past the switch delay is still refused.
+#[test]
+fn a_fresh_key_opened_first_clears_no_older_wrap_of_its_sender() {
+    let world = World::new();
+    let mut alice = session_of(&world, 0, 1);
+    let mut roger = session_of(&world, 1, 2);
+    let eve = session_of(&world, 2, 3);
+    let to_others = admit_each(&mut alice, &[&roger, &eve], &world.log);
+    admit_each(&mut roger, &[&alice, &eve], &world.log);
+    let old_to_roger = wrap_among(&to_others, roger.own());
+    let start = Instant::<UnixMs>::new(world.now);
+    let log = revoked(&world, 2);
+    let fresh = alice.heed(&log, start).unwrap_or_else(|e| panic!("{e:?}"));
+    roger.heed(&log, start).unwrap_or_else(|e| panic!("{e:?}"));
+
+    let past = start.plus(SWITCH_DELAY);
+    let handoffs = roger
+        .receive(alice.own(), &wrap_among(&[fresh], roger.own()), past)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(matches!(handoffs.as_slice(), [KeyHandoff::Open { .. }]));
+    assert_eq!(
+        roger
+            .receive(alice.own(), &old_to_roger, past)
+            .map(|h| h.len()),
+        Err(Refusal::Retired)
+    );
+}
+
 /// The wrap among `moves` to the session `to`.
 fn wrap_among(moves: &[Moves], to: Seq<SenderIndex>) -> ambre_crypto::call::WrappedSenderKey {
     moves

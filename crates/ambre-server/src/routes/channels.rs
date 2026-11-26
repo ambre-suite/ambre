@@ -748,6 +748,37 @@ pub async fn register_thread(
     }))
 }
 
+/// `POST /api/channels/{id}/threads/receipt`: the receipt of the link the
+/// relay holds for a root, under its current link seed, to any member of the
+/// channel (`SRV-374`).
+///
+/// A member writes it beside the `thread` field of the root once a rotation
+/// left no receipt there that counts (the Murmure threads spec). The body and
+/// the answer are those of a registration, and the answer reads `existing`.
+/// The route writes nothing (`SRV-375`). It signs the channel and the thread,
+/// which the relay already stores, so it learns only that this member asked.
+/// A root with no link answers 404, and a stranger gets 403.
+pub async fn thread_receipt(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    ids: OpaquePathId<Id<id::Channel>>,
+    body: Json<RegisterThreadRequest>,
+) -> Result<axum::Json<ThreadJson>, AppError> {
+    let channel_id = ids.into_inner();
+    let req = body.into_inner();
+    meta_role(&state, &channel_id, &auth.user_id).await?;
+    let held = db::held_thread(&state.db, &channel_id, req.root)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: crate::error::Resource::Document,
+        })?;
+    Ok(axum::Json(ThreadJson {
+        thread: held,
+        created: ambre_core::Creation::Existing,
+        receipt: state.jwt.sign_link(channel_id, held),
+    }))
+}
+
 /// The body of an erasure: the thread name no document of the channel
 /// answers, and the owner's signature over
 /// [`ambre_protocol::thread_erasure::erasure_transcript`].
@@ -4292,6 +4323,165 @@ mod tests {
             crate::jwt::JwtSeed::dev_link().verifying_key_bytes(),
             link_key,
             "the dev seed signs under the key a dev client pins"
+        );
+    }
+
+    /// `SRV-370`: the relay stores no receipt. After a rotation of its link
+    /// seed, the registration of a root it linked before answers a receipt
+    /// under the new key alone. The retired key, which a leak may hold,
+    /// signs none of it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_registration_after_a_rotation_answers_under_the_new_link_key(pool: sqlx::PgPool) {
+        use ambre_protocol::thread_erasure::{DEV_LINK_KEY, link_transcript};
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let root = Id::<Message>::mint();
+        let mine = document(&state, alice).await;
+        let before = thread(&state, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+
+        let new_seed = crate::jwt::JwtSeed::from_array([0x5a; 32]);
+        let new_key = new_seed.verifying_key_bytes();
+        let rotated = Arc::new(AppState {
+            jwt: Arc::new(
+                crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
+                    crate::test_helpers::TEST_JWT_SEED,
+                ))
+                .with_link(&new_seed),
+            ),
+            ..(*state).clone()
+        });
+        let after = thread(&rotated, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+
+        let under = |key: [u8; 32], answer: &ThreadJson| {
+            let receipt = answer.receipt.expect("a receipt");
+            ed25519_dalek::VerifyingKey::from_bytes(&key)
+                .and_then(|key| {
+                    key.verify_strict(
+                        link_transcript(channel.id, mine).as_bytes(),
+                        &ed25519_dalek::Signature::from_bytes(receipt.as_array()),
+                    )
+                })
+                .is_ok()
+        };
+        assert_eq!(after.thread, mine, "the link it holds");
+        assert!(under(*DEV_LINK_KEY.as_array(), &before));
+        assert!(under(new_key, &after), "the link it holds, signed again");
+        assert!(
+            !under(*DEV_LINK_KEY.as_array(), &after),
+            "no receipt under the retired key"
+        );
+    }
+
+    /// `who` asks the receipt of the link the relay holds for `root` in
+    /// `channel`.
+    async fn receipt_of(
+        state: &Arc<AppState>,
+        who: Id<User>,
+        channel: &Channel,
+        root: Id<Message>,
+    ) -> Result<ThreadJson, StatusCode> {
+        thread_receipt(
+            State(state.clone()),
+            session(who),
+            OpaquePathId::new(channel.id),
+            Json::new(RegisterThreadRequest {
+                root,
+                thread: Id::<Document>::mint(),
+            }),
+        )
+        .await
+        .map(|axum::Json(answer)| answer)
+        .map_err(|e| e.into_response().status())
+    }
+
+    /// `SRV-374`, `SRV-375`: any member of the channel, a viewer too, gets
+    /// the receipt of the link a root holds. The relay signs it under its
+    /// current link key. A stranger gets none, and so do a root not linked yet and a
+    /// root of another channel. The ask links nothing: a later registration
+    /// still creates.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_member_gets_the_receipt_of_a_held_link_and_the_ask_writes_nothing(
+        pool: sqlx::PgPool,
+    ) {
+        use ambre_protocol::thread_erasure::link_transcript;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let eve = user(&state, "eve@test.dev").await;
+        let space = space(&state, alice, &[(vera, Role::Viewer)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let other = public_channel(&state, alice, space).await;
+        grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
+        let root = Id::<Message>::mint();
+        let mine = document(&state, alice).await;
+
+        assert_eq!(
+            receipt_of(&state, vera, &channel, root).await.err(),
+            Some(StatusCode::NOT_FOUND),
+            "no link held yet"
+        );
+        let linked = thread(&state, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+        assert_eq!(linked.created, Creation::Created, "the ask linked nothing");
+
+        let new_seed = crate::jwt::JwtSeed::from_array([0x6b; 32]);
+        let new_key = new_seed.verifying_key_bytes();
+        let rotated = Arc::new(AppState {
+            jwt: Arc::new(
+                crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
+                    crate::test_helpers::TEST_JWT_SEED,
+                ))
+                .with_link(&new_seed),
+            ),
+            ..(*state).clone()
+        });
+        let answer = receipt_of(&rotated, vera, &channel, root)
+            .await
+            .expect("a member gets the receipt");
+        assert_eq!(
+            (answer.thread, answer.created),
+            (mine, Creation::Existing),
+            "the link it holds"
+        );
+        let receipt = answer.receipt.expect("a receipt");
+        let verifies = |channel_id, thread| {
+            ed25519_dalek::VerifyingKey::from_bytes(&new_key)
+                .and_then(|key| {
+                    key.verify_strict(
+                        link_transcript(channel_id, thread).as_bytes(),
+                        &ed25519_dalek::Signature::from_bytes(receipt.as_array()),
+                    )
+                })
+                .is_ok()
+        };
+        assert!(verifies(channel.id, mine), "under the current link key");
+        assert!(!verifies(other.id, mine), "over that channel alone");
+
+        assert_eq!(
+            receipt_of(&rotated, eve, &channel, root).await.err(),
+            Some(StatusCode::FORBIDDEN),
+            "a stranger"
+        );
+        assert_eq!(
+            receipt_of(&rotated, alice, &other, root).await.err(),
+            Some(StatusCode::NOT_FOUND),
+            "a root of another channel"
+        );
+        assert_eq!(
+            db::held_thread(&state.db, &channel.id, root)
+                .await
+                .expect("query"),
+            Some(mine),
+            "the asks moved no link"
         );
     }
 

@@ -939,6 +939,7 @@ services-down:
 selfhost := 'docker compose -f deploy/compose/compose.yml --env-file target/selfhost/.env -p ambre-selfhost-test'
 
 # Build and start the self-hosted stack under test, then wait for its page and its relay.
+# The served client must hold the link key of the `.env` in its slot (`SRV-369`).
 # Each run drops the stack left by an earlier one with its volumes, then writes
 # fresh secrets: CI restores `target/` from its cache, and an `.env` kept from an
 # older `setup.sh` lacks the secrets added since.
@@ -949,6 +950,7 @@ selfhost-up:
     { AMBRE_ENV_FILE="$PWD/target/selfhost/.env" sh deploy/compose/setup.sh localhost 127.0.0.1 internal && printf 'AMBRE_DEV_MODE=true\nAMBRE_DEV_LOGIN=1\nTURN_LOOPBACK_PEERS=--allow-loopback-peers\n' >> target/selfhost/.env; }
     {{selfhost}} up -d --build
     python3 scripts/selfhost_wait.py "{{selfhost}}"
+    THREAD_LINK_KEY=$(sed -n 's/^THREAD_LINK_KEY=//p' target/selfhost/.env) python3 scripts/link_key.py served https://localhost
 
 # Every browser reaches the stack from the loopback, and the relay admits 10 sockets a
 # minute from one address. So each test runs alone, a minute after the one before it.
@@ -976,8 +978,11 @@ chart-check:
 # Between the two, two probe pods find each store and the relay refused
 # (`SRV-352`). Before the install, each node holds an address inside the
 # blocks of the test values, where the web server reaches the signalling of the
-# SFU (`SRV-361`). The cluster is deleted on exit, and its state printed first
-# on a failure.
+# SFU (`SRV-361`). The served client holds the link key of the Secret
+# (`SRV-365`). Last, the recipe writes the development key, then an empty key,
+# into the Secret, and the restarted web pod stops before Caddy each time
+# (`SRV-368`). The cluster is deleted on exit, and its state printed first on
+# a failure.
 chart-test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -986,20 +991,26 @@ chart-test:
     kind create cluster --name ambre-chart --config deploy/chart/test/kind.yaml --wait 180s
     trap 'status=$?; [ $status -eq 0 ] || { kubectl $kube get pods -o wide; kubectl $kube describe pods | tail -n 80; for p in $(kubectl $kube get pods -o name); do kubectl $kube logs --all-containers "$p" | tail -n 40; done; }; kind delete cluster --name ambre-chart; exit $status' EXIT
     kind load docker-image --name ambre-chart ambre-relay:local ambre-sfu:local ambre-web:local ambre-init:local
-    sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
+    # The relay takes the seed of the `.env` of `just selfhost-up`, and the web pod patches its key.
+    THREAD_LINK_SEED=$(sed -n 's/^THREAD_LINK_SEED=//p' target/selfhost/.env) THREAD_LINK_KEY=$(sed -n 's/^THREAD_LINK_KEY=//p' target/selfhost/.env) sh deploy/chart/secret.sh ambre-test | kubectl $kube apply -f -
     python3 scripts/chart.py nodes kubectl $kube
     helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
     for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
     curl -skf -o /dev/null https://localhost/api/auth/config
     python3 scripts/chart.py probe kubectl $kube
+    python3 scripts/chart.py link-key served https://localhost kubectl $kube
     node=$(kubectl $kube get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
     for t in prose::tests::the_self_hosted_stack_serves_two_members_one_document murmure::tests::a_call_on_the_self_hosted_stack_reaches_the_sfu_over_udp; do sleep 61; BELT_CHROME_ARGS=--ignore-certificate-errors SELFHOST_ORIGIN=https://localhost SELFHOST_MEDIA_HOST="$node" cargo test -p ambre-belt -- --ignored --exact "$t"; done
+    python3 scripts/chart.py link-key refuse kubectl $kube
 
 # `SRV-356`: the chart test of a release, on a kind cluster of its own. It
 # verifies the provenance of each image of LIST by its digest, against the tag
-# REF and the commit SHA, then pulls it, then installs the chart and waits for
-# the relay to answer through the web server. The released client signs in by no
-# bare name (`ZK-045`), so the browser tier stays on `just chart-test`.
+# REF and the commit SHA, then pulls it, then installs the chart. The
+# released client signs in by no bare name (`ZK-045`), so the browser tier
+# stays on `just chart-test`. The released web image pins no link key: its pod
+# patches the fresh key of the test Secret into a copy of the client
+# (`SRV-365`). The recipe then reaches the relay through that web server, and
+# finds the key of the Secret in the served client.
 chart-test-release LIST REF SHA:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -1013,12 +1024,20 @@ chart-test-release LIST REF SHA:
     helm --kube-context kind-ambre-chart install ambre deploy/chart/ambre -f deploy/chart/test/values.yaml --wait --timeout 15m
     for _ in $(seq 60); do curl -skf -o /dev/null https://localhost/api/auth/config && break; sleep 5; done
     curl -skf -o /dev/null https://localhost/api/auth/config
+    python3 scripts/chart.py link-key served https://localhost kubectl $kube
 
 # `SRV-354`, `SRV-355`, `SRV-356`: each job that pushes an image attests its
 # digest and alone holds the signing token, and the chart test of a release
 # verifies each image before it pulls one (`scripts/image_provenance.py`).
 image-provenance:
     python3 scripts/image_provenance.py check
+
+# `ZK-057`, `SRV-369`: no release build names a link key, each build of the
+# web image checks that its slot is empty, the init image carries the patch,
+# and the compose web server serves the copy that `link-key` patches
+# (`scripts/link_key.py`).
+link-key:
+    python3 scripts/link_key.py lint
 
 # The dev container (`.devcontainer/README.md`): the toolchain, the relay and
 # the client in one container, PostgreSQL, Redis and Garage beside it from the

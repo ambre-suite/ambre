@@ -556,7 +556,8 @@ pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(Id<Message>, Id<Doc
 }
 
 /// The link receipt `amendments` records beside each thread it records
-/// (`MURMURE-734`).
+/// (`MURMURE-734`), then each fresh receipt its `thread_receipts` root holds
+/// (`MURMURE-739`).
 pub(crate) fn recorded_receipts(amendments: &LoroDoc) -> Vec<ambre_bus::LinkReceipt> {
     let receipts = crate::logic::schema::root_map(amendments, Root::Receipts);
     recorded_threads(amendments)
@@ -567,6 +568,7 @@ pub(crate) fn recorded_receipts(amendments: &LoroDoc) -> Vec<ambre_bus::LinkRece
                 ambre_core::FixedBytes::<ambre_core::Signature>::from_hex(&signature).ok()?;
             Some(ambre_bus::LinkReceipt { thread, signature })
         })
+        .chain(crate::logic::schema::fresh_receipts(amendments))
         .collect()
 }
 

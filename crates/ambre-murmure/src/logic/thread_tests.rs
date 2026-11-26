@@ -606,6 +606,140 @@ fn a_link_writes_its_receipt_with_the_thread_field_alone() {
     assert_eq!(thread_field(&alice, 1), None);
 }
 
+/// `MURMURE-739`: once a root names its thread, each member adds a fresh
+/// receipt under their own key, beside the first one. A removal names each
+/// of them, so a garbage entry of a hostile member shadows no receipt that
+/// counts. The check refuses an entry under another member's key, or of a
+/// thread no root names. It refuses a value that is no signature, a key
+/// spelled otherwise, and a removal.
+#[test]
+fn a_member_adds_a_fresh_receipt_under_their_own_key_alone() {
+    type Receipt = ambre_core::FixedBytes<ambre_core::Signature>;
+    let (alice_user, bob_user, carol_user) =
+        (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
+    let mut alice = channel_with(&["root"], alice_user);
+    let mut bob = peer_of(&alice);
+    let mut carol = peer_of(&alice);
+    let segment = alice.active_id();
+    let doc = segment.document_id();
+    let root = message_at(&alice, 0).id;
+    let thread = Id::<Document>::mint();
+    let first = Receipt::from_array([0x5c; 64]);
+    let named = alice
+        .thread_linked(segment, root, thread, Some(first))
+        .expect("link")
+        .root
+        .expect("named");
+    for peer in [&mut bob, &mut carol] {
+        peer.apply_signed(
+            doc,
+            Seq::<Relay>::new(10),
+            &named.delta,
+            signer(&alice, doc, alice_user),
+        )
+        .expect("named");
+    }
+    let garbage = Receipt::from_array([1; 64]);
+    let carols = carol
+        .write_fresh_receipt((segment, root), thread, garbage, carol_user)
+        .expect("write")
+        .expect("written");
+    let fresh = Receipt::from_array([0x6d; 64]);
+    let bobs = bob
+        .write_fresh_receipt((segment, root), thread, fresh, bob_user)
+        .expect("write")
+        .expect("written");
+    assert!(
+        matches!(
+            bob.write_fresh_receipt((segment, root), thread, fresh, bob_user),
+            Ok(None)
+        ),
+        "an entry that holds the receipt takes no second write"
+    );
+    assert!(
+        matches!(
+            bob.write_fresh_receipt((segment, root), thread, first, bob_user),
+            Ok(None)
+        ),
+        "a receipt the root holds takes no entry"
+    );
+    assert!(
+        matches!(
+            bob.write_fresh_receipt((segment, root), Id::<Document>::mint(), fresh, bob_user),
+            Ok(None)
+        ),
+        "a thread the root does not name takes no entry"
+    );
+    for (seq, (sent, by, user)) in
+        (11..).zip([(&carols, &carol, carol_user), (&bobs, &bob, bob_user)])
+    {
+        alice
+            .apply_signed(
+                doc,
+                Seq::<Relay>::new(seq),
+                &sent.delta,
+                signer(by, doc, user),
+            )
+            .expect("each member's own entry");
+    }
+    let crate::SweepStep::Done(swept) = alice.sweep_step() else {
+        panic!("the segment is held");
+    };
+    let mut held: Vec<Receipt> = swept.receipts.iter().map(|r| r.signature).collect();
+    held.sort_unstable_by_key(|r| r.to_hex());
+    let mut expected = vec![first, garbage, fresh];
+    expected.sort_unstable_by_key(|r| r.to_hex());
+    assert_eq!(held, expected, "the first receipt, and one per member");
+    assert!(swept.receipts.iter().all(|r| r.thread == thread));
+
+    // Carol copies Alice, every entry included, then forges.
+    let carol = peer_of(&alice);
+    let carol_doc = carol.doc(doc).expect("held");
+    let fresh_root = || crate::logic::schema::root_map(carol_doc, Root::ThreadReceipts);
+    let key = |thread, by| schema::FreshKey { thread, by }.spell();
+    let hex = garbage.to_hex();
+    let forged: [&dyn Fn(); 5] = [
+        &|| {
+            fresh_root()
+                .insert(&key(thread, bob_user), hex.clone())
+                .expect("write");
+        },
+        &|| {
+            fresh_root()
+                .insert(&key(Id::<Document>::mint(), carol_user), hex.clone())
+                .expect("write");
+        },
+        &|| {
+            fresh_root()
+                .insert(&key(thread, carol_user), "zz")
+                .expect("write");
+        },
+        &|| {
+            fresh_root()
+                .insert(&key(thread, carol_user).to_uppercase(), hex.clone())
+                .expect("write");
+        },
+        &|| fresh_root().delete(&key(thread, bob_user)).expect("delete"),
+    ];
+    for (seq, forge) in (20..).zip(forged) {
+        let before = carol_doc.oplog_vv();
+        forge();
+        assert_eq!(
+            alice.apply_signed(
+                doc,
+                Seq::<Relay>::new(seq),
+                &json_since(carol_doc, &before),
+                signer(&carol, doc, carol_user)
+            ),
+            Err(MurmureError::Refused(Refusal::ForeignReceipt))
+        );
+    }
+    let crate::SweepStep::Done(swept) = alice.sweep_step() else {
+        panic!("the segment is held");
+    };
+    assert_eq!(swept.receipts.len(), 3, "no forgery moved an entry");
+}
+
 /// A thread's own replies start no thread: another member may not set the
 /// `thread` field of a reply.
 #[test]

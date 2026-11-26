@@ -54,6 +54,8 @@ jobs:
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,trunk@0.22.1
+      # Each build of the digest checks that its link key slot is empty
+      # (`ZK-057`, `scripts/client_digest.py`).
       - run: just reproducible
       - name: Publish the release
         env:
@@ -61,7 +63,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           digest=$(cat target/client-digest/ambre-client.digest)
-          printf 'Client digest (BLAKE2b-256 of the manifest): `%s`\n\nRebuild: `just reproducible %s`. Check a deployment: `b2sum -l 256 -c ambre-client.manifest` in a copy of the files it serves.\n' "$digest" "$TAG" > notes.md
+          printf 'Client digest (BLAKE2b-256 of the manifest): `%s`\n\nRebuild: `just reproducible %s`.\n\nThe client pins no thread link key: each install writes the `thread-link-key` of its Secret, or the `THREAD_LINK_KEY` of its compose `.env`, into the slot of the Sync worker before its web server starts. Check a deployment: in a copy of the files it serves, run `python3 scripts/link_key.py zero F F` on its `ambre-sync-*_bg.wasm`, then `b2sum -l 256 -c ambre-client.manifest`.\n' "$digest" "$TAG" > notes.md
           gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md \
             target/client-digest/ambre-client.manifest target/client-digest/ambre-client.digest
 

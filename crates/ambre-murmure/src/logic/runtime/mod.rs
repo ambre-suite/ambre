@@ -183,6 +183,12 @@ pub struct Runtime<D> {
     /// The channels opened for a removal alone, which close again once it
     /// leaves. An open the view asks for takes the channel off.
     opened_for_removal: HashSet<Id<Channel>>,
+    /// The removals whose census set threads apart, with the threads, until
+    /// the owner confirms their erasure (`MURMURE-738`).
+    unproven: HashMap<Id<Channel>, removals::Unproven>,
+    /// The threads the owner confirmed to erase, which the next removals of
+    /// the channel carry (`SYNC-333`).
+    confirmed: HashMap<Id<Channel>, Vec<Id<Document>>>,
     /// Leaves of a space held while its owner role passes on (the Murmure
     /// spaces spec). Each is keyed by the role change this runtime asked
     /// for, and holds the leave the view asked for.
@@ -252,6 +258,8 @@ impl<D> Runtime<D> {
             leaving: HashMap::new(),
             removals: HashMap::new(),
             opened_for_removal: HashSet::new(),
+            unproven: HashMap::new(),
+            confirmed: HashMap::new(),
             handing_off: HashMap::new(),
             erasing: HashMap::new(),
             erase_owed: Vec::new(),
@@ -307,6 +315,8 @@ impl<D> Runtime<D> {
         self.leaving.clear();
         self.removals.clear();
         self.opened_for_removal.clear();
+        self.unproven.clear();
+        self.confirmed.clear();
         self.erasing.clear();
         self.erase_owed.clear();
         self.call_asks.clear();

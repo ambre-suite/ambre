@@ -95,6 +95,42 @@ would read what the client keeps on the device, and a second origin needs its ow
 certificate. An organization that leaves a provider outside the European Union already runs its
 directory: name it here.
 
+## The link key of a thread
+
+The relay signs a receipt of each thread link under `THREAD_LINK_SEED`, and the client refuses to
+erase a thread under a receipt that its link key verifies (`SYNC-330`). `setup.sh` draws the seed
+and writes its public half as `THREAD_LINK_KEY`. The relay refuses to start under a seed of
+another key (`SRV-364`).
+
+The web image pins no key: its client holds an empty link key slot (`ZK-057`). At each start, the
+one-shot service `web-files` copies the client into the volume `webfiles`. The one-shot service
+`link-key`, of the init image, then writes `THREAD_LINK_KEY` into that copy, and `web` serves it
+(`SRV-369`). The patch refuses an empty key, a malformed key and the development key, and `web`
+then never starts: `docker compose logs link-key` says why. A client with an empty slot names no
+thread, so keep the pair together.
+
+An `.env` written before the link key lacks both values, and `docker compose` then stops. Draw a
+pair as `setup.sh` does, add both lines, and run `docker compose up -d`.
+
+**Rotate the link key.** A leaked seed lets anyone sign a receipt, and a receipt over a thread that
+does not exist blocks each removal of the channel. A new seed is the only answer, and it needs no
+new build:
+
+1. draw a new pair as `setup.sh` does, and replace `THREAD_LINK_SEED` and `THREAD_LINK_KEY` in
+   `.env`;
+2. run `docker compose up -d --force-recreate relay web-files link-key web`. The relay checks the
+   new seed against the new key (`SRV-364`), and `link-key` patches a fresh copy (`SRV-369`);
+3. check the served client: `THREAD_LINK_KEY=<key> python3 scripts/link_key.py served https://<domain>`.
+
+The older key then counts nothing, in no client. The relay keeps no receipt: it signs each one when
+it answers a registration, so every link it holds gets a receipt under the new key at its next
+registration (`SRV-370`). A thread the relay never linked, which a leaked seed could vouch for, gets
+none. A browser asks for the Sync worker again before each use (`SRV-371`), so a reload takes the
+new key. A tab open across the rotation keeps the older key until it reloads.
+
+To check the served client against the release manifest, set its key bytes to zero first with
+`python3 scripts/link_key.py zero <file> <file>` (`ZK-059`).
+
 ## Web embeds
 
 A Toile web embed loads a page of another site only when the deployment names that site. Set

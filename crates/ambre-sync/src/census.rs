@@ -40,6 +40,9 @@ pub(crate) struct Named {
     /// The link receipts those documents hold. A hidden thread under a valid
     /// one takes no erasure (`SYNC-330`).
     pub receipts: Vec<ambre_bus::LinkReceipt>,
+    /// The hidden threads with no proof whose erasure the owner confirmed.
+    /// The census erases no other thread with no proof (`SYNC-333`).
+    pub erase: Vec<Id<Document>>,
 }
 
 /// A document a removal caps, as the relay lists it.
@@ -199,15 +202,15 @@ impl SyncState {
                         .await
                     {
                         Ok(listed) => {
+                            // A listing short of a named document fails
+                            // before any erasure is read or posted.
+                            let counted =
+                                channel_counted(&listed.documents, revoked_on, &named.documents);
                             let hidden = hidden_threads(&listed.documents, &named.threads);
-                            let erased = match (hidden.is_empty(), erasing) {
-                                (true, _) => Ok(()),
-                                (false, Some(params)) => {
-                                    let params = crate::erasure::ErasureParams {
-                                        hidden,
-                                        receipts: named.receipts,
-                                        ..params
-                                    };
+                            let erased = match (&counted, hidden.is_empty(), erasing) {
+                                (Err(_), ..) | (Ok(_), true, _) => Ok(crate::erasure::Cleared::All),
+                                (Ok(_), false, Some(params)) => {
+                                    let params = params.hiding(hidden, named);
                                     crate::erasure::erase_hidden(
                                         &crate::sharing::GlooHttp { auth },
                                         params,
@@ -216,13 +219,22 @@ impl SyncState {
                                 }
                                 // No footing of the `meta`, or no signed-in
                                 // user: no erasure can be checked or signed.
-                                (false, None) => Err(http::HttpError::Local(
+                                (Ok(_), false, None) => Err(http::HttpError::Local(
                                     ambre_core::LocalFailure::ChannelDocumentHidden,
                                 )),
                             };
-                            erased.and_then(|()| {
-                                channel_counted(&listed.documents, revoked_on, &named.documents)
-                            })
+                            match erased {
+                                Ok(crate::erasure::Cleared::All) => counted,
+                                Ok(crate::erasure::Cleared::Unproven(threads)) => {
+                                    let _ = tx.send(SyncEvent::CensusUnproven {
+                                        removal,
+                                        channel_id,
+                                        threads,
+                                    });
+                                    return;
+                                }
+                                Err(error) => Err(error),
+                            }
                         }
                         Err(error) => Err(error),
                     }
@@ -375,10 +387,51 @@ impl SyncState {
             meta,
             hidden: Vec::new(),
             receipts: Vec::new(),
+            confirmed: Vec::new(),
             footing: self.footing(meta)?,
             rule: self.log_rule(meta),
             author: self.author()?,
         })
+    }
+
+    /// The census of `removal` from `channel_id` set `threads` apart, and
+    /// posted nothing (`SYNC-333`). The Logic thread learns which threads,
+    /// then the removal fails: the owner confirms their erasure, and the
+    /// removal runs again.
+    pub(crate) fn census_unproven(
+        &self,
+        removal: Removal,
+        channel_id: Id<Channel>,
+        threads: Vec<Id<Document>>,
+    ) {
+        let named = match removal {
+            Removal::Revoke {
+                id,
+                document_id,
+                user_id,
+            } => ambre_bus::ChannelRemoval::Revoke {
+                id,
+                document_id,
+                user_id,
+            },
+            Removal::LeaveChannel { .. } => ambre_bus::ChannelRemoval::Leave,
+            // A departure of one document lists no thread.
+            Removal::Leave { .. } => {
+                return self.fail_removal(
+                    removal,
+                    ApiFailure::Local(ambre_core::LocalFailure::ChannelDocumentHidden),
+                );
+            }
+        };
+        self.send_to_logic(LogicEvent::ThreadsUnproven {
+            channel_id,
+            removal: named,
+            threads,
+        });
+        self.fail_removal(
+            removal,
+            ApiFailure::Local(ambre_core::LocalFailure::ThreadsUnproven),
+        );
     }
 
     /// Runs `removal` on the documents open here.
@@ -884,6 +937,7 @@ mod tests {
                 documents: Vec::new(),
                 threads: vec![THREAD],
                 receipts: Vec::new(),
+                erase: Vec::new(),
             })
         };
         for (removal, named) in [
@@ -908,6 +962,267 @@ mod tests {
             );
             assert!(events.try_iter().next().is_none(), "nothing was asked");
             assert!(state.censuses.is_empty() && state.census_docs.is_empty());
+        }
+    }
+
+    /// `SYNC-333`: a census that set threads apart names them to the Logic
+    /// thread with the removal it holds, then fails that removal, and
+    /// nothing posts. A revoke keeps its request id, a departure its
+    /// channel.
+    #[test]
+    fn a_census_that_sets_threads_apart_names_them_then_fails() {
+        let user_id = Id::<User>::from_bytes([8; 16]);
+        let revoke = Removal::Revoke {
+            id: Seq::<Request>::new(6),
+            document_id: META,
+            user_id,
+        };
+        let leave = Removal::LeaveChannel {
+            channel_id: CHANNEL,
+        };
+        let unproven = ApiFailure::Local(ambre_core::LocalFailure::ThreadsUnproven);
+        for (removal, named) in [
+            (
+                revoke,
+                ambre_bus::ChannelRemoval::Revoke {
+                    id: Seq::<Request>::new(6),
+                    document_id: META,
+                    user_id,
+                },
+            ),
+            (leave, ambre_bus::ChannelRemoval::Leave),
+        ] {
+            let (state, rx, _author) = signed_in();
+            state.census_unproven(removal, CHANNEL, vec![THREAD]);
+            let told: Vec<LogicEvent> = rx.try_iter().collect();
+            assert!(
+                matches!(
+                    told.as_slice(),
+                    [
+                        LogicEvent::ThreadsUnproven { channel_id, removal, threads },
+                        LogicEvent::ApiError { failure, .. }
+                        | LogicEvent::ChannelRequestFailed { failure, .. },
+                    ] if *channel_id == CHANNEL
+                        && *removal == named
+                        && threads == &[THREAD]
+                        && *failure == unproven
+                ),
+                "{told:?}"
+            );
+        }
+    }
+
+    /// `SYNC-312`: a census hears the opens of its own documents alone. An
+    /// open of another document that fails leaves the census waiting, and
+    /// fails no removal.
+    #[test]
+    fn an_open_outside_the_census_leaves_it_waiting() {
+        let (mut state, rx, _author) = signed_in();
+        state.census_planned(
+            Removal::LeaveChannel {
+                channel_id: CHANNEL,
+            },
+            Ok(vec![under_meta(THREAD)]),
+        );
+        state.send_to_logic(LogicEvent::DocumentOpenFailed {
+            document_id: SEGMENT,
+            cause: ambre_bus::OpenFailure::Transient,
+        });
+        state.settle_census();
+        assert_eq!(state.censuses.len(), 1, "the census still waits");
+        assert!(state.census_docs.contains(&THREAD));
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, LogicEvent::ChannelRequestFailed { .. })),
+            "{events:?}"
+        );
+    }
+
+    /// `SYNC-312`: an open holds its latest snapshot back until
+    /// the replay is done, then asks the Logic thread to check it. The census
+    /// reads that ask as the end of the replay. A snapshot held for another
+    /// purpose ends nothing.
+    #[test]
+    fn a_snapshot_held_at_the_open_ends_the_replay_of_a_census_document() {
+        for (purpose, ends) in [
+            (ambre_bus::SnapshotPurpose::Open, true),
+            (ambre_bus::SnapshotPurpose::Confirm, false),
+        ] {
+            let (mut state, rx, _author) = signed_in();
+            state.census_planned(
+                Removal::LeaveChannel {
+                    channel_id: CHANNEL,
+                },
+                Ok(vec![under_meta(THREAD)]),
+            );
+            state.send_to_logic(LogicEvent::PendingSnapshot {
+                document_id: THREAD,
+                snapshot_id: Id::<Snapshot>::mint(),
+                covered_seq: Seq::<Relay>::new(1),
+                payload: ambre_core::Payload::new(Vec::new()),
+                purpose,
+            });
+            state.settle_census();
+            assert_eq!(state.censuses.is_empty(), ends, "{purpose:?}");
+            assert_eq!(
+                about(&rx, THREAD),
+                0,
+                "the Logic thread hears no census open"
+            );
+        }
+    }
+
+    /// `SYNC-312`: every event an open of a census document raises reaches
+    /// the census alone, never the Logic thread. The same event about a
+    /// document outside the census reaches the Logic thread.
+    #[test]
+    fn no_event_of_a_census_open_reaches_the_logic_thread() {
+        let (mut state, rx, _author) = signed_in();
+        state.census_planned(
+            Removal::LeaveChannel {
+                channel_id: CHANNEL,
+            },
+            Ok(vec![under_meta(THREAD)]),
+        );
+        state.send_to_logic(LogicEvent::KeyRotated {
+            document_id: THREAD,
+        });
+        state.send_to_logic(LogicEvent::SnapshotNeeded {
+            document_id: THREAD,
+        });
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(told.is_empty(), "{told:?}");
+        state.send_to_logic(LogicEvent::KeyRotated {
+            document_id: SEGMENT,
+        });
+        assert_eq!(rx.try_iter().count(), 1);
+    }
+
+    /// `SYNC-312`, `SYNC-320`: a revoke on a `meta` that no listing names
+    /// fails before it asks the relay for anything. It fails when the `meta`
+    /// heads a channel open here, and when the Logic thread names the
+    /// documents of its channel. Nothing posts, and no census starts.
+    #[test]
+    fn a_revoke_on_a_meta_no_listing_names_fails_before_it_posts() {
+        let named = Named {
+            documents: vec![THREAD],
+            ..Named::default()
+        };
+        for (heads_open_channel, named) in [(true, None), (false, Some(named))] {
+            let (mut state, rx, _author) = signed_in();
+            state.listing_metas.clear();
+            if heads_open_channel {
+                state
+                    .channel_metas
+                    .insert(THREAD, Id::<Meta>::from_document(META));
+            }
+            let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+            state.set_event_tx(tx);
+            let id = Seq::<Request>::new(7);
+            state.begin_removal(
+                Removal::Revoke {
+                    id,
+                    document_id: META,
+                    user_id: Id::<User>::from_bytes([8; 16]),
+                },
+                named,
+            );
+            let told: Vec<LogicEvent> = rx.try_iter().collect();
+            let refused = ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen);
+            assert!(
+                matches!(
+                    told.as_slice(),
+                    [LogicEvent::ApiError {
+                        id: Some(i),
+                        request: ApiRequest::RevokeFromDocument,
+                        failure,
+                    }] if *i == id && *failure == refused
+                ),
+                "{told:?}"
+            );
+            assert!(events.try_iter().next().is_none(), "nothing was asked");
+            assert!(state.censuses.is_empty() && state.census_docs.is_empty());
+        }
+    }
+
+    /// `SYNC-260`: a census fails before it opens anything when an open of
+    /// another type claimed one of its Murmure documents for the session. A
+    /// claimed document of another type opens for the census as any other.
+    #[test]
+    fn a_census_of_a_murmure_document_another_open_claimed_fails() {
+        for (doc_type, fails) in [(DocType::Murmure, true), (DocType::Prose, false)] {
+            let (mut state, rx, _author) = signed_in();
+            state.typed_opens.insert(THREAD);
+            state.census_planned(
+                Removal::LeaveChannel {
+                    channel_id: CHANNEL,
+                },
+                Ok(vec![Counted {
+                    doc_type,
+                    ..under_meta(THREAD)
+                }]),
+            );
+            let refused = ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen);
+            let failed = rx.try_iter().any(|e| {
+                matches!(e, LogicEvent::ChannelRequestFailed { channel_id, failure }
+                    if channel_id == CHANNEL && failure == refused)
+            });
+            assert_eq!(failed, fails, "{doc_type:?}");
+            assert_eq!(state.censuses.is_empty(), fails, "{doc_type:?}");
+            assert_eq!(state.census_docs.contains(&THREAD), !fails, "{doc_type:?}");
+        }
+    }
+
+    /// `SYNC-322`: the erasure of a hidden thread stands on the footing of
+    /// the `meta` and on this user. A revoke names its `meta`, and a
+    /// departure of the channel reads it from the listing. With no footing
+    /// of the `meta`, no erasure can be checked.
+    #[test]
+    fn an_erasure_stands_on_the_footing_of_the_meta() {
+        use crate::membership_log::tests::{Person, created};
+        let (mut state, _rx, author) = signed_in();
+        let leave = Removal::LeaveChannel {
+            channel_id: CHANNEL,
+        };
+        assert!(state.erasure_params(CHANNEL, leave).is_none(), "no footing");
+        let entries = created(&Person::new(1), &Person::new(2));
+        let anchor = crate::membership_log::digest(&entries[0]).expect("an anchor");
+        let footing = crate::key_vouch::Footing::sealed_in_catalogue(META, anchor);
+        if let Some(meta) = state.documents.get_mut(&META) {
+            meta.footing = Some(footing);
+        }
+        let revoke = Removal::Revoke {
+            id: Seq::<Request>::new(8),
+            document_id: META,
+            user_id: Id::<User>::from_bytes([8; 16]),
+        };
+        for removal in [leave, revoke] {
+            let params = state
+                .erasure_params(CHANNEL, removal)
+                .unwrap_or_else(|| panic!("no erasure for {removal:?}"));
+            assert_eq!(
+                (params.channel_id, params.meta, params.footing),
+                (CHANNEL, META, footing)
+            );
+            assert!(params.hidden.is_empty());
+            assert_eq!(params.author.user_id, author.user_id);
+            assert!(params.receipts.is_empty() && params.confirmed.is_empty());
+            let receipt = ambre_bus::LinkReceipt {
+                thread: THREAD,
+                signature: FixedBytes::from_array([3; 64]),
+            };
+            let named = Named {
+                receipts: vec![receipt],
+                erase: vec![THREAD],
+                ..Named::default()
+            };
+            let hiding = params.hiding(vec![THREAD], named);
+            assert_eq!(hiding.hidden, [THREAD]);
+            assert_eq!(hiding.receipts, [receipt]);
+            assert_eq!(hiding.confirmed, [THREAD]);
+            assert_eq!((hiding.channel_id, hiding.meta), (CHANNEL, META));
         }
     }
 }

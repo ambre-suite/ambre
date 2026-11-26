@@ -1449,47 +1449,94 @@ pub(crate) struct ThreadParams {
     pub channel_id: Id<Channel>,
     pub root: Id<Message>,
     pub thread: Id<Document>,
-    /// The current key of the channel's `meta`, which opens every document
-    /// of the channel.
-    pub meta_key: DocumentKey,
-    /// This user, who creates the document.
-    pub author: Author,
+    pub step: ThreadStep,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
-    pub exchange_key: StaticSecret,
+}
+
+/// What [`thread_task`] asks the relay before it reads the link.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a task holds one step, moved once, so a box would only add an allocation"
+)]
+pub(crate) enum ThreadStep {
+    /// Create the thread document, then register it for the root
+    /// (`SRV-213`).
+    Create {
+        /// The current key of the channel's `meta`, which opens every
+        /// document of the channel.
+        meta_key: DocumentKey,
+        /// This user, who creates the document.
+        author: Author,
+        exchange_key: StaticSecret,
+    },
+    /// Ask the receipt of the link the relay holds for the root, and create
+    /// nothing (`SYNC-334`). The worker asks only when no receipt of the root
+    /// counts ([`fresh_needed`]). One task serves both, so the worker holds
+    /// one copy of the path that reads a link.
+    Held,
+}
+
+/// Whether a root that holds `receipts` for `thread` needs a fresh receipt:
+/// none of them counts under the pinned link key (`SYNC-334`).
+pub(crate) fn fresh_needed(
+    channel_id: Id<Channel>,
+    thread: Id<Document>,
+    receipts: &[ambre_bus::LinkReceipt],
+) -> bool {
+    !crate::erasure::linked(channel_id, thread, receipts)
 }
 
 /// Create the thread document of a root under the key of `meta`, then
 /// register it for the root (`SRV-213`). Returns the document the relay
 /// holds for the root, with the relay's receipt of that link (`SRV-363`).
+/// [`ThreadStep::Held`] creates nothing and asks that receipt alone
+/// (`SYNC-334`).
 ///
 /// A registration that lost its race deletes the document it created
 /// (`SYNC-169`). A failed request deletes nothing, as for amendments.
+///
+/// # Errors
+/// [`ambre_core::LocalFailure::UnexpectedAnswer`] when the answer carries no
+/// receipt that the pinned link key signed over that channel and that thread
+/// (`SYNC-332`). The root then names no thread a relay could hide. The error
+/// of each request otherwise.
 pub(crate) async fn thread_task<H: ShareHttp>(
     http: &H,
     p: ThreadParams,
 ) -> Result<(Id<Document>, Option<FixedBytes<Signature>>), http::HttpError> {
     let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
-    let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
-    let body = http::CreateDocumentRequest {
-        doc_type: ambre_core::DocType::Murmure,
-        name_enc: None,
-        doc_key_enc,
-        document_id: Some(p.thread),
-        entry: Some(entry),
-        space: ambre_core::DocumentScope::Personal,
+    let route = match &p.step {
+        ThreadStep::Create {
+            meta_key,
+            author,
+            exchange_key,
+        } => {
+            let (doc_key_enc, entry) = creation(p.thread, meta_key, exchange_key, author)?;
+            let body = http::CreateDocumentRequest {
+                doc_type: ambre_core::DocType::Murmure,
+                name_enc: None,
+                doc_key_enc,
+                document_id: Some(p.thread),
+                entry: Some(entry),
+                space: ambre_core::DocumentScope::Personal,
+            };
+            http.post_json::<_, http::CreateDocumentResponse>(&base.route("/documents"), &body)
+                .await?;
+            "threads"
+        }
+        ThreadStep::Held => "threads/receipt",
     };
-    http.post_json::<_, http::CreateDocumentResponse>(&base.route("/documents"), &body)
-        .await?;
     let body = http::RegisterThreadRequest {
         root: p.root,
         thread: p.thread,
     };
-    let url = base.route(format!("/channels/{}/threads", p.channel_id));
+    let url = base.route(format!("/channels/{}/{route}", p.channel_id));
     let linked = http
         .post_json::<_, http::ThreadResponse>(&url, &body)
         .await?;
-    if linked.created == ambre_core::Creation::Existing {
+    let created = matches!(p.step, ThreadStep::Create { .. });
+    if created && linked.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{}", p.thread));
         if let Err(e) = http.delete(&url, &()).await {
             crate::log::warning!(
@@ -1497,7 +1544,22 @@ pub(crate) async fn thread_task<H: ShareHttp>(
             );
         }
     }
-    Ok((linked.thread, linked.receipt))
+    // A link with no receipt that counts is a thread the relay could hide
+    // and get erased, so the root never names it (`SYNC-332`).
+    let proven = linked.receipt.filter(|signature| {
+        let receipt = ambre_bus::LinkReceipt {
+            thread: linked.thread,
+            signature: *signature,
+        };
+        crate::erasure::linked(p.channel_id, linked.thread, &[receipt])
+    });
+    let Some(receipt) = proven else {
+        crate::log::warning!("[Sync] the relay linked a thread under no receipt that counts");
+        return Err(http::HttpError::Local(
+            ambre_core::LocalFailure::UnexpectedAnswer,
+        ));
+    };
+    Ok((linked.thread, Some(receipt)))
 }
 
 /// Inputs for [`settle_task`].
@@ -3943,16 +4005,145 @@ mod tests {
         );
     }
 
+    /// The receipt a development relay signs over `thread` in `channel`.
+    fn dev_receipt(channel: Id<Channel>, thread: Id<Document>) -> FixedBytes<Signature> {
+        let transcript = ambre_protocol::thread_erasure::link_transcript(channel, thread);
+        let relay = SigningKey::from_bytes(&[0x4c; 32]);
+        FixedBytes::from_array(
+            ed25519_dalek::Signer::sign(&relay, transcript.as_bytes()).to_bytes(),
+        )
+    }
+
+    /// Holds `SYNC-332`. An answer with no receipt fails the link, so no
+    /// root names the thread. So does a receipt that the link key did not
+    /// sign over that thread and that channel. A lost registration still
+    /// deletes the document it created first.
+    #[tokio::test]
+    async fn a_link_under_no_receipt_that_counts_names_no_thread() {
+        let mine = Id::<Document>::mint();
+        let params = thread_params(mine);
+        let channel = params.channel_id;
+        let created = serde_json::json!({
+            "document_id": mine.to_string(), "doc_type": "murmure",
+        });
+        let unproven = [
+            None,
+            Some(FixedBytes::<Signature>::from_array([7; 64])),
+            Some(dev_receipt(channel, Id::<Document>::mint())),
+            Some(dev_receipt(Id::<Channel>::mint(), mine)),
+            Some(FixedBytes::from_array(
+                ed25519_dalek::Signer::sign(
+                    &author().signing_key,
+                    ambre_protocol::thread_erasure::link_transcript(channel, mine).as_bytes(),
+                )
+                .to_bytes(),
+            )),
+        ];
+        for receipt in unproven {
+            let mut answer = serde_json::json!({ "thread": mine.to_string(), "created": true });
+            if let Some(receipt) = receipt {
+                answer["receipt"] = serde_json::to_value(receipt).unwrap();
+            }
+            let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer)]);
+            let mut p = thread_params(mine);
+            p.channel_id = channel;
+            assert_eq!(
+                thread_task(&http, p).await,
+                Err(http::HttpError::Local(
+                    ambre_core::LocalFailure::UnexpectedAnswer
+                )),
+                "{receipt:?} proves no link"
+            );
+        }
+
+        let winner = Id::<Document>::mint();
+        let lost = serde_json::json!({ "thread": winner.to_string(), "created": false });
+        let http = FakeHttp::new(vec![Ok(created), Ok(lost), Ok(serde_json::Value::Null)]);
+        assert!(thread_task(&http, params).await.is_err());
+        assert!(
+            matches!(http.calls().last(), Some(Call::Delete(url, _)) if url.ends_with(&format!("/documents/{mine}"))),
+            "the loser deletes its own document before it fails"
+        );
+    }
+
+    /// Holds `SYNC-334`. A root under a receipt that counts needs no fresh
+    /// one, whatever else it holds. One under none asks the receipt of the
+    /// link the relay holds, creates and deletes nothing, and takes the
+    /// answer only when it counts. A receipt over another thread, over
+    /// another channel or by another key gives nothing.
+    #[tokio::test]
+    async fn a_root_under_no_receipt_that_counts_asks_a_fresh_one() {
+        let thread = Id::<Document>::mint();
+        let mut params = thread_params(thread);
+        params.step = ThreadStep::Held;
+        let (channel, root) = (params.channel_id, params.root);
+        let held = |signature| ambre_bus::LinkReceipt { thread, signature };
+        let garbage = FixedBytes::<Signature>::from_array([7; 64]);
+        let valid = dev_receipt(channel, thread);
+        assert!(!fresh_needed(
+            channel,
+            thread,
+            &[held(garbage), held(valid)]
+        ));
+        assert!(fresh_needed(channel, thread, &[held(garbage)]));
+        assert!(fresh_needed(channel, thread, &[]));
+
+        let answer = |receipt: Option<FixedBytes<Signature>>| {
+            let mut answer = serde_json::json!({ "thread": thread.to_string(), "created": false });
+            if let Some(receipt) = receipt {
+                answer["receipt"] = serde_json::to_value(receipt).unwrap();
+            }
+            answer
+        };
+        let http = FakeHttp::new(vec![Ok(answer(Some(valid)))]);
+        assert_eq!(
+            thread_task(&http, params).await,
+            Ok((thread, Some(valid))),
+            "the relay's fresh receipt passes through"
+        );
+        assert!(
+            matches!(http.calls().as_slice(), [Call::Post(url, body)]
+                if url.ends_with(&format!("/api/channels/{channel}/threads/receipt"))
+                    && body["root"] == root.to_string()),
+            "one ask, of that link, and no document created or deleted"
+        );
+
+        let unproven = [
+            None,
+            Some(garbage),
+            Some(dev_receipt(channel, Id::<Document>::mint())),
+            Some(dev_receipt(Id::<Channel>::mint(), thread)),
+            Some(FixedBytes::from_array(
+                ed25519_dalek::Signer::sign(
+                    &author().signing_key,
+                    ambre_protocol::thread_erasure::link_transcript(channel, thread).as_bytes(),
+                )
+                .to_bytes(),
+            )),
+        ];
+        for receipt in unproven {
+            let http = FakeHttp::new(vec![Ok(answer(receipt))]);
+            let mut p = thread_params(thread);
+            (p.channel_id, p.step) = (channel, ThreadStep::Held);
+            assert!(
+                thread_task(&http, p).await.is_err(),
+                "{receipt:?} is no fresh receipt"
+            );
+        }
+    }
+
     fn thread_params(thread: Id<Document>) -> ThreadParams {
         ThreadParams {
             channel_id: Id::<Channel>::mint(),
             root: Id::<Message>::mint(),
             thread,
-            meta_key: DocumentKey::generate(),
-            author: author(),
+            step: ThreadStep::Create {
+                meta_key: DocumentKey::generate(),
+                author: author(),
+                exchange_key: keypair(1).0,
+            },
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
-            exchange_key: keypair(1).0,
         }
     }
 
@@ -3967,14 +4158,15 @@ mod tests {
         let created = serde_json::json!({
             "document_id": mine.to_string(), "doc_type": "murmure",
         });
-        let answer = |held: Id<Document>, created: bool| serde_json::json!({ "thread": held.to_string(), "created": created });
-        let receipt = FixedBytes::<Signature>::from_array([7; 64]);
-        let mut first = answer(mine, true);
-        first["receipt"] = serde_json::to_value(receipt).unwrap();
-        let http = FakeHttp::new(vec![Ok(created.clone()), Ok(first)]);
+        let channel = params.channel_id;
+        let answer = |held: Id<Document>, created: bool| {
+            let receipt = dev_receipt(channel, held);
+            serde_json::json!({ "thread": held.to_string(), "created": created, "receipt": receipt })
+        };
+        let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
         assert_eq!(
             thread_task(&http, params).await,
-            Ok((mine, Some(receipt))),
+            Ok((mine, Some(dev_receipt(channel, mine)))),
             "the relay's receipt passes through"
         );
         {
@@ -3995,9 +4187,11 @@ mod tests {
             Ok(answer(winner, false)),
             Ok(serde_json::Value::Null),
         ]);
+        let mut lost = thread_params(mine);
+        lost.channel_id = channel;
         assert_eq!(
-            thread_task(&http, thread_params(mine)).await,
-            Ok((winner, None))
+            thread_task(&http, lost).await,
+            Ok((winner, Some(dev_receipt(channel, winner))))
         );
         {
             let calls = http.calls();
@@ -6470,6 +6664,7 @@ mod tests {
             meta,
             hidden: vec![phantom],
             receipts: Vec::new(),
+            confirmed: vec![phantom],
             footing: footing_of(meta, &log),
             rule: LogRule::document(),
             author,
@@ -6521,6 +6716,83 @@ mod tests {
         let refused = http::HttpError::Local(LocalFailure::UnexpectedAnswer);
         let http = FakeHttp::new(vec![Ok(members), Ok(none), Err(refused)]);
         assert!(erase_hidden(&http, params(author())).await.is_err());
+    }
+
+    /// `SYNC-333`: a hidden thread under no proof and no erasure is set
+    /// apart until the owner confirms its erasure, and nothing posts. The
+    /// set apart is the hidden threads alone, less those a held erasure
+    /// covers. A confirmation erases those it names among them alone, and a
+    /// thread it names past them takes no erasure.
+    #[tokio::test]
+    async fn an_owner_erases_no_thread_with_no_proof_before_confirming() {
+        use crate::erasure::{Cleared, ErasureEntry, ErasureParams, erase_hidden, sign_erasure};
+        let (owner_xk, _) = keypair(1);
+        let meta = Id::<Document>::mint();
+        let channel_id = Id::<Channel>::mint();
+        let (phantom, other, held, stray) = (
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+        );
+        let (log, own) = log_inviting(meta, &author(), &owner_xk, &[]);
+        let members = serde_json::json!({ "members": [own], "log": log });
+        let params = |confirmed| ErasureParams {
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            channel_id,
+            meta,
+            hidden: vec![phantom, other, held],
+            receipts: Vec::new(),
+            confirmed,
+            footing: footing_of(meta, &log),
+            rule: LogRule::document(),
+            author: author(),
+        };
+        let listed = serde_json::json!({ "erasures": [ErasureEntry {
+            thread: held,
+            signer: author().public(),
+            signature: sign_erasure(&author(), channel_id, held),
+        }] });
+
+        for (confirmed, apart) in [
+            (Vec::new(), vec![phantom, other]),
+            (vec![phantom, stray], vec![other]),
+        ] {
+            let http = FakeHttp::new(vec![Ok(members.clone()), Ok(listed.clone())]);
+            assert_eq!(
+                erase_hidden(&http, params(confirmed)).await.ok(),
+                Some(Cleared::Unproven(apart))
+            );
+            assert_eq!(http.calls().len(), 2, "nothing posts before the word");
+        }
+
+        let erased = |t: Id<Document>| Ok(serde_json::json!({ "thread": t.to_string() }));
+        let http = FakeHttp::new(vec![
+            Ok(members),
+            Ok(listed),
+            erased(phantom),
+            erased(other),
+        ]);
+        assert_eq!(
+            erase_hidden(&http, params(vec![other, stray, phantom]))
+                .await
+                .ok(),
+            Some(Cleared::All)
+        );
+        let posted: Vec<String> = http
+            .calls()
+            .iter()
+            .filter_map(|call| match call {
+                Call::Post(_, body) => body["thread"].as_str().map(str::to_owned),
+                Call::Get(_) | Call::Delete(..) | Call::Patch(..) => None,
+            })
+            .collect();
+        assert_eq!(
+            posted,
+            [phantom.to_string(), other.to_string()],
+            "the confirmed and hidden alone"
+        );
     }
 
     /// `SYNC-329`: a thread a valid revoke of the log caps stood in the
@@ -6576,13 +6848,14 @@ mod tests {
             .unwrap();
         assert!(walked.log().caps_document(linked), "the revoke walks");
         let members = serde_json::json!({ "members": [own], "log": log });
-        let params = |hidden| ErasureParams {
+        let params = |hidden: Vec<Id<Document>>| ErasureParams {
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             channel_id,
             meta,
-            hidden,
+            hidden: hidden.clone(),
             receipts: Vec::new(),
+            confirmed: hidden,
             footing: footing_of(meta, &log),
             rule: LogRule::document(),
             author: author(),
@@ -6635,6 +6908,7 @@ mod tests {
         };
         let relay = SigningKey::from_bytes(&[0x4c; 32]);
         let params = |receipts| ErasureParams {
+            confirmed: vec![thread],
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             channel_id,
@@ -6735,6 +7009,7 @@ mod tests {
                 meta,
                 hidden: vec![phantom],
                 receipts: Vec::new(),
+                confirmed: vec![phantom],
                 footing: footing_of(meta, log),
                 rule: LogRule::document(),
                 author,

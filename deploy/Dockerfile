@@ -83,6 +83,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
 # writes them into the page policy, and no frame loads without one (`SRV-312`).
 # `AMBRE_OIDC_ISSUER` names the OpenID Connect issuer the client offers in place
 # of Google, and the one host it follows a sign-in to (`CHROME-139`).
+# The client pins no thread link key. Its Sync worker holds an empty slot,
+# which each build checks before the image takes it (`ZK-057`). Each install
+# writes the key of its own relay into a copy of these files, from the init
+# image (`SRV-365`, `scripts/link_key.py`).
 FROM toolchain AS web-build
 # The trunk that `scripts/client_digest.py` pins: another trunk writes another page.
 ARG TRUNK_VERSION=0.22.1
@@ -97,11 +101,13 @@ ARG AMBRE_OIDC_ISSUER=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=private \
     --mount=type=cache,target=/src/target,id=target-web,sharing=locked \
     set -eu; \
+    mkdir -p /out; \
     if [ -n "${DEV_LOGIN}" ]; then \
         trunk build --cargo-profile=wasm-release --features dev-login --dist /out/dist; \
     else \
         trunk build --release --dist /out/dist; \
     fi; \
+    python3 scripts/link_key.py empty /out/dist; \
     python3 deploy/compose/caddy_headers.py /out/dist/_headers > /out/headers.caddy
 
 # ---------------------------------------------------------------------------
@@ -138,6 +144,8 @@ COPY --from=server-build /out/ambre-sfu /usr/local/bin/ambre-sfu
 ENTRYPOINT ["/usr/local/bin/ambre-sfu"]
 
 # The client: the built files behind Caddy, with the headers of `_headers`.
+# The files stay as the release built them, with an empty link key slot. The
+# chart and the compose file serve a patched copy of them (`SRV-365`).
 FROM caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d AS web
 # The binary carries the file capability to bind a low port. A process that
 # holds no capability cannot run such a file, so the copy drops it: the chart
@@ -149,7 +157,10 @@ COPY --from=web-build /out/headers.caddy /etc/caddy/headers.caddy
 COPY deploy/compose/Caddyfile /etc/caddy/Caddyfile
 
 # The one-shot preparation of the object store: its layout, the key of the
-# stack and the bucket (`scripts/garage_init.py`).
+# stack and the bucket (`scripts/garage_init.py`). It also carries the patch
+# of the link key slot, which a copy of the client files takes before the web
+# server starts (`SRV-365`, `scripts/link_key.py`). The patch writes the
+# brotli copy of the patched file again.
 FROM ${UBUNTU} AS init
 RUN --mount=type=secret,id=ca,required=false \
     set -eu; \
@@ -159,10 +170,11 @@ RUN --mount=type=secret,id=ca,required=false \
         echo 'Acquire::https::CAInfo "/tmp/build-ca.pem";' > /etc/apt/apt.conf.d/99build-ca; \
     fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends curl python3; \
+    apt-get install -y --no-install-recommends brotli curl python3; \
     rm -f /etc/apt/apt.conf.d/99build-ca /tmp/build-ca.pem; \
     sed -i 's#https://#http://#g' /etc/apt/sources.list.d/ubuntu.sources; \
     rm -rf /var/lib/apt/lists/*
 COPY scripts/garage_init.py /opt/ambre/garage_init.py
+COPY scripts/link_key.py /opt/ambre/link_key.py
 USER nobody
 ENTRYPOINT ["python3", "/opt/ambre/garage_init.py"]

@@ -755,15 +755,30 @@ impl SyncState {
                 });
             }
         };
+        let step = crate::sharing::ThreadStep::Create {
+            meta_key,
+            author,
+            exchange_key,
+        };
+        self.spawn_thread_task(tx, segment, (channel_id, root, thread), step);
+    }
+
+    /// Run [`crate::sharing::thread_task`] for `thread`, the thread of
+    /// `root` in `channel_id`, and answer the Logic thread through `tx`.
+    fn spawn_thread_task(
+        &self,
+        tx: ambre_bus::conduit::UnboundedSender<SyncEvent>,
+        segment: Id<Segment>,
+        (channel_id, root, thread): (Id<Channel>, Id<Message>, Id<Document>),
+        step: crate::sharing::ThreadStep,
+    ) {
         let params = crate::sharing::ThreadParams {
             channel_id,
             root,
             thread,
-            meta_key,
-            author,
+            step,
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
-            exchange_key,
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
@@ -778,6 +793,26 @@ impl SyncState {
                 result,
             });
         });
+    }
+
+    /// Ask the relay for a fresh receipt of the link of `thread`, when none
+    /// of the `receipts` its root holds counts (`SYNC-334`). The answer
+    /// reaches the Logic thread as a registration that found the link held.
+    pub(crate) fn handle_freshen_receipt(
+        &self,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+        receipts: Vec<ambre_bus::LinkReceipt>,
+    ) {
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        if crate::sharing::fresh_needed(channel_id, thread, &receipts) {
+            let step = crate::sharing::ThreadStep::Held;
+            self.spawn_thread_task(tx, segment, (channel_id, root, thread), step);
+        }
     }
 
     /// Ask the relay to delete a channel with every document it groups
@@ -3549,5 +3584,41 @@ pub(crate) mod tests {
         word.removed.insert(Id::<User>::mint());
         state.handle_sync_event(listing(2, word));
         assert!(walks(&state), "a new word walks the channel log again");
+    }
+
+    /// `SYNC-311`: the documents a revoke on the log of a `meta` caps are
+    /// the open documents of that channel. The `meta` itself, a closed
+    /// document of the channel and an open document of another channel are
+    /// left out.
+    #[test]
+    fn the_open_documents_of_a_channel_are_those_its_meta_vouches_for() {
+        let (mut state, _rx) = bare_state();
+        let meta = Id::<Document>::from_bytes([0x31; 16]);
+        let other_meta = Id::<Document>::from_bytes([0x32; 16]);
+        let open = Id::<Document>::from_bytes([0x33; 16]);
+        let closed = Id::<Document>::from_bytes([0x34; 16]);
+        let elsewhere = Id::<Document>::from_bytes([0x35; 16]);
+        for (document_id, of) in [
+            (meta, meta),
+            (open, meta),
+            (closed, meta),
+            (elsewhere, other_meta),
+        ] {
+            state
+                .channel_metas
+                .insert(document_id, Id::<Meta>::from_document(of));
+        }
+        for document_id in [meta, open, elsewhere] {
+            state.documents.insert(
+                document_id,
+                SyncDocumentState::new(
+                    document_id,
+                    DocumentKey::generate(),
+                    DocType::Murmure,
+                    crate::Existence::OnRelay,
+                ),
+            );
+        }
+        assert_eq!(state.open_channel_documents(meta), vec![open]);
     }
 }

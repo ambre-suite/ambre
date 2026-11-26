@@ -95,6 +95,50 @@ networkPolicy:
 
 A scraper of the metrics of the relay needs its peer in `networkPolicy.metricsFrom` (`SRV-257`).
 
+## The link key of a thread
+
+The relay signs a receipt of each thread link under the seed `thread-link-seed`, and the client
+refuses to erase a thread under a receipt its link key verifies (`SYNC-330`). The published web
+image pins no key: its client holds an empty link key slot (`ZK-057`). The web pod writes the
+`thread-link-key` of the Secret into that slot before Caddy starts, so the published images serve
+any install with no build of its own (`SRV-365`):
+
+1. the init container `web-files`, of the web image, copies the client into an `emptyDir`;
+2. the init container `link-key`, of the init image, writes the key into that copy;
+3. Caddy serves the copy. The web image stays as the release built it.
+
+`secret.sh` draws the seed and its public half, `thread-link-key`, into the Secret. The relay checks
+its seed against that key and refuses to start under another key (`SRV-364`). The patch refuses an
+empty key, a malformed key and the development key. The pod then stops before Caddy, and the log
+says why (`SRV-368`): read it with `kubectl logs <web pod> -c link-key`. No value of the chart
+turns the patch off.
+
+**Rotate the link key.** A leaked seed lets anyone sign a receipt, and a receipt over a thread
+that does not exist blocks each removal of the channel. A new seed is the only answer:
+
+1. draw a new pair: `openssl genpkey -algorithm ed25519 -outform DER -out link.der`, then the
+   seed is `tail -c 32 link.der | od -An -v -tx1 | tr -d ' \n'`, and the key is
+   `openssl pkey -inform DER -in link.der -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n'`;
+2. write both into the Secret that `existingSecret` names, here `ambre`: `kubectl -n ambre patch secret ambre --type merge -p
+   '{"stringData":{"thread-link-seed":"<seed>","thread-link-key":"<key>"}}'`, then delete
+   `link.der`;
+3. restart both: `kubectl -n ambre rollout restart deployment/<release>-relay deployment/<release>-web`.
+   The relay checks the new seed against the new key (`SRV-364`), and the web pod patches the new
+   key into a fresh copy (`SRV-365`);
+4. check the served client: `THREAD_LINK_KEY=<key> python3 scripts/link_key.py served https://<domain>`.
+
+The older key then counts nothing, in no client. The relay keeps no receipt: it signs each one
+when it answers a registration, so every link it holds gets a receipt under the new key at its next
+registration (`SRV-370`). A thread the relay never linked, which a leaked seed could vouch for,
+gets none. A browser asks for the Sync worker again before each use (`SRV-371`), so a reload takes
+the new key. A tab open across the rotation keeps the older key until it reloads.
+
+**Check the served client.** The patch changes 32 bytes of the Sync worker alone (`SRV-367`).
+Download the `ambre-sync-*_bg.wasm` the page names, then run
+`python3 scripts/link_key.py zero <file> <file>`, and check it with
+`b2sum -l 256 -c ambre-client.manifest` from the release (`ZK-059`). `link_key.py read <file>`
+prints the key the served file holds.
+
 ## Sign-in
 
 The Secret takes the keys of an identity provider, as `deploy/README.md` describes them:

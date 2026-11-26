@@ -301,6 +301,147 @@ class NodesTest(unittest.TestCase):
         self.assertTrue(values["networkPolicy"]["nodeCidrs"])
 
 
+def mount(name: str, path: str, **extra: object) -> dict:
+    return {"name": name, "mountPath": path, **extra}
+
+
+def web() -> dict:
+    """A web workload that serves a copy its init containers patch (`SRV-365`)."""
+    obj = workload("web", "ghcr.io/x/web:1.0.0")
+    spec = obj["spec"]["template"]["spec"]
+    spec["containers"][0]["volumeMounts"] = [mount("site", "/srv/ambre", readOnly=True)]
+    ref = {"secretKeyRef": {"name": "ambre", "key": "thread-link-key"}}
+    copy_files = container(
+        "web-files",
+        "ghcr.io/x/web:1.0.0",
+        command=["/bin/sh", "-c", "cp -R /srv/ambre/. /site/"],
+        volumeMounts=[mount("site", "/site")],
+    )
+    patch = container(
+        "link-key",
+        "ghcr.io/x/init:1.0.0",
+        env=[{"name": "THREAD_LINK_KEY", "valueFrom": ref}],
+        command=["python3", "/opt/ambre/link_key.py", "patch", "/site"],
+        volumeMounts=[mount("site", "/site")],
+    )
+    spec["initContainers"] = [copy_files, patch]
+    return obj
+
+
+class LinkKeyTest(unittest.TestCase):
+    """`SRV-365`: the web pod serves a copy patched with the key of the Secret."""
+
+    def inits(self, obj: dict) -> list[dict]:
+        return obj["spec"]["template"]["spec"]["initContainers"]
+
+    def faults(self, obj: dict) -> str:
+        return " ".join(chart.check_link_key([obj]))
+
+    def test_a_web_pod_that_patches_its_copy_holds(self) -> None:
+        self.assertEqual(chart.check_link_key([*stack(), web()]), [])
+
+    def test_a_web_pod_with_no_init_container_fails(self) -> None:
+        obj = web()
+        del obj["spec"]["template"]["spec"]["initContainers"]
+        self.assertIn("serves an empty slot", self.faults(obj))
+
+    def test_a_web_server_that_serves_its_image_fails(self) -> None:
+        obj = web()
+        obj["spec"]["template"]["spec"]["containers"][0]["volumeMounts"] = []
+        self.assertIn("from its image", self.faults(obj))
+
+    def test_a_patch_before_the_copy_fails(self) -> None:
+        obj = web()
+        self.inits(obj).reverse()
+        self.assertIn("runs before", self.faults(obj))
+
+    def test_a_copy_of_another_image_or_of_another_volume_fails(self) -> None:
+        obj = web()
+        self.inits(obj)[0]["image"] = "busybox:1"
+        self.assertIn("another image", self.faults(obj))
+        obj = web()
+        self.inits(obj)[0]["volumeMounts"] = [mount("tmp", "/site")]
+        self.assertIn("does not copy", self.faults(obj))
+
+    def test_a_patch_of_another_volume_or_with_no_patch_fails(self) -> None:
+        obj = web()
+        self.inits(obj)[1]["volumeMounts"] = [mount("tmp", "/site")]
+        self.assertIn("runs no", self.faults(obj))
+        obj = web()
+        self.inits(obj)[1]["command"] = ["/bin/true"]
+        self.assertIn("runs no", self.faults(obj))
+
+    def test_a_patch_from_the_web_image_or_in_dev_mode_fails(self) -> None:
+        obj = web()
+        self.inits(obj)[1]["image"] = "ghcr.io/x/web:1.0.0"
+        self.assertIn("carries no patch", self.faults(obj))
+        obj = web()
+        self.inits(obj)[1]["command"].append("--dev")
+        self.assertIn("development key", self.faults(obj))
+
+    def test_a_key_of_another_source_or_an_optional_one_fails(self) -> None:
+        obj = web()
+        ref = self.inits(obj)[1]["env"][0]["valueFrom"]["secretKeyRef"]
+        ref["optional"] = True
+        self.assertIn("is optional", self.faults(obj))
+        ref.pop("optional")
+        ref["key"] = "thread-link-seed"
+        self.assertIn("does not come from", self.faults(obj))
+
+    def test_a_render_with_no_web_server_fails(self) -> None:
+        self.assertIn("0 web workloads", " ".join(chart.check_link_key(stack())))
+
+
+def pods(init: dict, web_state: dict) -> dict:
+    """The web pods of a cluster, as `kubectl get pods -o json` prints them."""
+    status = {
+        "initContainerStatuses": [{"name": "web-files", "state": {"terminated": {"exitCode": 0}}}, {"name": "link-key", **init}],
+        "containerStatuses": [{"name": "web", "ready": False, "state": web_state}],
+    }
+    return {"items": [{"metadata": {"name": "ambre-web-1"}, "status": status}]}
+
+
+FAILED = {"state": {"waiting": {"reason": "CrashLoopBackOff"}}, "lastState": {"terminated": {"exitCode": 1}}}
+WAITING = {"waiting": {"reason": "PodInitializing"}}
+REASON = "names the development key"
+LOG = f"link_key: THREAD_LINK_KEY {REASON}, under which any member signs a receipt"
+
+
+class LinkKeyRefusalTest(unittest.TestCase):
+    """`SRV-368`: the verdict of `chart.py link-key refuse` on a cluster."""
+
+    def test_a_failed_init_whose_log_says_why_holds(self) -> None:
+        self.assertEqual(chart.link_key_faults(pods(FAILED, WAITING), LOG, REASON), [])
+
+    def test_a_web_server_that_runs_fails(self) -> None:
+        running = pods({"state": {"terminated": {"exitCode": 0}}}, {"running": {}})
+        text = " ".join(chart.link_key_faults(running, LOG, REASON))
+        self.assertIn("runs under a key the patch refuses", text)
+        self.assertIn("failed", text)
+
+    def test_a_log_that_says_another_reason_fails(self) -> None:
+        text = " ".join(chart.link_key_faults(pods(FAILED, WAITING), "link_key: no link key slot", REASON))
+        self.assertIn("does not say why", text)
+
+    def test_the_termination_message_keeps_the_reason_past_a_restart(self) -> None:
+        restarted = {"state": {"waiting": {"reason": "CrashLoopBackOff"}}, "lastState": {"terminated": {"exitCode": 1, "message": LOG}}}
+        self.assertIn(REASON, chart.termination_messages(pods(restarted, WAITING)))
+        self.assertNotIn(REASON, chart.termination_messages(pods(FAILED, WAITING)))
+
+    def test_the_chart_keeps_the_log_of_a_refused_patch(self) -> None:
+        template = (chart.ROOT / "deploy/chart/ambre/templates/web.yaml").read_text()
+        patch = template[template.index("- name: link-key") : template.index("containers:\n        - name: web")]
+        self.assertIn("terminationMessagePolicy: FallbackToLogsOnError", patch)
+
+    def test_each_refusal_plants_a_key_the_patch_refuses(self) -> None:
+        for planted, reason in chart.REFUSALS:
+            with self.subTest(reason=reason):
+                self.assertIn(reason, chart.link_key.key_refusal(planted, dev=False) or "")
+
+    def test_a_cluster_with_no_web_pod_fails(self) -> None:
+        self.assertIn("no web pod", " ".join(chart.link_key_faults({"items": []}, LOG, REASON)))
+
+
 class ProbeTest(unittest.TestCase):
     TARGETS = {"ambre-postgres:5432": False, "ambre-web:443": True}
 

@@ -21,6 +21,9 @@ the stores in the cluster, the stores outside it, and the stack under test of
   not name, or refuse one it names (`SRV-351`). The web server reaches the
   signalling port of the SFU on the blocks of `networkPolicy.nodeCidrs`
   alone, so a rule with no peer on that port is a fault (`SRV-361`);
+* a web pod that serves its client from the image, or from a copy that no
+  init container of the init image patches with the `thread-link-key` of the
+  Secret, or that reads that key as optional (`SRV-365`);
 * with `--release`, an image of Ambre that names no digest (`SRV-308`).
 
 `check` also renders the chart under `NODE_REFUSALS`: no block of nodes, and
@@ -38,6 +41,13 @@ table names nowhere try each port of the stores and of the relay, and a
 refused connection is the pass. The pod outside the release also reaches the
 web server, so a refusal is the policy and not a broken network (`SRV-352`).
 
+`link-key served ORIGIN CONTEXT` runs on a cluster of the chart: the Sync
+worker that `ORIGIN` serves holds the `thread-link-key` of the Secret in its
+slot (`SRV-365`), under `Cache-Control: no-cache` and an `ETag` (`SRV-373`).
+`link-key refuse CONTEXT` then writes the development key,
+then an empty key, into the Secret and restarts the web server each time. The
+pod must stop in its init container, and its log must say why (`SRV-368`).
+
 `nodes CONTEXT` runs on the same cluster before the install: each node holds
 an address inside the `networkPolicy.nodeCidrs` of the test values, or the
 web server cannot reach the signalling of the SFU (`SRV-361`).
@@ -48,17 +58,23 @@ CI runner ships as `python3-yaml`. Run: `just chart-check`. It writes nothing.
 
 from __future__ import annotations
 
+import base64
 import ipaddress
 import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 try:
     import yaml
 except ImportError:  # pragma: no cover - the message is the whole behaviour
     sys.exit("chart.py needs PyYAML: install python3-yaml")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import link_key  # noqa: E402  -- the slot this gate reads in a served client
 
 ROOT = Path(__file__).resolve().parent.parent
 CHART = ROOT / "deploy/chart/ambre"
@@ -329,6 +345,64 @@ def check_network(objects: list[dict], expected: set[tuple[str, str, str, str]])
     return faults
 
 
+# The two init containers of the web pod, the files they copy and the key of
+# the Secret the second one writes into the copy (`SRV-365`).
+LINK_COPY = "web-files"
+LINK_INIT = "link-key"
+LINK_SERVED = "/srv/ambre"
+LINK_PATCH = "/opt/ambre/link_key.py patch"
+LINK_SECRET_KEY = "thread-link-key"
+
+
+def mounts(container: dict) -> dict[str, str]:
+    """The volumes a container mounts, by mount path."""
+    return {m.get("mountPath"): m.get("name") for m in container.get("volumeMounts", [])}
+
+
+def check_link_key(objects: list[dict]) -> list[str]:
+    """The faults of the web pod against `SRV-365`."""
+    webs = [o for o in objects if component(o) == "web" and pod_of(o) is not None]
+    if len(webs) != 1:
+        return [f"{len(webs)} web workloads, not one"]
+    pod = pod_of(webs[0])
+    server = next((c for c in pod.get("containers", []) if c.get("name") == "web"), None)
+    inits = [c.get("name") for c in pod.get("initContainers", [])]
+    copy = next((c for c in pod.get("initContainers", []) if c.get("name") == LINK_COPY), None)
+    init = next((c for c in pod.get("initContainers", []) if c.get("name") == LINK_INIT), None)
+    if server is None or copy is None or init is None:
+        return [f"the web pod runs no {LINK_COPY} and {LINK_INIT} init containers, so it serves an empty slot"]
+    faults = []
+    served = mounts(server).get(LINK_SERVED)
+    if served is None:
+        faults.append(f"web: serves {LINK_SERVED} from its image, which holds an empty slot")
+    if inits.index(LINK_COPY) > inits.index(LINK_INIT):
+        faults.append(f"web/{LINK_INIT}: runs before {LINK_COPY} copies the files")
+    if copy.get("image") != server.get("image"):
+        faults.append(f"web/{LINK_COPY}: copies another image than the web server runs")
+    command = " ".join(map(str, copy.get("command", []) + copy.get("args", [])))
+    target = next((path for path, name in mounts(copy).items() if name == served), None)
+    if served is None or target is None or LINK_SERVED not in command or target not in command:
+        faults.append(f"web/{LINK_COPY}: does not copy {LINK_SERVED} into the volume the web server serves")
+    command = " ".join(map(str, init.get("command", []) + init.get("args", [])))
+    patched = next((path for path, name in mounts(init).items() if name == served), None)
+    if served is None or patched is None or f"{LINK_PATCH} {patched}" not in command:
+        faults.append(f"web/{LINK_INIT}: runs no `{LINK_PATCH}` on the volume the web server serves")
+    if init.get("image") == server.get("image"):
+        faults.append(f"web/{LINK_INIT}: runs the web image, which carries no patch")
+    if "--dev" in command:
+        faults.append(f"web/{LINK_INIT}: takes the development key")
+    refs = [
+        e.get("valueFrom", {}).get("secretKeyRef", {})
+        for e in init.get("env", [])
+        if e.get("name") == "THREAD_LINK_KEY"
+    ]
+    if not refs or refs[0].get("key") != LINK_SECRET_KEY:
+        faults.append(f"web/{LINK_INIT}: THREAD_LINK_KEY does not come from {LINK_SECRET_KEY} of the Secret")
+    elif refs[0].get("optional"):
+        faults.append(f"web/{LINK_INIT}: {LINK_SECRET_KEY} is optional, so a Secret without it starts the pod")
+    return faults
+
+
 def check_objects(objects: list[dict], compose: dict[str, str], release: bool) -> list[str]:
     """Every fault of one render."""
     faults = []
@@ -442,6 +516,7 @@ def check(release: bool) -> int:
     for name, objects in renders.items():
         under_test = name == "the stack under test"
         faults += [f"{name}: {f}" for f in check_objects(objects, compose, release and not under_test)]
+        faults += [f"{name}: {f}" for f in check_link_key(objects)]
         present = {component(o) for o in objects if pod_of(o) is not None}
         table = flows_table(present, acme=not under_test, external=name == "stores outside it", nodes=nodes[name])
         faults += [f"{name}: {f}" for f in check_network(objects, table)]
@@ -548,6 +623,141 @@ def probe(kubectl: list[str]) -> int:
     return 0
 
 
+def link_key_faults(pods: dict, log: str, reason: str) -> list[str]:
+    """The faults of the web pods of a cluster against `SRV-368`.
+
+    `pods` is the list of the pods of the web server, as `kubectl get -o json`
+    prints it, and `log` the log of the init container of the refused pod.
+    The pass is a pod whose init container failed, whose web server never
+    ran, and whose log names `reason`.
+    """
+    items = pods.get("items", [])
+    if not items:
+        return ["the cluster runs no web pod"]
+    faults = []
+    refused = False
+    for pod in items:
+        name = pod.get("metadata", {}).get("name", "?")
+        status = pod.get("status", {})
+        for c in status.get("containerStatuses", []):
+            if "running" in c.get("state", {}) or c.get("ready"):
+                faults.append(f"{name}: the web server runs under a key the patch refuses")
+        for c in status.get("initContainerStatuses", []):
+            if c.get("name") != LINK_INIT:
+                continue
+            ends = [c.get(k, {}).get("terminated", {}) for k in ("state", "lastState")]
+            refused |= any(e and e.get("exitCode", 0) != 0 for e in ends)
+    if not refused:
+        faults.append(f"no web pod shows {LINK_INIT} failed")
+    if reason not in log:
+        faults.append(f"the log of {LINK_INIT} does not say why: {reason!r}")
+    return faults
+
+
+# The keys a Secret plants for each refusal of `link-key refuse`, and the words
+# the log of the init container must hold (`SRV-368`).
+REFUSALS = (
+    (link_key.DEV_KEY, "names the development key"),
+    ("", "is not set"),
+)
+
+
+def secret_key(kubectl: list[str]) -> str:
+    """The `thread-link-key` of the Secret of the test values, in lowercase hex."""
+    secret = yaml.safe_load(TEST_VALUES.read_text())["existingSecret"]
+    path = "jsonpath={.data." + LINK_SECRET_KEY + "}"
+    return base64.b64decode(kube(kubectl, "get", "secret", secret, "-o", path)).decode().strip().lower()
+
+
+def link_key_served(kubectl: list[str], origin: str) -> int:
+    """Finds the key of the Secret in the slot of the client the web server serves (`SRV-365`).
+
+    The fetch also fails on an answer a browser may keep without asking
+    again, since a rotated key would then not reach it (`SRV-373`).
+    """
+    named = secret_key(kubectl)
+    try:
+        held = link_key.slot_bytes(link_key.sync_worker(origin)).hex()
+    except link_key.SlotError as e:
+        print(f"chart: {e}", file=sys.stderr)
+        return 1
+    if held != named:
+        print(f"chart: the served client holds {held}, and {LINK_SECRET_KEY} names {named}", file=sys.stderr)
+        return 1
+    print(f"chart: the served client holds {held}, the {LINK_SECRET_KEY} of the Secret")
+    return 0
+
+
+def termination_messages(pods: dict) -> str:
+    """The termination messages of the init containers of the patch.
+
+    The chart sets `FallbackToLogsOnError`, so a failed container leaves the
+    tail of its log in its status, which outlives the restarts of the kubelet.
+    """
+    return "\n".join(
+        c.get(k, {}).get("terminated", {}).get("message", "")
+        for p in pods.get("items", [])
+        for c in p.get("status", {}).get("initContainerStatuses", [])
+        if c.get("name") == LINK_INIT
+        for k in ("state", "lastState")
+    )
+
+
+def refusal_log(kubectl: list[str], pods: dict, pod: str, reason: str) -> str:
+    """What the refused pod says: its termination messages, then its logs.
+
+    `kubectl logs` of an init container the kubelet starts again can answer
+    nothing, so each source is read a few times before the verdict.
+    """
+    seen = termination_messages(pods)
+    for _ in range(6):
+        if reason in seen:
+            break
+        for extra in (["--previous"], []):
+            out = subprocess.run([*kubectl, "logs", pod, "-c", LINK_INIT, *extra], capture_output=True, text=True, check=False)
+            seen += "\n" + out.stdout
+        time.sleep(5)
+    return seen
+
+
+def refused(kubectl: list[str], planted: str, reason: str) -> list[str]:
+    """Plants `planted` as the key of the Secret, restarts the web server, and reads the verdict."""
+    secret = yaml.safe_load(TEST_VALUES.read_text())["existingSecret"]
+    deployment = f"deployment/{PROBE_RELEASE}-web"
+    kube(kubectl, "patch", "secret", secret, "--type", "merge", "-p", json.dumps({"stringData": {LINK_SECRET_KEY: planted}}))
+    kube(kubectl, "rollout", "restart", deployment)
+    selector = f"app.kubernetes.io/instance={PROBE_RELEASE},app.kubernetes.io/component=web"
+    # The pod runs its init containers once per start, so the verdict waits
+    # for the first failure, or for the restart to leave the old pod.
+    for _ in range(36):
+        time.sleep(5)
+        pods = json.loads(kube(kubectl, "get", "pods", "-l", selector, "-o", "json"))
+        failed = [
+            p["metadata"]["name"]
+            for p in pods.get("items", [])
+            if any(
+                c.get("name") == LINK_INIT and c.get(k, {}).get("terminated", {}).get("exitCode", 0) != 0
+                for c in p.get("status", {}).get("initContainerStatuses", [])
+                for k in ("state", "lastState")
+            )
+        ]
+        if not failed or len(pods.get("items", [])) != 1:
+            continue
+        return link_key_faults(pods, refusal_log(kubectl, pods, failed[0], reason), reason)
+    return [f"no web pod failed its link key within 180 s under {planted or 'an empty key'}"]
+
+
+def link_key_refuse(kubectl: list[str]) -> int:
+    """Finds the web pod stopped under the development key and under no key (`SRV-368`)."""
+    faults = [f for planted, reason in REFUSALS for f in refused(kubectl, planted, reason)]
+    for fault in faults:
+        print(f"chart: {fault}", file=sys.stderr)
+    if faults:
+        return 1
+    print("chart: the web pod stopped under the development key and under no key")
+    return 0
+
+
 def nodes_outside(cidrs: list[str], addresses: list[str]) -> list[str]:
     """The faults of the nodes against the blocks of the test values (`SRV-361`)."""
     if not addresses:
@@ -579,6 +789,10 @@ def main(argv: list[str]) -> int:
         return check(release=argv[1:] == ["--release"])
     if argv[:1] == ["probe"]:
         return probe(argv[1:] or PROBE_KUBECTL)
+    if argv[:2] == ["link-key", "served"] and len(argv) >= 3:
+        return link_key_served(argv[3:] or PROBE_KUBECTL, argv[2])
+    if argv[:2] == ["link-key", "refuse"]:
+        return link_key_refuse(argv[2:] or PROBE_KUBECTL)
     if argv[:1] == ["nodes"]:
         return nodes(argv[1:] or PROBE_KUBECTL)
     if argv[:1] == ["pin"] and len(argv) >= 2:

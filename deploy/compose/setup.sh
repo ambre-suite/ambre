@@ -43,6 +43,12 @@ trap 'rm -f "$key"' EXIT
 openssl genpkey -algorithm ed25519 -outform DER -out "$key" 2>/dev/null
 admission_seed=$(tail -c 32 "$key" | tohex)
 admission_key=$(openssl pkey -inform DER -in "$key" -pubout -outform DER | tail -c 32 | tohex)
+# The link key of a thread, drawn the same way: the relay signs each link
+# with the seed, and the client of `web` pins the public key at its build
+# (`ZK-057`, `SRV-364`).
+openssl genpkey -algorithm ed25519 -outform DER -out "$key" 2>/dev/null
+link_seed=$(tail -c 32 "$key" | tohex)
+link_key=$(openssl pkey -inform DER -in "$key" -pubout -outform DER | tail -c 32 | tohex)
 
 umask 077
 cat > "$env_file" <<EOF
@@ -59,9 +65,10 @@ GARAGE_KEY_ID=GK$(hex 12)
 GARAGE_KEY_SECRET=$(hex 32)
 JWT_SIGNING_SEED=$(hex 32)
 CALL_ADMISSION_SEED=$admission_seed
-# The seed of the thread link receipts (\`SRV-363\`).
-THREAD_LINK_SEED=$(hex 32)
 SFU_ADMISSION_KEY=$admission_key
+THREAD_LINK_SEED=$link_seed
+# Public: the client build pins it, and a rebuild of the client needs it.
+THREAD_LINK_KEY=$link_key
 TURN_SECRET=$(hex 32)
 # The bearer token a scrape of the relay metrics presents (\`SRV-318\`).
 METRICS_TOKEN=$(hex 32)

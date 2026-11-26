@@ -346,6 +346,10 @@ pub enum MurmureCommand {
     /// Fetch the image `media_ref` of a message and decode it for its
     /// preview. The answer is [`MurmureEvent::Picture`].
     ShowPicture { media_ref: Validated<ContentHash> },
+    /// The owner confirmed the erasure of `threads`, which a removal from the
+    /// channel set apart (`MURMURE-738`). The Logic thread runs that removal
+    /// again, and erases those of the threads it set apart alone.
+    EraseUnproven { threads: Vec<Id<Document>> },
     /// The shared import and export shape (`INTEROP-001`). Murmure reads and
     /// writes no format yet, so neither half can be built. The `Chat import`
     /// Story (`ambre-roadmap.md` E5) and the `Murmure export` Story
@@ -371,7 +375,9 @@ impl MurmureCommand {
             | Self::DeleteMessage { .. }
             | Self::Reply { .. }
             // A file uploads only for a message to carry it.
-            | Self::UploadFile { .. } => true,
+            | Self::UploadFile { .. }
+            // The removal it runs again writes the log of the `meta`.
+            | Self::EraseUnproven { .. } => true,
             Self::LoadOlder { .. }
             | Self::FetchFile { .. }
             | Self::ShowPicture { .. }
@@ -422,6 +428,7 @@ impl ambre_bus::Mutation for MurmureCommand {
             | Self::UploadFile { .. }
             | Self::FetchFile { .. }
             | Self::ShowPicture { .. }
+            | Self::EraseUnproven { .. }
             | Self::Interop(_) => ambre_bus::Traffic::Lossless,
         }
     }
@@ -753,6 +760,10 @@ pub enum MurmureEvent {
     },
     /// The shared answer of an import or an export (`INTEROP-001`).
     Interop(ambre_bus::interop::InteropAnswer<MurmureConstruct>),
+    /// A removal from the channel posted nothing: the relay hid `threads`,
+    /// which no link receipt proves and no erasure covers. The view asks the
+    /// owner to erase them or keep them (`MURMURE-737`).
+    ThreadsUnproven { threads: Vec<Id<Document>> },
 }
 
 /// The shared import and export command, over what Murmure reads and writes

@@ -599,6 +599,14 @@ enum SyncEvent {
         removal: census::Removal,
         result: Result<Vec<census::Counted>, http::HttpError>,
     },
+    /// The census of a removal from `channel_id` set `threads` apart: each
+    /// is hidden under no proof, and the owner has not confirmed its erasure
+    /// (`SYNC-333`). Nothing was posted.
+    CensusUnproven {
+        removal: census::Removal,
+        channel_id: Id<Channel>,
+        threads: Vec<Id<Document>>,
+    },
     /// The answer to a channel leave (`SyncCommand::LeaveChannel`).
     ChannelLeft {
         channel_id: Id<Channel>,
@@ -2396,6 +2404,13 @@ impl SyncState {
                 root,
                 thread,
             } => self.handle_create_thread(channel_id, meta, segment, root, thread),
+            SyncCommand::FreshenReceipt {
+                channel_id,
+                segment,
+                root,
+                thread,
+                receipts,
+            } => self.handle_freshen_receipt(channel_id, segment, root, thread, receipts),
             SyncCommand::TakeFinalizeLease {
                 channel_id,
                 segment,
@@ -2443,11 +2458,13 @@ impl SyncState {
                 named,
                 threads,
                 receipts,
+                erase,
             } => {
                 let named = crate::census::Named {
                     documents: named,
                     threads,
                     receipts,
+                    erase,
                 };
                 self.handle_leave_channel(channel_id, named);
             }
@@ -2458,6 +2475,7 @@ impl SyncState {
                 named,
                 threads,
                 receipts,
+                erase,
             } => self.begin_removal(
                 crate::census::Removal::Revoke {
                     id,
@@ -2468,6 +2486,7 @@ impl SyncState {
                     documents: named,
                     threads,
                     receipts,
+                    erase,
                 }),
             ),
             SyncCommand::CreateDirectMessage {

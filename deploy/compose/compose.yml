@@ -100,9 +100,11 @@ services:
       AWS_SECRET_ACCESS_KEY: ${GARAGE_KEY_SECRET}
       JWT_SIGNING_SEED: ${JWT_SIGNING_SEED:?run setup.sh first}
       CALL_ADMISSION_SEED: ${CALL_ADMISSION_SEED:?run setup.sh first}
-      # An `.env` written before the link receipts lacks the seed: add one,
-      # as `openssl rand -hex 32` draws it (`SRV-363`).
+      # The relay signs each thread link under this seed, and refuses to start
+      # when it is not the seed of the key `link-key` writes into the client
+      # (`SRV-364`).
       THREAD_LINK_SEED: ${THREAD_LINK_SEED:?run setup.sh first}
+      THREAD_LINK_KEY: ${THREAD_LINK_KEY:?run setup.sh first}
       # The metrics listen off the loopback of the container, so the relay
       # starts only with a scrape token (`SRV-318`). An `.env` written before
       # it lacks the token: add one, as `openssl rand -hex 32` draws it.
@@ -172,6 +174,35 @@ services:
       - --log-file=stdout
       - ${TURN_LOOPBACK_PEERS:---fingerprint}
 
+  # A copy of the client files, made again at each start: the web image stays
+  # as the release built it, with an empty link key slot (`ZK-057`). The
+  # `web` service builds the image that this one and `link-key` run.
+  web-files:
+    image: ambre-web:local
+    pull_policy: never
+    entrypoint: ["/bin/sh", "-c", "find /work -mindepth 1 -delete && cp -a /srv/ambre/. /work/"]
+    volumes:
+      - webfiles:/work
+
+  # Writes the link key of the relay into the slot of that copy, then exits.
+  # It refuses no key, a malformed key and the development key, and the web
+  # server then never starts (`SRV-369`, `scripts/link_key.py`). The init
+  # image alone carries Python and brotli, and its user writes the copy as
+  # root made it.
+  link-key:
+    image: ambre-init:local
+    pull_policy: never
+    user: root
+    entrypoint: ["python3", "/opt/ambre/link_key.py"]
+    command: ["patch", "/work"]
+    environment:
+      THREAD_LINK_KEY: ${THREAD_LINK_KEY:?run setup.sh first}
+    volumes:
+      - webfiles:/work
+    depends_on:
+      web-files:
+        condition: service_completed_successfully
+
   web:
     build:
       <<: *ambre-build
@@ -189,10 +220,14 @@ services:
       AMBRE_DOMAIN: ${AMBRE_DOMAIN}
       AMBRE_TLS: ${AMBRE_TLS:?run setup.sh first}
     volumes:
+      - webfiles:/srv/ambre:ro
       - caddydata:/data
       - caddyconfig:/config
     depends_on:
-      - relay
+      relay:
+        condition: service_started
+      link-key:
+        condition: service_completed_successfully
 
   front:
     image: nginx:1.29.3-alpine@sha256:b3c656d55d7ad751196f21b7fd2e8d4da9cb430e32f646adcf92441b72f82b14
@@ -210,3 +245,4 @@ volumes:
   garagedata:
   caddydata:
   caddyconfig:
+  webfiles:

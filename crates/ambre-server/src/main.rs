@@ -186,9 +186,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("CALL_ADMISSION_SEED must be set (64 hex chars) outside DEV_MODE".into());
         }
     };
-    // The link key signs the receipt of each thread link, which a client
-    // build pins (`SRV-363`). A development relay signs under the public dev
-    // seed, which only a development client pins.
+    // The link key signs the receipt of each thread link, and the client
+    // holds its public half in its slot (`SRV-363`, `ZK-058`). A development
+    // relay signs under the public dev seed, which only a development client
+    // takes.
     let link_seed = match jwt::JwtSeed::link_from_env()
         .map_err(|_| "THREAD_LINK_SEED must be 32 bytes in hex (64 hex chars)")?
     {
@@ -209,6 +210,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(jwt_seed);
     drop(admission_seed);
     drop(link_seed);
+    // The deployment names the link key its client pins, and a seed of
+    // another key fails the start (`SRV-364`). The public half is logged, as
+    // the admission key is, for a client build to pin.
+    jwt_keys.holds_link_key(jwt::named_link_key()?)?;
+    if let Some(key) = jwt_keys.link_key() {
+        tracing::info!("THREAD_LINK_KEY={}", key.to_hex());
+    }
     // The public key alone: the SFU verifies the admissions of a call with it.
     if let Some(key) = jwt_keys.admission_key() {
         tracing::info!("SFU_ADMISSION_KEY={}", key.to_hex());

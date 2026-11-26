@@ -5086,5 +5086,16 @@ ambre-murmure | src/logic/delta.rs | crate::logic::delta | receipt_set() | ret |
 ambre-protocol | src/thread_erasure.rs | crate::thread_erasure | LINK_DOMAIN | const | &[u8]	generic	domain-separation tag of the link receipt transcript
 ambre-sync | src/erasure.rs | crate::erasure | holds() | ret | bool	generic	predicate answer: whether a signature verifies, selects no mode
 ambre-sync | src/erasure.rs | crate::erasure | linked() | ret | bool	generic	predicate answer: whether a link receipt proves the thread, selects no mode
+ambre-sync | src/erasure.rs | crate::erasure | linked_under() | ret | bool	generic	predicate answer: whether a key signed a receipt of the thread, selects no mode
+ambre-sync | src/erasure.rs | crate::erasure | LINK_KEY_SLOT_MARKER | const | [u8;16]	foreign-api	the bytes the patch of scripts/link_key.py searches the wasm for; a FixedBytes guarantees no byte layout
+ambre-sync | src/erasure.rs | crate::erasure | LinkKeySlot.marker | field | [u8;16]	foreign-api	the marker in the repr(C) layout the patch of scripts/link_key.py reads in the wasm; no code reads it
+ambre-sync | src/erasure.rs | crate::erasure | LinkKeySlot.key | field | [AtomicU8;32]	foreign-api	the std atomic, so no optimisation folds the bytes a patch writes; key() types them as FixedBytes<PublicKey>
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | Held.named | field | &'a dyn Fn(Id<Document>)->bool	generic	a predicate the caller passes: whether a root of the document names a thread, or the amendments record it
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | fresh_allowed(named) | param | &dyn Fn(Id<Document>)->bool	generic	the predicate of Held.named, passed on: whether the document names the thread a fresh receipt proves
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | names_thread() | ret | bool	generic	predicate answer: whether a message of a segment names a thread, selects no mode
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | FreshKey::parse(key) | param | &str	foreign-api	a thread_receipts map key as Loro hands it back, parsed into the thread and the member here
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | FreshKey::spell() | ret | String	foreign-api	the thread_receipts map key that LoroMap::insert and get take as &str, spelled from its two identifiers
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | fresh_receipts_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-sync | src/sharing.rs | crate::sharing | fresh_needed() | ret | bool	generic	predicate answer: whether no receipt a root holds counts under the pinned link key, selects no mode
 ambre-chrome | src/color.rs | crate::color | INLINE | const | [(ambre_commands::TitleWords,&str,Rgb);7]	free-text	the name and the CSS text of each inline swatch a person reads and picks
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | title() | ret | &'static str	free-text	the title of a property a person reads, in the interface language

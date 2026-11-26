@@ -1003,6 +1003,24 @@ mod tests {
         }
     }
 
+    /// Holds `SYNC-300` at an eviction. The clocks the evicted session
+    /// applied travel with its light subscription. The reopen checks them
+    /// against the caps of the log it walks.
+    #[test]
+    fn an_eviction_keeps_the_clocks_the_session_applied() {
+        let bob = FixedBytes::<PublicKey>::from_array([0x52; 32]);
+        let (mut state, _rx, document_id, _, _) =
+            released_after(ambre_bus::Seq::<ambre_bus::Relay>::new(9), |doc| {
+                doc.note_applied(&bob, Seq::<DeltaAuthor>::new(2));
+            });
+        assert_eq!(state.take_light(document_id), Some(Seq::<Relay>::new(9)));
+        let resumed = state
+            .resumed_clocks
+            .get(&document_id)
+            .and_then(|applied| applied.clocks.get(&bob).copied());
+        assert_eq!(resumed, Some(Seq::<DeltaAuthor>::new(2)));
+    }
+
     /// The horizon never passes what the session itself received.
     #[test]
     fn the_horizon_never_passes_what_the_session_received() {
@@ -1646,5 +1664,62 @@ mod tests {
         state.light.get_mut(&m).expect("watched").writers = LightWriters::Walked(granted);
         state.receive_update(Seq::<Relay>::new(4), mentioned());
         assert_eq!(counted(&rx), vec![(1, 1)], "a writer's summary counts");
+    }
+
+    /// `RESID-032`: the answer of a walk of a `meta` never opened reaches its
+    /// light subscription. From then on, the summary of a key the walk
+    /// granted no writing role counts nothing.
+    #[test]
+    fn the_walk_of_a_meta_never_opened_counts_its_writers_alone() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        state.user_id = Some(Id::<User>::from_bytes([7; 16]));
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel_id, meta, doc_key) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            DocumentKey::generate(),
+        );
+        state
+            .listed_keys
+            .insert(channel_id, (meta, doc_key.clone()));
+        state.handle_command(SyncCommand::WatchChannel {
+            channel_id,
+            meta,
+            meta_last: Some(Seq::<Relay>::new(1)),
+            documents: Vec::new(),
+        });
+        let m = meta.document_id();
+        // The signer of `update` is seed 2. The walk grants another key.
+        let other = MasterSeed::from_array([3; 32]).derive_signing_key();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: ambre_core::Seq::nth(1),
+            document_id: m,
+            word: membership_log::SpaceWord::default(),
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+            heads: Default::default(),
+            writers: membership_log::Writers::granted(HashSet::from([FixedBytes::from_array(
+                other.verifying_key().to_bytes(),
+            )])),
+            departed: None,
+            revoked: None,
+            root: membership_log::Root::Free,
+        });
+        drain(&rx);
+        state.receive_update(
+            Seq::<Relay>::new(2),
+            update(m, Id::<Snapshot>::mint(), &doc_key, Some(&mention())),
+        );
+        let counted = drain(&rx)
+            .into_iter()
+            .any(|event| matches!(event, LogicEvent::Activity { .. }));
+        assert!(!counted, "a non-writer's summary counted");
     }
 }

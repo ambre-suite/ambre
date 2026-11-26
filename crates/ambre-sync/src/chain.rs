@@ -513,6 +513,31 @@ mod tests {
         assert!(pipeline::open_link(&moved, document_id, &k1).is_err());
     }
 
+    /// Holds `SYNC-308`. A kept link can name the place of the kept head
+    /// after another entry. It then signs a fork the kept log never reached,
+    /// and the chain is refused whole. A link at the kept head, or before
+    /// it, stays.
+    #[test]
+    fn a_kept_link_at_the_kept_place_after_another_entry_is_refused() {
+        let (_, _, heads, _) = revoked_log();
+        let document_id = Id::<Document>::mint();
+        let (k0, k1) = (DocumentKey::generate(), DocumentKey::generate());
+        let kept_at = |head: LogHead| ambre_bus::KeptLog {
+            anchor: FixedBytes::from_array([0x61; 32]),
+            head: heads[2],
+            key: k1.id(),
+            links: vec![pipeline::seal_link(document_id, &k0, &k1, head, &rotator()).unwrap()],
+        };
+        assert!(Chain::kept(document_id, &kept_at(heads[1])).is_some());
+        assert!(Chain::kept(document_id, &kept_at(heads[2])).is_some());
+        let fork = LogHead {
+            position: heads[2].position,
+            previous: heads[3].previous,
+        };
+        assert!(Chain::kept(document_id, &kept_at(fork)).is_none());
+        assert!(Chain::kept(document_id, &kept_at(heads[3])).is_none());
+    }
+
     /// A key the walk recovers opens history and is handed back alone: the
     /// key the caller holds as current is untouched (`SYNC-122`).
     #[test]

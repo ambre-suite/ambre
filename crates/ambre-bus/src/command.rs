@@ -248,6 +248,17 @@ pub enum SyncCommand {
         root: Id<Message>,
         thread: Id<Document>,
     },
+    /// A reply in `thread`, the thread of `root`, a message of `segment`.
+    /// The root holds `receipts`. When none counts under the link key of
+    /// this client, ask the relay for the receipt of that link (`SYNC-334`).
+    /// Answered by [`crate::LogicEvent::ThreadLinked`], or by nothing.
+    FreshenReceipt {
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+        receipts: Vec<crate::LinkReceipt>,
+    },
     /// Ask the relay for the finalize lease of the closing segment `segment`
     /// (the Murmure segments spec). Answered by
     /// [`crate::LogicEvent::FinalizeLeaseAnswered`] or by
@@ -342,11 +353,15 @@ pub enum SyncCommand {
     /// owner's erasure of it (`SYNC-321`, `SYNC-322`). `receipts` lists the
     /// relay's receipt of each link those documents hold: a thread under a
     /// valid one takes no erasure (`SYNC-330`).
+    ///
+    /// `erase` lists the hidden threads with no proof whose erasure the owner
+    /// confirmed (`SYNC-333`). The census signs the erasure of no other.
     LeaveChannel {
         channel_id: Id<Channel>,
         named: Vec<Id<Document>>,
         threads: Vec<Id<Document>>,
         receipts: Vec<crate::LinkReceipt>,
+        erase: Vec<Id<Document>>,
     },
     /// Revoke `user_id` from the channel whose `meta` is `document_id`, as
     /// [`RestCommand::RevokeFromDocument`] does. It carries what
@@ -359,6 +374,7 @@ pub enum SyncCommand {
         named: Vec<Id<Document>>,
         threads: Vec<Id<Document>>,
         receipts: Vec<crate::LinkReceipt>,
+        erase: Vec<Id<Document>>,
     },
     /// Open or create the direct message of this user and `members`, in one
     /// request. It carries one channel key wrapped for each member alone, and

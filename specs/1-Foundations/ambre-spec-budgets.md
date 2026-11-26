@@ -417,6 +417,15 @@
   that title. A lazy module of French words was not taken: a French page would wait
   on a fetch before its first frame. By the Main ceiling has room for the interface language Story
   (`ambre-roadmap.md`).
+* **The ceiling of Main went up to 10 965 000 on 2026-11-26.** The census sets apart a thread
+  with no receipt that counts and asks the owner (`SYNC-333`). A reply writes a fresh receipt
+  under the current link key (`SYNC-334`).
+
+  Over `ccr` at `e77a2f3`, the first took Main to 10 908 562 raw bytes, 18 364 more than `main`
+  at `61fca83`. The second added about 11 512 more. Over the 10 915 699 of the interface language,
+  the two make about 10 945 600. No cut was tried first. The owner of the project raised the
+  ceiling for these two security fixes, by the Main ceiling has room for the thread receipts
+  Story (`ambre-roadmap.md`).
 * **The figures of the cfg.** `just size` on the session container, over `main` at `f2f601d`, by
   the Win back room in Main Story (`ambre-roadmap.md`).
 
@@ -1279,6 +1288,7 @@
 | Murmure members before an `@channel` asks for confirmation | 10 | Past it, one `@channel` notifies enough people to warrant a second thought. A first estimate, to measure against use (`MURMURE-231`) |
 | Murmure members past which a channel defaults to the mentions level | 30 | A busy room would otherwise wake every member for every line. A first estimate (`MURMURE-267`) |
 | Murmure members of a direct message, its creator included | 50 | Each member costs the relay one lookup and one signature check, so the cap bounds one request. `DIRECT_MESSAGE_MAX_MEMBERS` in `ambre_protocol::membership` (`SYNC-180`, `SRV-240`) |
+| Murmure fresh link receipts, per thread | 1 per member of the channel | The key of each entry names its thread and its writer, and that writer alone writes it (`MURMURE-739`). A hostile member thus fills one entry, which shadows no receipt that counts, and the bound evicts nothing. An entry costs about 200 bytes: 128 of hex, and a key of two identifiers |
 | Murmure pins per channel | 50 | A pinned list longer than a screen stops being a list of what matters (`MURMURE-339`) |
 | Murmure custom emoji, per space | 500, of 128 KB each at most | Every member loads the images the channel shows, so the cap bounds the space document and the images drawn |
 | Murmure active segment, deltas past its latest snapshot | < 250, to measure on a phone | A cold open pays one inbound open (section 1, < 350 us) and one replay (section 1, < 250 us) for each. 250 of them cost about 150 ms of a phone cold open. Without a snapshot, a segment at its close replays 6250 deltas, fetched as 6250 objects. The relay asks for the snapshot (`SRV-038`). The phone figure assumes a phone about 7 times slower than the desktop: the ratio of the inbound open budget (350 us) to its desktop measure (50 us). The `Murmure measured on a phone` Story (`ambre-roadmap.md` E5) replaces that ratio with a measure |

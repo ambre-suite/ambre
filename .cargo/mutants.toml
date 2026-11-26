@@ -186,4 +186,20 @@ exclude_re = [
     # browser path, which no host test reaches.
     'converter\.rs:.*replace fetch -> ',
     'converter\.rs:.*delete ! in fetch$',
+    # Host-unreachable: past each guard, a departure or a channel removal
+    # with named documents lists its documents in the `spawn_local` task of
+    # the browser path. With no event channel, `begin_removal` runs the
+    # removal before the guards, so no host test reaches either side.
+    'replace match guard self\.documents\.contains_key\(&document_id\) with (true|false) in SyncState::begin_removal',
+    'replace match guard !named\.documents\.is_empty\(\) with false in SyncState::begin_removal',
+    # Equivalent: a JSON object key is always a string, so `serde_json` hands
+    # each field name to `visit_str` and never asks what the visitor expects.
+    'for NameInto<.*>::expecting -> ',
+    # Host-unreachable: the vault over IndexedDB and WebCrypto is compiled for
+    # wasm32 alone, so a host build never holds its mutants. Host tests drive
+    # the memory vault in its place.
+    'kept\.rs:.*\bweb::',
+    # Host-unreachable: the console print is compiled for wasm32 alone. The
+    # wasm tier reads what it prints (`tests/worker_log.rs`, `SYNC-305`).
+    'log\.rs:.*replace console::print with \(\)',
 ]

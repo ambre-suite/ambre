@@ -8255,6 +8255,43 @@ mod tests {
         assert!(!doc_state.applied_past_cap(&capped));
     }
 
+    /// `SYNC-304`: the open fetches the reference only for a start whose
+    /// snapshot folds a delta past a cap. A start at the cap is no start past
+    /// it, and neither is a blob that does not decode.
+    #[test]
+    fn a_start_past_a_cap_is_one_whose_snapshot_folds_a_delta_past_it() {
+        use crate::membership_log::Writers;
+        use crate::membership_log::tests::Person;
+        let (alice, bob) = (Person::new(0x61), Person::new(0x62));
+        let at = Seq::<DeltaAuthor>::new;
+        let capped = Writers::capped(
+            HashSet::from([alice.public(), bob.public()]),
+            HashMap::from([(bob.public(), at(2))]),
+        );
+        let doc = Id::<Document>::mint();
+        let key = DocumentKey::generate();
+        let latest = served(Id::<Snapshot>::mint(), 4);
+        let start = |folded: u64| {
+            started(
+                snapshot_blob_folding(
+                    doc,
+                    latest,
+                    b"latest",
+                    (&key, &alice.key),
+                    vec![(bob.public(), at(folded))],
+                ),
+                &alice.key,
+            )
+        };
+        assert!(start_past_cap(&start(3), doc, latest, &capped));
+        assert!(!start_past_cap(&start(2), doc, latest, &capped));
+        let garbled = started(
+            Payload::<pipeline::FetchedBlob>::new(vec![0xff; 8]),
+            &alice.key,
+        );
+        assert!(!start_past_cap(&garbled, doc, latest, &capped));
+    }
+
     /// Holds `SYNC-307`. Bob is capped at clock 2. The latest snapshot
     /// folds his clock 3, so it opens nothing. The trusted reference folds
     /// his clocks up to 2, at horizon 2. The open starts from it and asks

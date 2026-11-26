@@ -535,6 +535,23 @@ pub async fn register_amendments(
     Ok(amendments)
 }
 
+/// The thread document the relay holds for the root message `root` of
+/// `channel_id`, or `None` while no registration linked one (`SRV-374`).
+pub async fn held_thread(
+    pool: &PgPool,
+    channel_id: &Id<Channel>,
+    root: Id<Message>,
+) -> Result<Option<Id<Document>>, AppError> {
+    let held: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT document_id FROM channel_documents WHERE channel_id = $1 AND thread_root = $2",
+    )
+    .bind(id_to_uuid(*channel_id))
+    .bind(id_to_uuid(root))
+    .fetch_optional(pool)
+    .await?;
+    Ok(held.map(uuid_row_to_id))
+}
+
 /// Register `thread` as the one thread document of the root message `root`
 /// (`SRV-213`), and answer the one the root holds after.
 ///

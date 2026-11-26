@@ -95,6 +95,40 @@ spec:
         checksum/caddyfile: {{ printf "%s%s%s" $domain $tls (toJson .Values.garage.enabled) | sha256sum }}
     spec:
       {{- include "ambre.podSecurity" (dict "uid" 1000) | nindent 6 }}
+      # The web image serves a client whose link key slot is empty (`ZK-057`).
+      # The first init container copies its files into `site`. The second, of
+      # the init image that alone carries the patch, writes the
+      # `thread-link-key` of the Secret into the slot of that copy (`SRV-365`).
+      # The relay signs under the seed of that key (`SRV-364`). No key, a
+      # malformed key or the development key stops the pod here (`SRV-368`).
+      initContainers:
+        - name: web-files
+          image: {{ include "ambre.image" $c }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          command: ["/bin/sh", "-c", "cp -R /srv/ambre/. /site/"]
+          {{- with .Values.web.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: site
+              mountPath: /site
+        - name: link-key
+          image: {{ include "ambre.image" (dict "root" . "component" "init") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "ambre.containerSecurity" . | nindent 10 }}
+          command: ["python3", "/opt/ambre/link_key.py", "patch", "/site"]
+          # The status of the pod keeps the tail of the log of a refusal, so a
+          # reader finds the reason after the kubelet starts the container again.
+          terminationMessagePolicy: FallbackToLogsOnError
+          env:
+            {{- include "ambre.secretEnv" (dict "root" . "name" "THREAD_LINK_KEY" "key" "thread-link-key") | nindent 12 }}
+          {{- with .Values.web.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: site
+              mountPath: /site
       containers:
         - name: web
           image: {{ include "ambre.image" $c }}
@@ -113,6 +147,9 @@ spec:
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
+            - name: site
+              mountPath: /srv/ambre
+              readOnly: true
             - name: caddyfile
               mountPath: /etc/caddy/Caddyfile
               subPath: Caddyfile
@@ -124,6 +161,8 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: site
+          emptyDir: {}
         - name: caddyfile
           configMap:
             name: {{ include "ambre.name" $c }}
