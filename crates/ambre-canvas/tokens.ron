@@ -35,6 +35,9 @@ Tokens(
             error:     "#cc4444",
             info:      "#2467c0",
             on_accent: "#ffffff",
+            // The mention ink of the Murmure calls mockup
+            // (`research/mockups/murmure-calls.html`).
+            mention:   "#c23a78",
         ),
         dark: (
             bg:        "#13110e",
@@ -55,6 +58,7 @@ Tokens(
             info:      "#5a9ae0",
             // The dark accent is light, so the text on it is dark.
             on_accent: "#1b1b1d",
+            mention:   "#ec6aa6",
         ),
     ),
 

@@ -95,11 +95,24 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-505` | `POST` | End, or the control a list read higher up shows, MUST bring the list back to its latest message. | this spec section 3; `MURMURE-189` | `ambre_murmure::ui::view::tests::end_or_the_control_brings_back_the_latest_message` -- End, a click and a tap on the control each bring back the latest message, and the control shows only higher up; `ambre_murmure::ui::paint::tests::the_jump_control_paints_its_words_inside_what_it_answers` -- the control paints its words inside the rectangle a press hits | none | verified |
 | `MURMURE-506` | `FRAME` | A jump through the list MUST NOT mark read a message it did not show. | this spec section 3; `MURMURE-206` | `ambre_murmure::ui::view::tests::a_jump_marks_read_only_what_it_showed` -- pages short of a new message mark nothing, and End marks it once it paints | none | verified |
 
+### 1.9 The look of a row
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-737` | `OBS` | Messages that fill less than the viewport MUST start at its top, never at its foot. | this spec section 3, the look of a row; `MURMURE-182` | `ambre_murmure::ui::list::tests::a_window_past_the_bottom_rests_on_the_latest_row` -- a short window starts at the top, anchored or not; `ambre_murmure::ui::paint::look_tests::a_short_list_paints_from_the_top_of_the_viewport` -- two rows paint from the top of a tall viewport | none | verified |
+| `MURMURE-738` | `OBS` | A row that opens a group MUST show the initials of its author on the author's peer colour, left of the header. | this spec section 3, the look of a row; `MURMURE-183` | `ambre_murmure::ui::paint::look_tests::a_header_draws_the_initials_of_its_author_on_the_peer_colour` -- one avatar on the peer colour, its initials in white, none on a joined row | none | verified |
+| `MURMURE-739` | `OBS` | The first message of each day in the reader's zone MUST follow a divider that names the day: today, yesterday, or its date. | this spec section 3, the look of a row; `MURMURE-418` | `ambre_murmure::ui::paint::look_tests::a_divider_names_the_day_above_its_first_message` -- `Today`, `Yesterday` or the date, above the first message of each day alone, a rule each side | none | verified |
+| `MURMURE-740` | `OBS` | The separator above the first unread message MUST read `New`, in the mention ink. | this spec section 3, the look of a row; `MURMURE-184` | `ambre_murmure::ui::paint::tests::the_unread_line_paints_above_the_first_unread_message` -- the label `New` and its rule paint in the mention ink, between the read row and the unread one | none | verified |
+| `MURMURE-741` | `OBS` | A reaction MUST show as a pill with its emoji and its count, in the accent when it holds the member's own. The pills MUST run from the most chosen. | this spec section 3, the look of a row; `features/ambre-spec-murmure-reactions.md` | `ambre_murmure::ui::paint::tests::the_reactions_paint_as_chips_under_the_body` -- one framed pill each, the most chosen first, the member's own in the accent; `ambre_murmure::ui::view::tests::a_click_on_a_chip_adds_or_takes_away_the_members_reaction` -- a click on each pill reaches its emoji | none | verified |
+| `MURMURE-742` | `OBS` | A root MUST show its thread as a summary: the faces of its latest repliers other than the member, its reply count, the last replier and how long ago. | this spec section 3, the look of a row; `MURMURE-106` | `ambre_murmure::logic::thread_tests::the_root_reads_its_latest_repliers_and_the_time_of_the_last_reply` -- the head names each replier once, the latest first, and the time of the latest reply; `ambre_murmure::ui::paint::look_tests::a_root_shows_its_repliers_its_count_and_its_last_reply` -- the faces but the member's, the count in the accent, the last replier and the age | none | verified |
+| `MURMURE-743` | `OBS` | A mention of a member MUST show as a chip in the mention ink. | this spec section 3, the look of a row; `MURMURE-098` | `ambre_murmure::ui::paint::look_tests::a_mention_paints_as_a_chip_in_the_mention_ink` -- the name paints in the mention ink on a ground of a faint tint of it | none | verified |
+| `MURMURE-744` | `OBS` | Inline code MUST show in the mono family on a framed chip. | this spec section 3, the look of a row; `MURMURE-565` | `ambre_murmure::ui::paint::tests::a_sent_body_draws_each_of_its_marks` -- inline code shapes in the mono family, on a chip framed by the line, under its words | none | verified |
+
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` holds the scroll, and the
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span of a segment.
-* **Verification.** 39 `verified`, 1 `unimplemented`. The host tier holds the order, the groups, the
+* **Verification.** 47 `verified`, 1 `unimplemented`. The host tier holds the order, the groups, the
   words and the paint of the rows and the bands. It holds the scroll, the jumps, the focus and the
   thread's list too, the actions of a message and the selection. The browser tier holds each canvas,
   the finger, the local time and the live region. It holds the menu's listener, the dialog of a
@@ -157,6 +170,24 @@ list costs nothing. The DOM around a list holds its header and its controls, nev
 `ambre-spec-kinetic-scroll.md` (`MURMURE-417`). The list owns step 4 of that model alone: it moves
 its anchor by the distance of each tick. A page key steps it by a viewport (`MURMURE-504`), and
 End or the control over the list rests it on the latest message (`MURMURE-505`).
+
+**The look of a row.** The list follows the mockup of the Murmure calls, in the research folder.
+Short of a viewport, the rows start at its top (`MURMURE-737`).
+
+A row that opens a group shows a square of the
+author's initials on the author's peer colour, `PRESENCE-006` (`MURMURE-738`). The page
+names the day of each message in the reader's zone. A divider reads that day above its first
+message: `Today`, `Yesterday` or the date (`MURMURE-739`). The unread separator reads `New`, in
+the mention ink of the design tokens (`MURMURE-740`).
+
+The decorations under a body read the same message and add no state:
+
+| Element | Look |
+|---|---|
+| reaction | a pill, the emoji and the count; the accent when the member is among its members; the most chosen first (`MURMURE-741`) |
+| thread | the faces of up to three repliers, newest first, the member aside; the count in the accent; the last replier and how long ago (`MURMURE-742`) |
+| mention | a chip in the mention ink on a faint tint of it (`MURMURE-743`) |
+| inline code | the mono family on a framed chip of the sunken tint (`MURMURE-744`) |
 
 **The time of a message.** The `ts` of a message is Unix milliseconds. The list formats it in the
 language and the time zone of the reader (`MURMURE-418`). A channel carries no locale: two members

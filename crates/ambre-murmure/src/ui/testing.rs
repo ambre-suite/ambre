@@ -42,6 +42,11 @@ pub fn channel_of(
         }),
         name_of: Rc::new(|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok()),
         time_of: Rc::new(|_| "t".to_owned()),
+        // One day holds every message of a test.
+        day_of: Rc::new(|_| crate::ui::paint::Day {
+            start: Instant::<Authored>::new(0),
+            written: "d".to_owned(),
+        }),
         now: Rc::new(|| Instant::<PageLoad>::new(0.0)),
         wall_clock: Rc::new(|| Instant::<Authored>::new(0)),
         motion: Rc::new(|| crate::ui::pictures::Motion::Full),
@@ -66,6 +71,7 @@ pub fn channel_of(
         warn: Rc::new(|_| {}),
         call: Rc::new(|| None),
         press_call: Rc::new(|_| {}),
+        join_call: Rc::new(|_, _| {}),
     };
     let (events, from_logic) =
         local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());

@@ -70,6 +70,9 @@ pub struct PageReads {
     pub name_of: Rc<dyn Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     /// A time, in the reader's language and zone (`MURMURE-418`).
     pub time_of: Rc<dyn Fn(Instant<Authored>) -> String>,
+    /// The day of an instant in the reader's zone, which a day divider
+    /// names (`MURMURE-739`).
+    pub day_of: Rc<dyn Fn(Instant<Authored>) -> crate::ui::paint::Day>,
     /// The page's monotonic clock: the wheel and the pictures read it.
     pub now: Rc<dyn Fn() -> Instant<PageLoad>>,
     /// The user's wall clock: it dates a message, an edit, a reaction and a
@@ -149,6 +152,9 @@ pub struct PageReads {
     /// Hand the page a press on the video region. An arrow turns the page of the grid, and the
     /// tile of a participant pins it (`MURMURE-654`, `MURMURE-668`).
     pub press_call: Rc<dyn Fn(crate::ui::call_videos::CallPress)>,
+    /// Join the call of a call card whose `Join` a click or a tap pressed,
+    /// in its channel, as the `Join call` action does (`MURMURE-746`).
+    pub join_call: Rc<dyn Fn(Id<ambre_core::id::Call>, Id<Channel>)>,
 }
 
 /// What the page does with a file fetched, and its bytes.
@@ -848,7 +854,12 @@ impl MurmureView {
         let rows = list.rows();
         rows.iter()
             .filter_map(|row| row.message())
-            .find(|message| message.thread.is_some_and(|t| t.document == thread))
+            .find(|message| {
+                message
+                    .thread
+                    .as_ref()
+                    .is_some_and(|t| t.document == thread)
+            })
             .and_then(|root| {
                 let segment = list.segment_of(root.id)?;
                 Some(FromThread::Root(MessageRef {
@@ -1421,6 +1432,11 @@ impl MurmureView {
                     now: (self.reads.now)(),
                     motion: (self.reads.motion)(),
                 }),
+                theme: self.theme,
+                calendar: Some(crate::ui::paint::Calendar {
+                    now: self.now(),
+                    day_of: &*self.reads.day_of,
+                }),
             },
             list_size,
             &*self.reads.name_of,
@@ -1437,6 +1453,11 @@ impl MurmureView {
         }
         if let Some(file) = painted.file.clone() {
             self.fetch_file(pane, file);
+        }
+        if let Some((i, call)) = painted.join
+            && let Some(target) = self.target_of_row(i)
+        {
+            (self.reads.join_call)(call, target.channel);
         }
         // A selection moves no read cursor: only what the paint shows does
         // (`MURMURE-427`).
@@ -2187,6 +2208,9 @@ mod tests {
         /// Each press the view handed the page on its video region, oldest first
         /// (`MURMURE-654`, `MURMURE-668`).
         presses: Rc<RefCell<Vec<crate::ui::call_videos::CallPress>>>,
+        /// Each call a card's `Join` joined, with its channel, oldest first.
+        #[expect(clippy::type_complexity, reason = "each `Id<_>` names its kind")]
+        joined: Rc<RefCell<Vec<(Id<ambre_core::id::Call>, Id<Channel>)>>>,
     }
 
     /// A file the view handed the page, and its bytes.
@@ -2257,12 +2281,19 @@ mod tests {
         let received = Rc::clone(&call);
         let presses = Rc::new(RefCell::new(Vec::new()));
         let call_pressed = Rc::clone(&presses);
+        let joined = Rc::new(RefCell::new(Vec::new()));
+        let joins = Rc::clone(&joined);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| {
                 ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok()
             }),
             time_of: Rc::new(|_| "t".to_owned()),
+            // One day holds every message of a test.
+            day_of: Rc::new(|_| crate::ui::paint::Day {
+                start: Instant::<Authored>::new(0),
+                written: "d".to_owned(),
+            }),
             now: Rc::new(move || now.get()),
             // The wall clock follows the page's unless a test sets it, so a
             // step dates what it sends.
@@ -2333,6 +2364,7 @@ mod tests {
             warn: Rc::new(move |text: &str| warns.borrow_mut().push(text.to_owned())),
             call: Rc::new(move || received.borrow().clone()),
             press_call: Rc::new(move |press| call_pressed.borrow_mut().push(press)),
+            join_call: Rc::new(move |call, channel| joins.borrow_mut().push((call, channel))),
         };
         let size = ambre_core::Size::new(ambre_core::Px::new(300), ambre_core::Px::new(400));
         let view = MurmureView::new(
@@ -2369,6 +2401,7 @@ mod tests {
             warned,
             call,
             presses,
+            joined,
         }
     }
 
@@ -2664,11 +2697,12 @@ mod tests {
                 Px::<View>::new(284.0),
                 ambre_canvas::Weight::Regular,
             );
-            f64::from(SPACE_8 + width.width())
+            f64::from(crate::ui::paint::TEXT_LEFT.get() + width.width())
         };
-        let on_link = (x_after("see si"), f64::from(second - SPACE_2 - 6.0));
+        let pad = crate::ui::paint::ROW_PAD.get();
+        let on_link = (x_after("see si"), f64::from(second - pad - 6.0));
         let beside = (x_after("s"), on_link.1);
-        let on_bad = (x_after("b"), f64::from(first - SPACE_2 - 6.0));
+        let on_bad = (x_after("b"), f64::from(first - pad - 6.0));
 
         for at in [beside, on_bad] {
             mouse(&mut page.view, at, at);
@@ -2696,6 +2730,48 @@ mod tests {
             ]
         );
         assert!(page.commands.try_recv().is_err(), "the opens sent nothing");
+    }
+
+    /// `MURMURE-746`: a click on `Join` of a call card hands the page its
+    /// call and its channel, once.
+    #[test]
+    fn a_click_on_join_hands_the_page_the_call_and_its_channel() {
+        let mut page = page();
+        let (me, lea) = (Id::<User>::mint(), Id::<User>::mint());
+        page.me.set(Some(me));
+        let channel = Id::<Channel>::mint();
+        let call = Id::<ambre_core::id::Call>::mint();
+        let mut card = message(lea, Instant::<Authored>::new(1), "");
+        card.call = Some(crate::message::CallView {
+            call,
+            end: crate::message::CallEnd::Open,
+            members: Some(ambre_bus::CallMembers::Live(vec![lea])),
+        });
+        let segment = Id::<Segment>::mint();
+        send(
+            &page,
+            channel,
+            MurmureEvent::Messages {
+                segment,
+                messages: vec![card],
+            },
+        );
+        page.pane.set(MurmurePane::Channel { channel, at: None });
+        frame_with_fonts(&mut page.view);
+        let rows = spans(&page.view.last_painted().expect("painted").rows);
+        let [(_, _, bottom)] = rows.as_slice() else {
+            panic!("one row: {rows:?}");
+        };
+        // The button sits at the right of the card, half a card above the
+        // foot of the row. The scan walks left until a click lands on it.
+        let y = f64::from(bottom - crate::ui::paint::ROW_PAD.get() - 28.0);
+        let mut x = 296.0;
+        while page.joined.borrow().is_empty() && x > 0.0 {
+            mouse(&mut page.view, (x, y), (x, y));
+            frame_with_fonts(&mut page.view);
+            x -= 6.0;
+        }
+        assert_eq!(page.joined.borrow().as_slice(), [(call, channel)]);
     }
 
     /// A click on a reaction chip adds the member's reaction when theirs is
@@ -2735,11 +2811,15 @@ mod tests {
             "\u{1F44D} 1",
             FONT_UI,
             Px::<View>::new(284.0),
-            ambre_canvas::Weight::Regular,
+            ambre_canvas::Weight::Bold,
         );
-        let y = f64::from(bottom - 2.0 * SPACE_2 - 2.0);
-        let on_first = (f64::from(SPACE_8 + 2.0), y);
-        let on_second = (f64::from(SPACE_8 + first.width() + 4.0 * SPACE_4), y);
+        use crate::ui::paint::{PILL_GAP, ROW_PAD, TEXT_LEFT};
+        let y = f64::from(bottom - ROW_PAD.get() - 2.0);
+        let on_first = (f64::from(TEXT_LEFT.get() + 2.0), y);
+        let on_second = (
+            f64::from(TEXT_LEFT.get() + first.width() + 2.0 * SPACE_4 + PILL_GAP.get() + 2.0),
+            y,
+        );
         let mut clicked = Vec::new();
         for at in [on_first, on_second] {
             mouse(&mut page.view, at, at);
@@ -3724,14 +3804,20 @@ mod tests {
             call: None,
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
-        // The list rests on its latest row: the top of the region is empty.
-        let above = shown(&page.view)
+        // A short list starts at the top: the foot of the region is empty
+        // (`MURMURE-737`).
+        let below = shown(&page.view)
             .rows
-            .first()
-            .map_or(0.0, |r| r.bounds.top.get())
-            - 1.0;
-        assert!(above > 0.0, "room above the first row");
-        button(&mut page, PointerButton::Secondary, above);
+            .last()
+            .map_or(0.0, |r| r.bounds.bottom.get())
+            + 1.0;
+        assert!(
+            shown(&page.view)
+                .rows
+                .first()
+                .is_some_and(|r| r.bounds.top.get() == 0.0)
+        );
+        button(&mut page, PointerButton::Secondary, below);
         assert_eq!(page.acted.borrow().last(), Some(&None), "off any message");
         button(&mut page, PointerButton::Primary, y);
         assert_eq!(page.acted.borrow().len(), 2, "a left click opens nothing");
@@ -6130,6 +6216,8 @@ mod tests {
                 document: thread,
                 replies: ambre_core::Count::<crate::message::Replies>::new(1),
                 last_replier: Some(ada),
+                repliers: vec![ada],
+                last_reply: None,
             }),
             ..message(ada, Instant::<Authored>::new(0), "root")
         };

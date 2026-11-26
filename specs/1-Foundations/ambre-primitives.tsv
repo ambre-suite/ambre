@@ -793,7 +793,7 @@ ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit(text) 
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused colour text
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
 ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);16]	generic	the codec of a struct that is no newtype: the Palette field name of each typed colour, which the generated Rust module spells and the compiler matches back
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);16]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
+ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);17]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
 ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'static str,&dyn fmt::Display);4]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed effect, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	free-text	a whole generated file: the stylesheet or the Rust module
@@ -5088,3 +5088,22 @@ ambre-sync | src/erasure.rs | crate::erasure | holds() | ret | bool	generic	pred
 ambre-sync | src/erasure.rs | crate::erasure | linked() | ret | bool	generic	predicate answer: whether a link receipt proves the thread, selects no mode
 ambre-chrome | src/color.rs | crate::color | INLINE | const | [(ambre_commands::TitleWords,&str,Rgb);7]	free-text	the name and the CSS text of each inline swatch a person reads and picks
 ambre-trame | src/chrome/panel.rs | crate::chrome::panel | title() | ret | &'static str	free-text	the title of a property a person reads, in the interface language
+ambre-murmure | src/ui/list.rs | crate::ui::list | CallCard.started | field | String	free-text	the words of a call card under its title: who started the call and when, as the reader reads them
+ambre-murmure | src/ui/list.rs | crate::ui::list | CallCard::joinable() | ret | bool	generic	predicate result: whether a call card offers Join to the member
+ambre-murmure | src/ui/list.rs | crate::ui::list | CallCard::title() | ret | &'static str	free-text	the title a call card reads, a display label
+ambre-murmure | src/ui/list.rs | crate::ui::list | Face.initials | field | String	free-text	the initials a small avatar draws, a display label of a display name
+ambre-murmure | src/ui/list.rs | crate::ui::list | HeaderWords.initials | field | String	free-text	the initials the avatar of a header draws, a display label of a display name
+ambre-murmure | src/ui/list.rs | crate::ui::list | ThreadWords.last | field | Option<(String,Instant<Authored>)>	free-text	the display name of the last replier beside the typed instant of the reply
+ambre-murmure | src/ui/list.rs | crate::ui::list | face(name) | param | &str	free-text	the display name a face takes its initials from
+ambre-murmure | src/ui/list.rs | crate::ui::list | first_name() | ret | &str	free-text	the first word of a display name, a display label
+ambre-murmure | src/ui/list.rs | crate::ui::list | first_name(name) | param | &str	free-text	a display name
+ambre-murmure | src/ui/look.rs | crate::ui::look | chip() | ret | bool	generic	predicate result: whether a style draws its run on a chip
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | Above.day | field | Option<String>	free-text	the label of a day divider: today, yesterday or a date the page wrote
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | Day.written | field | String	free-text	a date as the reader's language writes it, from the page
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | Days<'a>::divider() | ret | Option<String>	free-text	the label of a day divider, a display label
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | ago() | ret | String	free-text	how long ago a reply was sent, a display label
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | day_label() | ret | String	free-text	the label of a day divider, a display label
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | draw_day(label) | param | &str	free-text	the label of a day divider, a display label
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | label_tall(text) | param | &str	free-text	the words of a divider label, which the call shapes
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | last_reply_words() | ret | Option<String>	free-text	the last reply line of a thread summary, a display label
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | PHONE_PATH | const | &str	foreign-api	the SVG path data of the phone icon, which BezPath::from_svg alone reads

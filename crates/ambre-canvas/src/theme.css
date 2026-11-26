@@ -16,6 +16,7 @@
     --error: #cc4444;
     --info: #2467c0;
     --on-accent: #ffffff;
+    --mention: #c23a78;
     --shadow-low: 0 1px 4px #0000001f;
     --shadow-mid: 0 4px 14px #0000002e;
     --shadow-high: 0 12px 48px #00000047;
@@ -83,6 +84,7 @@
     --error: #e05a5a;
     --info: #5a9ae0;
     --on-accent: #1b1b1d;
+    --mention: #ec6aa6;
     --shadow-low: 0 1px 4px #0000001f;
     --shadow-mid: 0 4px 14px #00000059;
     --shadow-high: 0 12px 48px #0000008c;

@@ -30,6 +30,10 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         pane: Rc::new(move || relay.pane.get_untracked()),
         name_of: Rc::new(move |user| relay.member_name(user)),
         time_of: Rc::new(move |ts| clock.format(ts)),
+        day_of: Rc::new({
+            let days = LocalDay::new();
+            move |ts| days.day(ts)
+        }),
         now: Rc::new(super::probe::now),
         // `Date.now()` is a whole, non-negative count of milliseconds.
         wall_clock: Rc::new(|| Instant::<Authored>::new(js_sys::Date::now() as u64)),
@@ -73,6 +77,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
             crate::call_stage::stage(relay.me(), relay.pane.get_untracked().shown_channel())
         }),
         press_call: Rc::new(crate::call_stage::press),
+        join_call: Rc::new(crate::call::join),
     }
 }
 
@@ -309,6 +314,41 @@ impl LocalTime {
             .ok()
             .and_then(|written| written.as_string())
             .unwrap_or_default()
+    }
+}
+
+/// The day of an instant in the reader's zone: its local midnight, and its
+/// date as the reader's language writes it (`MURMURE-739`).
+pub struct LocalDay(js_sys::Function);
+
+impl LocalDay {
+    pub fn new() -> Self {
+        let options = js_sys::Object::new();
+        for (key, value) in [("weekday", "long"), ("day", "numeric"), ("month", "long")] {
+            let _ = js_sys::Reflect::set(&options, &key.into(), &value.into());
+        }
+        let format = js_sys::Intl::DateTimeFormat::new(&js_sys::Array::new(), &options);
+        Self(format.format())
+    }
+
+    /// The day `ts` falls in, for the reader.
+    pub fn day(&self, ts: Instant<Authored>) -> ambre_murmure::ui::paint::Day {
+        let date = js_sys::Date::new(&JsValue::from_f64(ts.get() as f64));
+        let written = self
+            .0
+            .call1(&JsValue::NULL, &date)
+            .ok()
+            .and_then(|written| written.as_string())
+            .unwrap_or_default();
+        // The local midnight, a whole count of milliseconds.
+        date.set_minutes(0);
+        date.set_seconds(0);
+        date.set_milliseconds(0);
+        let midnight = date.set_hours(0);
+        ambre_murmure::ui::paint::Day {
+            start: Instant::<Authored>::new(midnight.max(0.0) as u64),
+            written,
+        }
     }
 }
 

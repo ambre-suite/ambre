@@ -536,6 +536,7 @@ fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
         .expect("reply");
     let head = alice.messages(segment).expect("held")[0]
         .thread
+        .clone()
         .expect("the root names its thread");
     assert_eq!((head.document, head.replies.get()), (thread, 1));
     let raw = read_messages(
@@ -570,6 +571,7 @@ fn another_member_finds_the_thread_of_a_locked_root() {
     .expect("any member records a thread");
     let head = bob.messages(segment).expect("held")[0]
         .thread
+        .clone()
         .expect("read over the root");
     assert_eq!((head.document, head.replies.get()), (thread, 0));
     assert_eq!(bob.threads_to_open(), [thread]);
@@ -660,7 +662,10 @@ fn a_fold_carries_the_thread_of_a_locked_root() {
         alice.doc(segment.document_id()).expect("held"),
         alice.channel_id(),
     );
-    assert_eq!(raw[0].thread.map(|head| head.document), Some(thread));
+    assert_eq!(
+        raw[0].thread.as_ref().map(|head| head.document),
+        Some(thread)
+    );
 }
 
 /// `MURMURE-732`, `MURMURE-733`, `MURMURE-734`, `MURMURE-735`: the record

@@ -122,3 +122,9 @@ pub(crate) fn link_ink(palette: &Palette) -> Color {
 pub(crate) fn tint(style: &TextStyle, palette: &Palette) -> Option<Color> {
     matches!(style, TextStyle::Code | TextStyle::CodeBlock).then_some(palette.header_hover)
 }
+
+/// Whether `style` draws its run on a framed chip in the list: inline code
+/// does (`MURMURE-744`).
+pub(crate) fn chip(style: &TextStyle) -> bool {
+    *style == TextStyle::Code
+}

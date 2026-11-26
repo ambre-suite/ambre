@@ -1150,8 +1150,9 @@ body {
 }
 
 /* The `@` list of the composer, hung above its caret. The pipe keeps the
-   focus, so the list takes no pointer focus of its own. */
-.murmure-mentions {
+   focus, so the list takes no pointer focus of its own. Its class is not
+   the mention badge of the sidebar, `.murmure-mentions`. */
+.murmure-mention-list {
     position: fixed;
     z-index: 20;
     transform: translateY(-100%);

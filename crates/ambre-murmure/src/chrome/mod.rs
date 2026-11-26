@@ -2143,7 +2143,7 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
                 .collect_view();
             view! {
                 <ul
-                    class="murmure-mentions"
+                    class="murmure-mention-list"
                     role="listbox"
                     aria-label=ambre_commands::tr!("Mention a member", "Mentionner un membre")
                     style:left=format!("{x}px")

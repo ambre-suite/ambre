@@ -80,6 +80,7 @@ pub struct ChromePalette {
     pub error: Color,
     pub info: Color,
     pub on_accent: Color,
+    pub mention: Color,
 }
 
 pub const CHROME_LIGHT: ChromePalette = ChromePalette {
@@ -99,6 +100,7 @@ pub const CHROME_LIGHT: ChromePalette = ChromePalette {
     error: Color::from_rgba8(204, 68, 68, 255),
     info: Color::from_rgba8(36, 103, 192, 255),
     on_accent: Color::from_rgba8(255, 255, 255, 255),
+    mention: Color::from_rgba8(194, 58, 120, 255),
 };
 
 pub const CHROME_DARK: ChromePalette = ChromePalette {
@@ -118,6 +120,7 @@ pub const CHROME_DARK: ChromePalette = ChromePalette {
     error: Color::from_rgba8(224, 90, 90, 255),
     info: Color::from_rgba8(90, 154, 224, 255),
     on_accent: Color::from_rgba8(27, 27, 29, 255),
+    mention: Color::from_rgba8(236, 106, 166, 255),
 };
 
 pub const SPACE_1: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(2.0);

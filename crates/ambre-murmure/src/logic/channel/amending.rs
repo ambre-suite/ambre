@@ -526,6 +526,8 @@ fn overlay_named_threads(amendments: &LoroDoc, messages: &mut [MessageView]) {
             document,
             replies: ambre_core::Count::<crate::message::Replies>::ZERO,
             last_replier: None,
+            repliers: Vec::new(),
+            last_reply: None,
         });
     }
 }

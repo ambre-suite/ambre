@@ -48,6 +48,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-630` | `OBS` | Given a share that the screen of another member took over, the header MUST say that another member shares. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-107`) | `ambre_murmure::ui::call_controls::tests::another_screen_takes_over_a_share_and_the_header_says_so`; `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the take-over is a status; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's header reads that another member shares | none | verified |
 | `MURMURE-645` | `OBS` | Given a ring of the caller that ended with no answer, the header MUST say whether the member declined or did not answer, until the next call gesture. | this spec section 3, the ring | `ambre_murmure::ui::call_ring::tests::the_header_says_why_a_ring_ended_with_no_answer`; `ambre_app::shell::murmure_regions::the_header_says_why_a_call_rang_with_no_answer` -- wasm tier: the notice is a status beside the call button | none | verified |
 | `MURMURE-646` | `INV` | The title of the ring alert MUST read as an alert, and accept and decline MUST each carry an accessible name and take the keyboard focus. | this spec section 3, the ring; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_ring_alert_names_the_caller_and_offers_accept_and_decline` -- wasm tier: the title is an alert, and each control is a button with its name that takes the focus | none | verified |
+| `MURMURE-745` | `OBS` | A call message MUST show as a card: a phone icon, `Call in progress` or `Call ended`, who started it and when, the faces of the members in the call, and a `Join` button while the member is out of a live call. | this spec section 3, the call card; `MURMURE-409`; `MURMURE-592` | `ambre_murmure::ui::paint::look_tests::a_call_message_paints_as_a_card_with_its_faces_and_join` -- the frame, the phone, the title, who started it, the faces and `Join` while out of a live call, no `Join` inside it, and an ended card muted | none | verified |
 
 ### 1.2 Start a call
 
@@ -65,6 +66,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-411` | `POST` | Joining from a call message MUST bring the member into that call. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-016`) | `ambre_murmure::ui::commands::tests::a_live_call_message_offers_a_join_of_its_call`; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox: Bob joins from the menu of the message, and the two decode each other | none | verified |
 | `MURMURE-412` | `FAIL` | Given a call that has ended, the call message MUST offer no join. | this spec section 3 | `ambre_murmure::ui::commands::tests::a_call_that_ended_offers_no_join`; `ambre_server::ws::handler::call::tests::a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended` -- database tier; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox: the menu of an ended call holds no join | none | verified |
 | `MURMURE-413` | `FRAME` | Joining a call MUST NOT move a read cursor. | this spec section 3 | structural -- `MessageAction::JoinCall` carries no command of the Logic thread, and the shell hands it to the call client of the page; `ambre_murmure::ui::commands::tests::a_live_call_message_offers_a_join_of_its_call` | none | verified |
+| `MURMURE-746` | `POST` | A click or a tap on the `Join` button of a call card MUST join its call, as the `Join call` action of the message does. | this spec section 3, the call card; `MURMURE-411` | `ambre_murmure::ui::paint::look_tests::a_click_on_join_names_the_call_of_its_card` -- a click on the button names the call, one beside it none; `ambre_murmure::ui::view::tests::a_click_on_join_hands_the_page_the_call_and_its_channel` -- the view hands the page the call and its channel | none | verified |
 
 ### 1.4 Show who is in the call
 
@@ -207,7 +209,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). A ring
   rides their sealed summaries, so the relay learns no ring and no decline (`MURMURE-647`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 95 `verified`, 7 `unimplemented`. The relay half holds in the database tier. The
+* **Verification.** 97 `verified`, 7 `unimplemented`. The relay half holds in the database tier. The
   engine and the two workers hold on the host, and the whole path in the browser tier, under Chrome
   and Firefox.
 
@@ -268,6 +270,18 @@ message shows the members that pass. Nothing of the list is written into the mes
 
 The view ticks while it shows the channel. Each tick asks for each live call of the
 held segments, once per interval at most (`MURMURE-595`).
+
+**The call card.** The list draws a call message as a card, never as text (`MURMURE-745`):
+
+| Part | Live call | Ended call |
+|---|---|---|
+| icon | a phone on the success ink | a phone on the faint ink |
+| title | `Call in progress` | `Call ended` |
+| line | `Started by`, the author, the time of the message | the same |
+| faces | who is in the call, at its right | none |
+| button | `Join` while the member is out of it (`MURMURE-746`) | none |
+
+The card shows the start, not a running duration. The header counts the duration already.
 
 **A live call in the sidebar.** The sidebar marks each channel whose held segments name a live
 call, with the count of its participants and no name (`MURMURE-689`). The entry of the channel the

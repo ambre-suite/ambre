@@ -441,11 +441,16 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let n = at + 1;
     let thread = scenario_thread(reader.channel);
     match MessageKey::parse(stored.key(1)?)? {
-        MessageKey::Thread if message.thread.is_some_and(|head| head.document == thread) => {
+        MessageKey::Thread
+            if message
+                .thread
+                .as_ref()
+                .is_some_and(|head| head.document == thread) =>
+        {
             Some(format!("message {n} names its thread"))
         }
         MessageKey::Thread
-            if message.thread.is_some_and(|head| {
+            if message.thread.as_ref().is_some_and(|head| {
                 stored.string() == Some(head.document.to_string().as_str())
             }) =>
         {

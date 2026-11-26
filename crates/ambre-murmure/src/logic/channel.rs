@@ -2294,6 +2294,8 @@ fn read_message(item: ValueOrContainer, channel: Id<Channel>) -> Option<MessageV
             document,
             replies: ambre_core::Count::<crate::message::Replies>::ZERO,
             last_replier: None,
+            repliers: Vec::new(),
+            last_reply: None,
         }),
         also_in_thread: document_of(&map, MessageKey::AlsoInThread),
         call: crate::logic::call::read(&map),

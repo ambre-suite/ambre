@@ -251,7 +251,7 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
     let MurmureEvent::Messages { messages, .. } = &replied.head else {
         panic!("the head moves");
     };
-    let head = messages[0].thread.expect("a head");
+    let head = messages[0].thread.clone().expect("a head");
     assert_eq!(head.document, thread);
     assert_eq!((head.replies.get(), head.last_replier), (2, Some(bob)));
     // A reply deleted in the thread no longer counts.
@@ -265,15 +265,49 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
     last.insert(crate::logic::schema::MessageKey::Deleted, true)
         .expect("delete");
     doc.commit();
-    let head = message_at(&state, 0).thread.expect("a head");
+    let head = message_at(&state, 0).thread.clone().expect("a head");
     assert_eq!((head.replies.get(), head.last_replier), (1, Some(alice)));
     // A peer that holds the root but not the thread shows no count yet.
     let peer = peer_of(&state);
-    let head = message_at(&peer, 0).thread.expect("the root names it");
+    let head = message_at(&peer, 0)
+        .thread
+        .clone()
+        .expect("the root names it");
     assert_eq!(
         (head.document, head.replies.get(), head.last_replier),
         (thread, 0, None)
     );
+}
+
+/// `MURMURE-742`: the head names each replier once, the latest first, and
+/// the time of the latest reply, so the summary shows faces and an age.
+#[test]
+fn the_root_reads_its_latest_repliers_and_the_time_of_the_last_reply() {
+    let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
+    let mut state = channel_with(&["root"], alice);
+    let root = message_at(&state, 0).id;
+    threaded(&mut state, root);
+    let mut last = None;
+    for (author, text, at) in [(alice, "one", 10), (bob, "two", 20), (alice, "three", 30)] {
+        let ts = Instant::<Authored>::new(at);
+        last = Some(
+            state
+                .reply(
+                    root,
+                    &draft(text),
+                    author,
+                    ts,
+                    crate::message::ReplyEcho::ThreadOnly,
+                )
+                .expect("reply"),
+        );
+    }
+    let Some(MurmureEvent::Messages { messages, .. }) = last.map(|r| r.head) else {
+        panic!("the head moves");
+    };
+    let head = messages[0].thread.clone().expect("a head");
+    assert_eq!(head.repliers, vec![alice, bob]);
+    assert_eq!(head.last_reply, Some(Instant::<Authored>::new(30)));
 }
 
 // --- MURMURE-107, MURMURE-110 ---
@@ -766,7 +800,10 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     let Some(MurmureEvent::Messages { messages, .. }) = state.root_view(root) else {
         panic!("the root's segment");
     };
-    assert_eq!(messages[0].thread.map(|head| head.replies.get()), Some(0));
+    assert_eq!(
+        messages[0].thread.as_ref().map(|head| head.replies.get()),
+        Some(0)
+    );
     assert_eq!(state.root_view(Id::<Message>::mint()), None);
     // The root itself still changes in its segment.
     assert!(
@@ -869,7 +906,10 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     let MurmureEvent::Messages { messages, .. } = bob.older_ready(thread).expect("admitted") else {
         panic!("the root's segment");
     };
-    assert_eq!(messages[0].thread.map(|head| head.replies.get()), Some(0));
+    assert_eq!(
+        messages[0].thread.as_ref().map(|head| head.replies.get()),
+        Some(0)
+    );
     let replied = alice
         .reply(
             root,
@@ -893,7 +933,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     ));
     assert!(matches!(
         &events[1],
-        MurmureEvent::Messages { messages, .. } if messages[0].thread.map(|h| h.replies.get()) == Some(1)
+        MurmureEvent::Messages { messages, .. } if messages[0].thread.as_ref().map(|h| h.replies.get()) == Some(1)
     ));
     // Alice's thread of `other` is linked, by mistake, to `third` in another
     // copy: its header names `other`, so it is refused.

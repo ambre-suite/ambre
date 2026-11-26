@@ -236,11 +236,14 @@ struct ChromeColors {
     info: OpaqueColour,
     /// Text and icons drawn on an accent ground.
     on_accent: OpaqueColour,
+    /// The ink of a mention: its chip, its badge and the unread separator of
+    /// a message list.
+    mention: OpaqueColour,
 }
 
 impl ChromeColors {
     /// The CSS variable name of each colour, in declaration order.
-    fn vars(&self) -> [(&'static str, OpaqueColour); 16] {
+    fn vars(&self) -> [(&'static str, OpaqueColour); 17] {
         [
             ("bg", self.bg),
             ("surface", self.surface),
@@ -258,6 +261,7 @@ impl ChromeColors {
             ("error", self.error),
             ("info", self.info),
             ("on-accent", self.on_accent),
+            ("mention", self.mention),
         ]
     }
 }

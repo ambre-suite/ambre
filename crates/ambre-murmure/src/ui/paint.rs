@@ -11,18 +11,23 @@ use std::collections::HashMap;
 
 use crate::message::{Attachment, TextStyle};
 use ambre_bus::{Authored, ContentHash, Emoji, Instant};
-use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
+use ambre_canvas::Theme;
+use ambre_canvas::theme::{
+    FONT_BODY, FONT_SMALL, FONT_UI, FONT_XS, SPACE_1, SPACE_2, SPACE_3, SPACE_4, SPACE_5, SPACE_6,
+    SPACE_8, SPACE_12,
+};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_core::id::{Id, Message, User};
 use ambre_core::{Byte, Px, Size, Surface, View};
 use ambre_draw::{
-    Affine, Affinity, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource, Layout,
-    ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
+    Affine, Affinity, BezPath, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource, Layout,
+    ParleyBrush, Point, PositionedLayoutItem, Rect, Selection, peer_color,
 };
 
 use crate::ui::list::{
-    BodyInk, HeaderWords, JUMP_TO_LATEST, ListRow, MessageList, OnScreen, RowKey, RowWords,
-    UNREAD_LINE, chip_label, file_label, window,
+    BodyInk, CALL_JOIN, CallCard, CallState, Face, HeaderWords, JUMP_TO_LATEST, ListRow,
+    MessageList, OnScreen, RowKey, RowWords, ThreadWords, UNREAD_LINE, chip_label, file_label,
+    window,
 };
 use crate::ui::look;
 use crate::ui::pictures::{Pictures, frame_at, frame_key, previews};
@@ -137,6 +142,16 @@ pub(crate) fn text_width(layout: &Layout<ParleyBrush>) -> Px<View> {
     Px::<View>::new(layout.width())
 }
 
+/// How far below the top of a shaped text its first baseline lies.
+fn first_baseline(layout: &Layout<ParleyBrush>) -> Px<View> {
+    Px::<View>::new(
+        layout
+            .lines()
+            .next()
+            .map_or(0.0, |line| line.metrics().baseline),
+    )
+}
+
 /// The height a shaped text takes, in the painter's pixels.
 pub(crate) fn text_height(layout: &Layout<ParleyBrush>) -> Px<View> {
     Px::<View>::new(layout.height())
@@ -190,6 +205,9 @@ pub struct Painted {
     pub chip: Option<(Pos<ListRow>, Emoji)>,
     /// The file chip a click landed on: the file it fetches.
     pub file: Option<Attachment>,
+    /// The `Join` button of a call card a click landed on: the index of its
+    /// row and its call (`MURMURE-746`).
+    pub join: Option<(Pos<ListRow>, Id<ambre_core::id::Call>)>,
     /// The files whose preview this paint drew, decoded or not. Only these
     /// are on screen, so only these play (`MURMURE-131`).
     pub pictures: Vec<Validated<ContentHash>>,
@@ -206,6 +224,46 @@ impl Painted {
             .iter()
             .find(|row| row.bounds.holds(y))
             .map(|row| row.index)
+    }
+}
+
+/// The day of a message in the reader's zone, as the page names it
+/// (`MURMURE-739`).
+///
+/// `Debug` prints the start alone.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Day {
+    /// The start of the day, in the reader's zone: two messages of one day
+    /// share it.
+    pub start: Instant<Authored>,
+    /// The date the divider writes when the day is neither today nor
+    /// yesterday.
+    pub written: String,
+}
+
+impl std::fmt::Debug for Day {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Day")
+            .field("start", &self.start)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The reader's clock and calendar, which the day dividers and the age of a
+/// last reply read (`MURMURE-739`, `MURMURE-742`).
+#[derive(Clone, Copy)]
+pub struct Calendar<'a> {
+    /// The wall clock at this paint.
+    pub now: Instant<Authored>,
+    /// The day of an instant, in the reader's zone.
+    pub day_of: &'a dyn Fn(Instant<Authored>) -> Day,
+}
+
+impl std::fmt::Debug for Calendar<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Calendar")
+            .field("now", &self.now)
+            .finish_non_exhaustive()
     }
 }
 
@@ -226,6 +284,430 @@ pub struct Shown<'a> {
     /// The pictures to preview. `None` previews nothing: each file shows
     /// as its chip alone.
     pub pictures: Option<Pictured<'a>>,
+    /// The theme, whose chrome colours the decorations of a row share.
+    pub theme: Theme,
+    /// The reader's calendar. `None` draws no day divider, and a last reply
+    /// with no age.
+    pub calendar: Option<Calendar<'a>>,
+}
+
+/// The left edge of the avatars and of the dividers: the mockup's gutter.
+const EDGE: Px<View> = SPACE_8;
+/// The side of an avatar beside a header (`MURMURE-738`).
+const AVATAR: Px<View> = Px::<View>::new(36.0);
+/// The corner of an avatar beside a header.
+const AVATAR_CORNER: Px<Surface> = Px::<Surface>::new(10.0);
+/// The size of the initials in an avatar beside a header.
+const AVATAR_FONT: Px<View> = FONT_UI;
+/// The left edge of the text of a row: past the avatar and its gap.
+pub(crate) const TEXT_LEFT: Px<View> = Px::<View>::new(EDGE.get() + AVATAR.get() + SPACE_5.get());
+/// The space of the list above its oldest row.
+const LIST_TOP: Px<View> = SPACE_4;
+/// The space above a row that opens a group, and below every row.
+pub(crate) const ROW_PAD: Px<View> = Px::<View>::new(5.0);
+/// The space above a row that joins the group above it.
+const JOINED_PAD: Px<View> = Px::<View>::new(1.0);
+/// The space between a body and what hangs under it: the pills, the thread
+/// summary, the call card.
+const UNDER: Px<View> = Px::<View>::new(5.0);
+/// The space above and below the label of a day divider.
+const DAY_MARGIN: Px<View> = SPACE_5;
+/// The space above and below the unread separator.
+const NEW_MARGIN: Px<View> = SPACE_3;
+/// The space between two pills.
+pub(crate) const PILL_GAP: Px<View> = Px::<View>::new(5.0);
+/// The side of a face in a thread summary.
+const THREAD_FACE: Px<View> = Px::<View>::new(20.0);
+/// The corner of a face in a thread summary.
+const THREAD_FACE_CORNER: Px<Surface> = Px::<Surface>::new(6.0);
+/// The size of the initials of a small face.
+const FACE_FONT: Px<View> = Px::<View>::new(8.5);
+/// The space around the faces of a thread summary.
+const THREAD_PAD: Px<View> = Px::<View>::new(3.0);
+/// The widest a call card grows.
+const CARD_MAX: Px<View> = Px::<View>::new(520.0);
+/// The space inside a call card.
+const CARD_PAD_X: Px<View> = SPACE_6;
+/// The space above and below the content of a call card.
+const CARD_PAD_Y: Px<View> = SPACE_5;
+/// The corner of a call card.
+const CARD_CORNER: Px<Surface> = Px::<Surface>::new(12.0);
+/// The side of the icon of a call card.
+const CARD_ICON: Px<View> = Px::<View>::new(34.0);
+/// The side of a face in a call card.
+const CARD_FACE: Px<View> = SPACE_12;
+/// How far a face in a call card slides over the one before it.
+const CARD_FACE_OVERLAP: Px<View> = Px::<View>::new(7.0);
+/// The size of the initials of a face in a call card.
+const CARD_FACE_FONT: Px<View> = Px::<View>::new(9.5);
+/// The height of the `Join` button of a call card.
+const JOIN_TALL: Px<View> = Px::<View>::new(30.0);
+/// A card narrower than this drops its faces, as the phone mockup does.
+const CARD_FACES_FROM: Px<View> = Px::<View>::new(420.0);
+
+/// The phone of the mockup's icon set, on a 24 px box.
+const PHONE_PATH: &str =
+    "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
+
+/// The chrome colours of the decorations, mixed as the mockup mixes them.
+struct Inks {
+    text: Color,
+    faint: Color,
+    dim: Color,
+    line: Color,
+    sunken: Color,
+    surface: Color,
+    accent: Color,
+    accent_soft: Color,
+    mention: Color,
+    ok: Color,
+}
+
+impl Inks {
+    fn of(theme: Theme) -> Self {
+        let chrome = theme.chrome_palette();
+        Self {
+            text: chrome.text,
+            faint: chrome.text_faint,
+            dim: chrome.text_dim,
+            line: chrome.border,
+            sunken: chrome.surface_2,
+            surface: chrome.surface,
+            accent: chrome.accent,
+            accent_soft: chrome.accent_soft,
+            mention: chrome.mention,
+            ok: chrome.success,
+        }
+    }
+}
+
+/// `ink` over `ground`, as CSS mixes `color-mix(ink share, ground)`.
+fn mix(ink: Color, ground: Color, share: ambre_core::Bounded<ambre_core::Opacity>) -> Color {
+    let (a, b) = (ink.to_rgba8(), ground.to_rgba8());
+    let t = share.get();
+    let channel = |x: u8, y: u8| (f32::from(x) * t + f32::from(y) * (1.0 - t)).round() as u8;
+    Color::from_rgba8(channel(a.r, b.r), channel(a.g, b.g), channel(a.b, b.b), 255)
+}
+
+/// The share of the success ink in the ground of a live call card.
+const CARD_GROUND: ambre_core::Bounded<ambre_core::Opacity> =
+    ambre_core::Bounded::<ambre_core::Opacity>::clamped(0.1);
+/// The share of the success ink in the border of a live call card.
+const CARD_BORDER: ambre_core::Bounded<ambre_core::Opacity> =
+    ambre_core::Bounded::<ambre_core::Opacity>::clamped(0.4);
+/// The share of the mention ink in the ground of a mention chip.
+const MENTION_GROUND: ambre_core::Bounded<ambre_core::Opacity> =
+    ambre_core::Bounded::<ambre_core::Opacity>::clamped(0.12);
+
+/// The outline of `rect` with corners of `corner`, as four arcs and four
+/// sides. A corner wider than half a side is clamped to it, so a square
+/// with half its side for a corner is a circle.
+fn rounded(rect: Rect, corner: Px<Surface>) -> BezPath {
+    let r = corner
+        .get()
+        .min(rect.width() / 2.0)
+        .min(rect.height() / 2.0)
+        .max(0.0);
+    // The cubic that draws a quarter circle best.
+    let k = r * 0.552_284_8;
+    let (x0, y0, x1, y1) = (rect.x0, rect.y0, rect.x1, rect.y1);
+    let mut path = BezPath::new();
+    path.move_to((x0 + r, y0));
+    path.line_to((x1 - r, y0));
+    path.curve_to((x1 - r + k, y0), (x1, y0 + r - k), (x1, y0 + r));
+    path.line_to((x1, y1 - r));
+    path.curve_to((x1, y1 - r + k), (x1 - r + k, y1), (x1 - r, y1));
+    path.line_to((x0 + r, y1));
+    path.curve_to((x0 + r - k, y1), (x0, y1 - r + k), (x0, y1 - r));
+    path.line_to((x0, y0 + r));
+    path.curve_to((x0, y0 + r - k), (x0 + r - k, y0), (x0 + r, y0));
+    path.close_path();
+    path
+}
+
+/// Fill `rect` with corners of `corner` in `ground`, and draw its border in
+/// `border` when given.
+fn fill_rounded<S: DrawSurface>(
+    surface: &mut S,
+    rect: Rect,
+    corner: Px<Surface>,
+    ground: Color,
+    border: Option<Color>,
+) {
+    let path = rounded(rect, corner);
+    surface.fill_path(&path, &Brush::Solid(ground));
+    if let Some(border) = border {
+        surface.stroke_path(&path, &Brush::Solid(border), &ambre_draw::Stroke::new(1.0));
+    }
+}
+
+/// Paint the face of `face` in `rect`: its initials on its peer colour
+/// (`MURMURE-738`).
+fn draw_face<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    face: &Face,
+    rect: Rect,
+    (corner, size): (Px<Surface>, Px<View>),
+) {
+    fill_rounded(surface, rect, corner, peer_color(&face.who), None);
+    let layout = shape(
+        font_cx,
+        cache,
+        &face.initials,
+        size,
+        Px::<View>::new(rect.width() as f32),
+        ambre_canvas::Weight::Bold,
+    );
+    let (wide, tall) = (text_width(layout), text_height(layout));
+    let left = painter_px(Px::<Surface>::new(rect.x0))
+        + (Px::<View>::new(rect.width() as f32) - wide) / 2.0;
+    let top = painter_px(Px::<Surface>::new(rect.y0))
+        + (Px::<View>::new(rect.height() as f32) - tall) / 2.0;
+    let white = Color::from_rgba8(255, 255, 255, 255);
+    draw(
+        surface,
+        layout,
+        &face.initials,
+        ambre_core::Point::new(left, top),
+        white,
+    );
+}
+
+/// What a row draws above its header: a day divider, the unread separator,
+/// or both.
+#[derive(Debug, Clone, PartialEq, Default)]
+struct Above {
+    /// The label of the day divider, `None` inside a day (`MURMURE-739`).
+    day: Option<String>,
+    /// The unread separator: the first unread message follows
+    /// (`MURMURE-184`).
+    unread: Unread,
+    /// The space above the row: the padding of the list above its oldest
+    /// row, nothing above any other.
+    lead: Px<View>,
+}
+
+ambre_core::define_flag! {
+    /// Whether the unread separator stands above a row.
+    enum Unread {
+        /// It does not.
+        No,
+        /// The first unread message follows.
+        Above,
+    }
+}
+
+/// The words of the divider of `day`: today, yesterday or its date
+/// (`MURMURE-739`).
+fn day_label(day: &Day, today: &Day, yesterday: &Day) -> String {
+    if day.start == today.start {
+        ambre_commands::tr!("Today", "Aujourd'hui").to_owned()
+    } else if day.start == yesterday.start {
+        ambre_commands::tr!("Yesterday", "Hier").to_owned()
+    } else {
+        day.written.clone()
+    }
+}
+
+/// The days a paint compares each message with.
+struct Days<'a> {
+    calendar: Calendar<'a>,
+    today: Day,
+    yesterday: Day,
+}
+
+impl<'a> Days<'a> {
+    fn of(calendar: Calendar<'a>) -> Self {
+        let today = (calendar.day_of)(calendar.now);
+        let eve = Instant::<Authored>::new(today.start.get().saturating_sub(1));
+        let yesterday = (calendar.day_of)(eve);
+        Self {
+            calendar,
+            today,
+            yesterday,
+        }
+    }
+
+    /// The divider above `message`, given the message above it: one at the
+    /// first message of a day.
+    fn divider(
+        &self,
+        message: Instant<Authored>,
+        above: Option<Instant<Authored>>,
+    ) -> Option<String> {
+        let day = (self.calendar.day_of)(message);
+        let same = above.is_some_and(|above| (self.calendar.day_of)(above).start == day.start);
+        (!same).then(|| day_label(&day, &self.today, &self.yesterday))
+    }
+}
+
+/// Where each part of a row lies. The measure, the paint and each hit test
+/// read this one walk of its layouts, so the three never drift.
+#[derive(Debug, Clone, Copy)]
+struct Placed {
+    /// The top of the day divider's label.
+    day: Option<Px<View>>,
+    /// The top of the unread separator's label.
+    unread: Option<Px<View>>,
+    /// The top of the header and of the avatar beside it.
+    header: Option<Px<View>>,
+    /// The top of the body.
+    body: Px<View>,
+    /// The top of the previews.
+    previews: Px<View>,
+    /// The top of the file chips, the space above them included.
+    files: Px<View>,
+    /// The top of the pills.
+    pills: Option<Px<View>>,
+    /// The top of the thread summary.
+    thread: Option<Px<View>>,
+    /// The top of the call card.
+    card: Option<Px<View>>,
+    /// The top of the line that names the thread of a reply also sent.
+    replies: Option<Px<View>>,
+    /// The bottom of the row.
+    bottom: Px<View>,
+}
+
+/// The heights of the two labels a row may draw above its header.
+fn label_tall(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    text: &str,
+    size: Px<View>,
+) -> Px<View> {
+    text_height(shape(
+        font_cx,
+        cache,
+        text,
+        size,
+        Px::<View>::new(1000.0),
+        ambre_canvas::Weight::Bold,
+    ))
+}
+
+/// Lay `row` out from `top`, in a list `width` wide.
+fn place(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    row: &RowWords,
+    above: &Above,
+    top: Px<View>,
+    width: Px<View>,
+    pics: Option<Pictured<'_>>,
+) -> Placed {
+    let text = text_column(width);
+    let mut y = top + above.lead;
+    let day = above.day.as_ref().map(|label| {
+        let at = y + DAY_MARGIN;
+        y = at + label_tall(font_cx, cache, label, FONT_SMALL) + DAY_MARGIN;
+        at
+    });
+    let unread = (above.unread == Unread::Above).then(|| {
+        let at = y + NEW_MARGIN;
+        let label = ambre_commands::shown(&UNREAD_LINE);
+        y = at + label_tall(font_cx, cache, label, FONT_XS) + NEW_MARGIN;
+        at
+    });
+    let opens = row.header.is_some() || row.ink == BodyInk::Muted;
+    y += if opens { ROW_PAD } else { JOINED_PAD };
+    let header = row.header.as_ref().map(|words| {
+        let at = y;
+        y += header_tall(font_cx, cache, words, text);
+        at
+    });
+    let body = y;
+    if row.call.is_none() {
+        y += text_height(self::body(font_cx, cache, row, text));
+    }
+    let previews = y;
+    y += previews_height(row, pics);
+    let files = y;
+    y += file_chips(font_cx, cache, row, text).1;
+    let pills = (!row.reactions.is_empty()).then(|| {
+        let at = y + UNDER;
+        y = at + pill_boxes(font_cx, cache, row, text).1;
+        at
+    });
+    let thread = row.thread.as_ref().map(|_| {
+        let at = y + UNDER;
+        y = at + THREAD_FACE + THREAD_PAD * 2.0;
+        at
+    });
+    let card = row.call.as_ref().map(|card| {
+        let at = y + if row.header.is_some() {
+            UNDER
+        } else {
+            Px::<View>::ZERO
+        };
+        y = at + card_tall(font_cx, cache, card);
+        at
+    });
+    let replies = match (&row.thread, &row.replies) {
+        (None, Some(line)) => {
+            let at = y;
+            y += text_height(shape(
+                font_cx,
+                cache,
+                line,
+                FONT_UI,
+                text,
+                ambre_canvas::Weight::Regular,
+            ));
+            Some(at)
+        }
+        _ => None,
+    };
+    let mut bottom = y + ROW_PAD;
+    if let Some(at) = header {
+        bottom = bottom.max(at + AVATAR + ROW_PAD);
+    }
+    Placed {
+        day,
+        unread,
+        header,
+        body,
+        previews,
+        files,
+        pills,
+        thread,
+        card,
+        replies,
+        bottom,
+    }
+}
+
+/// The width the text of a row wraps to, in a list `width` wide.
+fn text_column(width: Px<View>) -> Px<View> {
+    (width - TEXT_LEFT - EDGE).max(Px::<View>::new(1.0))
+}
+
+/// The height of a header line: the name and the time beside it.
+fn header_tall(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    words: &HeaderWords,
+    width: Px<View>,
+) -> Px<View> {
+    let author = text_height(shape(
+        font_cx,
+        cache,
+        &words.author,
+        FONT_BODY,
+        width,
+        ambre_canvas::Weight::Bold,
+    ));
+    let time = text_height(shape(
+        font_cx,
+        cache,
+        &words.time,
+        FONT_SMALL,
+        width,
+        ambre_canvas::Weight::Regular,
+    ));
+    author.max(time)
 }
 
 /// Paint `shown` from its anchor, in a viewport of `size`.
@@ -245,28 +727,41 @@ pub fn paint_list<S: DrawSurface>(
         cache,
         palette,
     } = pen;
+    let inks = Inks::of(shown.theme);
     let (width, height) = (size.width, size.height);
     let backdrop = view_rect(Px::<View>::ZERO, Px::<View>::ZERO, width, height);
     surface.fill_rect(backdrop, palette.content_bg);
     let rows = shown.list.rows();
-    let text_width = (width - SPACE_8 * 2.0).max(Px::<View>::new(1.0));
-    let mut words: HashMap<Pos<ListRow>, (RowWords, LineAbove)> = HashMap::new();
+    let text_width = text_column(width);
+    let days = shown.calendar.map(Days::of);
+    let pics = shown.pictures;
+    let mut words: HashMap<Pos<ListRow>, (RowWords, Above)> = HashMap::new();
     let reached = window(rows.len(), height, shown.anchor, |i| {
         let Some(row) = rows.get(i) else {
             return Px::<View>::ZERO;
         };
-        let line = if shown.unread.is_some() && shown.unread == row.message().map(|m| m.id) {
-            LineAbove::Unread
+        let unread = if shown.unread.is_some() && shown.unread == row.message().map(|m| m.id) {
+            Unread::Above
         } else {
-            LineAbove::Nothing
+            Unread::No
         };
+        let day = days
+            .as_ref()
+            .zip(row.message())
+            .and_then(|(days, message)| {
+                let previous = i.prev().and_then(|p| rows.get(p)).and_then(|r| r.message());
+                days.divider(message.ts, previous.map(|m| m.ts))
+            });
+        let lead = if i == Pos::<ListRow>::ZERO {
+            LIST_TOP
+        } else {
+            Px::<View>::ZERO
+        };
+        let above = Above { day, unread, lead };
         let row = row.words(name_of, time_of);
-        let mut tall = measure(font_cx, cache, &row, shown.pictures, text_width);
-        if line == LineAbove::Unread {
-            tall += line_height(font_cx, cache, text_width);
-        }
-        words.insert(i, (row, line));
-        tall
+        let placed = place(font_cx, cache, &row, &above, Px::<View>::ZERO, width, pics);
+        words.insert(i, (row, above));
+        placed.bottom
     });
     // The rows the paint draws and hit-tests.
     let laid: Vec<LaidRow> = reached
@@ -282,28 +777,31 @@ pub fn paint_list<S: DrawSurface>(
         IdxVec::<ListRow, _>::new()
     };
     let mut selection = selecting.selection;
-    let mut spot_at = |at| spot_at(font_cx, cache, &laid, &words, &keys, at, text_width);
+    let hit = Hit {
+        rows: &laid,
+        words: &words,
+        width,
+        pics,
+    };
     if let Some(at) = selecting.press {
-        selection = spot_at(at).map(|spot| TextSelection {
-            anchor: spot,
-            focus: spot,
-        });
+        selection = hit
+            .spot(font_cx, cache, &keys, at)
+            .map(|spot| TextSelection {
+                anchor: spot,
+                focus: spot,
+            });
     }
     if let (Some(at), Some(selection)) = (selecting.drag, selection.as_mut())
-        && let Some(spot) = spot_at(at)
+        && let Some(spot) = hit.spot(font_cx, cache, &keys, at)
     {
         selection.focus = spot;
     }
-    let link = selecting
+    let link = selecting.click.and_then(|at| hit.link(font_cx, cache, at));
+    let chip = selecting.click.and_then(|at| hit.chip(font_cx, cache, at));
+    let file = selecting.click.and_then(|at| hit.file(font_cx, cache, at));
+    let join = selecting
         .click
-        .and_then(|at| link_at(font_cx, cache, &laid, &words, at, text_width));
-    let pics = shown.pictures;
-    let chip = selecting
-        .click
-        .and_then(|at| chip_at(font_cx, cache, &laid, &words, at, text_width, pics));
-    let file = selecting
-        .click
-        .and_then(|at| file_at(font_cx, cache, &laid, &words, at, text_width, pics));
+        .and_then(|at| hit.join(font_cx, cache, at, shown.me));
     let mut played = Played::default();
     let mut line_shown = OnScreen::Hidden;
     let mut focus = None;
@@ -313,68 +811,60 @@ pub fn paint_list<S: DrawSurface>(
         tall,
     } in &laid
     {
-        let Some((row, line)) = words.get(&i) else {
+        let Some((row, above)) = words.get(&i) else {
             continue;
         };
+        let placed = place(font_cx, cache, row, above, top, width, pics);
         let band = selection
             .zip(keys.get(i))
             .and_then(|(s, &key)| s.range_in(&keys, key, Len::<Byte>::of(row.body.len())));
-        let tints: Vec<(Span<Byte>, Color)> = row
-            .marks
-            .iter()
-            .filter_map(|mark| look::tint(&mark.style, palette).map(|c| (mark.bytes, c)))
-            .collect();
-        let blocks = row
-            .marks
-            .iter()
-            .any(|mark| matches!(mark.style, TextStyle::Quote | TextStyle::List));
-        if band.is_some() || !tints.is_empty() || blocks {
-            let body_y = body_top(font_cx, cache, row, *line, top, text_width);
-            let layout = body(font_cx, cache, row, text_width);
-            // The tints go first, so a selection band stays visible over code.
-            for (bytes, color) in tints {
-                fill_bytes(surface, layout, bytes, body_y, color);
-            }
-            let (x, y) = (surface_px(SPACE_8).get(), surface_px(body_y).get());
-            for mark in &row.marks {
-                for at in look::margin(layout, &row.body, &mark.style, mark.bytes) {
-                    let at = Rect::new(at.x0 + x, at.y0 + y, at.x1 + x, at.y1 + y);
-                    surface.fill_rect(at, look::margin_ink(palette));
-                }
-            }
-            if let Some(band) = band {
-                let tint = selection_tint(palette.selection);
-                fill_bytes(surface, layout, band, body_y, tint);
-            }
+        if row.call.is_none() {
+            draw_body_grounds(
+                Pen {
+                    surface,
+                    font_cx,
+                    cache,
+                    palette,
+                },
+                row,
+                placed.body,
+                text_width,
+                &inks,
+                band.map(|band| (band, selection_tint(palette.selection))),
+            );
         }
-        let bottom = top + tall;
-        let mut top = top;
-        if *line == LineAbove::Unread {
+        if placed.unread.is_some() {
             line_shown = OnScreen::Shown;
-            top = draw_line(surface, font_cx, cache, top, width, palette);
         }
+        let pen = Pen {
+            surface,
+            font_cx,
+            cache,
+            palette,
+        };
         draw_row(
-            Pen {
-                surface,
-                font_cx,
-                cache,
-                palette,
-            },
+            pen,
             row,
-            top,
-            text_width,
+            above,
+            &placed,
+            width,
             shown.me,
             pics,
             &mut played,
+            &inks,
+            days.as_ref(),
         );
         if shown.focus == Some(i) {
-            let ring = view_rect(SPACE_2, top, width - SPACE_2, bottom);
+            let ring = view_rect(SPACE_2, top, width - SPACE_2, top + tall);
             surface.stroke_rect(
                 ring,
                 palette.selection,
                 ambre_core::Px::<ambre_core::Surface>::new(2.0),
             );
-            focus = Some(RowBounds { top, bottom });
+            focus = Some(RowBounds {
+                top,
+                bottom: top + tall,
+            });
         }
     }
     Painted {
@@ -400,56 +890,344 @@ pub fn paint_list<S: DrawSurface>(
         link,
         chip,
         file,
+        join,
         pictures: played.files,
         next_frame: played.next,
     }
 }
 
-/// The reaction chip drawn under `(x, y)`: the index of its row and its
-/// emoji. `None` off every chip.
-fn chip_at(
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    rows: &[LaidRow],
-    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
-    at: ambre_core::Point<Px<View>>,
+/// Paint what lies behind the words of a body. That is the chip of each
+/// inline code and each mention, the margin marks of a block, and the
+/// selection.
+fn draw_body_grounds<S: DrawSurface>(
+    pen: Pen<'_, S>,
+    row: &RowWords,
+    body_y: Px<View>,
     width: Px<View>,
-    pics: Option<Pictured<'_>>,
-) -> Option<(Pos<ListRow>, Emoji)> {
-    let (x, y) = (at.x, at.y);
-    let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
-    let (row, line) = words.get(&i)?;
-    if row.reactions.is_empty() {
-        return None;
-    }
-    // The reactions sit under the previews and the files.
-    let chips_y = body_top(font_cx, cache, row, *line, top, width)
-        + text_height(body(font_cx, cache, row, width))
-        + previews_height(row, pics)
-        + file_chips(font_cx, cache, row, width).1;
-    let (boxes, _) = chips(font_cx, cache, row, width);
-    let (x, y) = (surface_px(x - SPACE_8).get(), surface_px(y - chips_y).get());
-    boxes
+    inks: &Inks,
+    band: Option<(Span<Byte>, Color)>,
+) {
+    let Pen {
+        surface,
+        font_cx,
+        cache,
+        palette,
+    } = pen;
+    let codes: Vec<Span<Byte>> = row
+        .marks
         .iter()
-        .zip(&row.reactions)
-        .find(|(b, _)| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)
-        .map(|(_, reaction)| (i, reaction.emoji.clone()))
+        .filter(|mark| look::chip(&mark.style))
+        .map(|mark| mark.bytes)
+        .collect();
+    let blocks = row
+        .marks
+        .iter()
+        .any(|mark| matches!(mark.style, TextStyle::Quote | TextStyle::List));
+    let tints: Vec<Span<Byte>> = row
+        .marks
+        .iter()
+        .filter(|mark| mark.style == TextStyle::CodeBlock)
+        .map(|mark| mark.bytes)
+        .collect();
+    if band.is_none() && codes.is_empty() && row.mentions.is_empty() && !blocks && tints.is_empty()
+    {
+        return;
+    }
+    let layout = body(font_cx, cache, row, width);
+    for bytes in tints {
+        fill_bytes(surface, layout, bytes, body_y, inks.sunken);
+    }
+    // A chip of code: the sunken ground framed by the line (`MURMURE-744`).
+    for bytes in codes {
+        for b in byte_boxes(layout, bytes, body_y) {
+            let chip = Rect::new(b.x0 - 3.0, b.y0 + 1.0, b.x1 + 3.0, b.y1 - 1.0);
+            fill_rounded(
+                surface,
+                chip,
+                Px::<Surface>::new(4.0),
+                inks.sunken,
+                Some(inks.line),
+            );
+        }
+    }
+    // A chip of a mention: a faint ground of the mention ink (`MURMURE-743`).
+    for &bytes in &row.mentions {
+        for b in byte_boxes(layout, bytes, body_y) {
+            let chip = Rect::new(b.x0 - 2.0, b.y0 + 1.0, b.x1 + 2.0, b.y1 - 1.0);
+            let ground = mix(inks.mention, palette.content_bg, MENTION_GROUND);
+            fill_rounded(surface, chip, Px::<Surface>::new(4.0), ground, None);
+        }
+    }
+    let (x, y) = (surface_px(TEXT_LEFT).get(), surface_px(body_y).get());
+    for mark in &row.marks {
+        for at in look::margin(layout, &row.body, &mark.style, mark.bytes) {
+            let at = Rect::new(at.x0 + x, at.y0 + y, at.x1 + x, at.y1 + y);
+            surface.fill_rect(at, look::margin_ink(palette));
+        }
+    }
+    if let Some((bytes, tint)) = band {
+        fill_bytes(surface, layout, bytes, body_y, tint);
+    }
 }
 
-/// The box of each reaction chip of a row, from the top-left of the chips,
-/// and the height they take with the space above them. The chips run left
-/// to right and wrap past `width`.
-fn chips(
+/// The boxes `layout` gives the bytes `bytes`, on the surface, its top at
+/// `body_y`.
+fn byte_boxes(layout: &Layout<ParleyBrush>, bytes: Span<Byte>, body_y: Px<View>) -> Vec<Rect> {
+    let from = Cursor::from_byte_index(layout, bytes.start.to_usize(), Affinity::Downstream);
+    let to = Cursor::from_byte_index(layout, bytes.end.to_usize(), Affinity::Upstream);
+    let (x, y) = (surface_px(TEXT_LEFT).get(), surface_px(body_y).get());
+    Selection::new(from, to)
+        .geometry(layout)
+        .into_iter()
+        .map(|(bb, _)| Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y))
+        .collect()
+}
+
+/// What a hit test reads: the rows laid out and their words.
+struct Hit<'h, 'p> {
+    rows: &'h [LaidRow],
+    words: &'h HashMap<Pos<ListRow>, (RowWords, Above)>,
+    width: Px<View>,
+    pics: Option<Pictured<'p>>,
+}
+
+impl Hit<'_, '_> {
+    /// The row under the height `y`, its words and where its parts lie.
+    fn row_at(
+        &self,
+        font_cx: &mut FontContext,
+        cache: &mut TextCache,
+        y: Px<View>,
+    ) -> Option<(Pos<ListRow>, &RowWords, Placed)> {
+        let &LaidRow { index, top, .. } = self.rows.iter().find(|row| row.holds(y))?;
+        let (row, above) = self.words.get(&index)?;
+        Some((
+            index,
+            row,
+            place(font_cx, cache, row, above, top, self.width, self.pics),
+        ))
+    }
+
+    /// The reaction pill drawn under `at`: the index of its row and its
+    /// emoji. `None` off every pill.
+    fn chip(
+        &self,
+        font_cx: &mut FontContext,
+        cache: &mut TextCache,
+        at: ambre_core::Point<Px<View>>,
+    ) -> Option<(Pos<ListRow>, Emoji)> {
+        let (i, row, placed) = self.row_at(font_cx, cache, at.y)?;
+        let pills_y = placed.pills?;
+        let (boxes, _) = pill_boxes(font_cx, cache, row, text_column(self.width));
+        let (x, y) = (
+            surface_px(at.x - TEXT_LEFT).get(),
+            surface_px(at.y - pills_y).get(),
+        );
+        boxes
+            .iter()
+            .zip(&row.reactions)
+            .find(|(b, _)| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)
+            .map(|(_, reaction)| (i, reaction.emoji.clone()))
+    }
+
+    /// The `Join` button of a call card drawn under `at`: the index of its
+    /// row and its call (`MURMURE-746`). `None` off every button.
+    fn join(
+        &self,
+        font_cx: &mut FontContext,
+        cache: &mut TextCache,
+        at: ambre_core::Point<Px<View>>,
+        me: Option<Id<User>>,
+    ) -> Option<(Pos<ListRow>, Id<ambre_core::id::Call>)> {
+        let (i, row, placed) = self.row_at(font_cx, cache, at.y)?;
+        let card = row.call.as_ref()?;
+        let parts = card_parts(font_cx, cache, card, placed.card?, self.width, me);
+        let button = parts.join?;
+        let (x, y) = (surface_px(at.x).get(), surface_px(at.y).get());
+        (button.x0 <= x && x < button.x1 && button.y0 <= y && y < button.y1)
+            .then_some((i, card.call))
+    }
+
+    /// The preview or the file chip drawn under `at`: the file a click
+    /// fetches. `None` off every one.
+    fn file(
+        &self,
+        font_cx: &mut FontContext,
+        cache: &mut TextCache,
+        at: ambre_core::Point<Px<View>>,
+    ) -> Option<Attachment> {
+        let (_, row, placed) = self.row_at(font_cx, cache, at.y)?;
+        if row.files.is_empty() {
+            return None;
+        }
+        let text = text_column(self.width);
+        let (x, y) = (
+            surface_px(at.x - TEXT_LEFT).get(),
+            surface_px(at.y - placed.previews).get(),
+        );
+        let hit = |b: &Rect| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1;
+        if let Some((file, _)) = preview_boxes(row, self.pics, text)
+            .into_iter()
+            .find(|(_, b)| hit(b))
+        {
+            return Some(file.clone());
+        }
+        let y = surface_px(at.y - placed.files).get();
+        let (boxes, _) = file_chips(font_cx, cache, row, text);
+        boxes
+            .iter()
+            .zip(&row.files)
+            .find(|(b, _)| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)
+            .map(|(_, file)| file.clone())
+    }
+
+    /// The address of the link drawn under `at`, `None` off any link. An
+    /// address the write rule would refuse opens nothing (`MURMURE-561`).
+    fn link(
+        &self,
+        font_cx: &mut FontContext,
+        cache: &mut TextCache,
+        at: ambre_core::Point<Px<View>>,
+    ) -> Option<ambre_core::LinkUrl> {
+        let (_, row, placed) = self.row_at(font_cx, cache, at.y)?;
+        let layout = body(font_cx, cache, row, text_column(self.width));
+        let (x, y) = (
+            surface_px(at.x - TEXT_LEFT).get(),
+            surface_px(at.y - placed.body).get(),
+        );
+        row.marks.iter().find_map(|mark| {
+            let TextStyle::Link(address) = &mark.style else {
+                return None;
+            };
+            let from =
+                Cursor::from_byte_index(layout, mark.bytes.start.to_usize(), Affinity::Downstream);
+            let to = Cursor::from_byte_index(layout, mark.bytes.end.to_usize(), Affinity::Upstream);
+            let hit = Selection::new(from, to)
+                .geometry(layout)
+                .iter()
+                .any(|(bb, _)| bb.x0 <= x && x < bb.x1 && bb.y0 <= y && y < bb.y1);
+            (hit && crate::logic::style::linkable(address)).then(|| address.clone())
+        })
+    }
+
+    /// The end of a selection under `at`: the byte of the body the layout
+    /// puts there. A point above every row falls on the first one. A point
+    /// below them falls on the last, so a drag past an edge reaches it.
+    fn spot(
+        &self,
+        font_cx: &mut FontContext,
+        cache: &mut TextCache,
+        keys: &IdxVec<ListRow, RowKey>,
+        at: ambre_core::Point<Px<View>>,
+    ) -> Option<Spot> {
+        let &LaidRow { index: i, top, .. } = self
+            .rows
+            .iter()
+            .find(|row| at.y < row.top + row.tall)
+            .or_else(|| self.rows.last())?;
+        let (row, above) = self.words.get(&i)?;
+        let placed = place(font_cx, cache, row, above, top, self.width, self.pics);
+        let layout = body(font_cx, cache, row, text_column(self.width));
+        let cursor =
+            Cursor::from_point(layout, (at.x - TEXT_LEFT).get(), (at.y - placed.body).get());
+        Some(Spot {
+            row: *keys.get(i)?,
+            byte: Pos::<Byte>::from_usize(cursor.index()),
+        })
+    }
+}
+
+/// The box of each reaction pill of a row, from the top-left of the first,
+/// and the height they take. The pills run left to right and wrap past
+/// `width` (`MURMURE-741`).
+fn pill_boxes(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
     width: Px<View>,
 ) -> (Vec<Rect>, Px<View>) {
-    let labels: Vec<String> = row.reactions.iter().map(chip_label).collect();
-    chip_boxes(font_cx, cache, &labels, width)
+    let mut boxes = Vec::with_capacity(row.reactions.len());
+    let (mut x, mut y, mut line) = (Px::<View>::ZERO, Px::<View>::ZERO, Px::<View>::ZERO);
+    for reaction in &row.reactions {
+        let label = chip_label(reaction);
+        let layout = shape(
+            font_cx,
+            cache,
+            &label,
+            FONT_UI,
+            width,
+            ambre_canvas::Weight::Bold,
+        );
+        let (wide, tall) = (
+            text_width(layout) + SPACE_4 * 2.0,
+            text_height(layout) + SPACE_1 * 2.0,
+        );
+        if x > Px::<View>::ZERO && x + wide > width {
+            (x, y) = (Px::<View>::ZERO, y + line + PILL_GAP);
+            line = Px::<View>::ZERO;
+        }
+        boxes.push(view_rect(x, y, x + wide, y + tall));
+        x += wide + PILL_GAP;
+        line = line.max(tall);
+    }
+    (boxes, y + line)
 }
 
-/// The box of each file chip of a row, as [`chips`] gives the reactions.
+/// Paint the reaction pills of a row, their top-left at `at`. A pill that
+/// holds `me` takes the accent (`MURMURE-741`).
+fn draw_pills<S: DrawSurface>(
+    pen: Pen<'_, S>,
+    row: &RowWords,
+    at: ambre_core::Point<Px<View>>,
+    width: Px<View>,
+    me: Option<Id<User>>,
+    inks: &Inks,
+) {
+    let Pen {
+        surface,
+        font_cx,
+        cache,
+        ..
+    } = pen;
+    let (boxes, _) = pill_boxes(font_cx, cache, row, width);
+    let (dx, dy) = (surface_px(at.x).get(), surface_px(at.y).get());
+    for (reaction, b) in row.reactions.iter().zip(boxes) {
+        let rect = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
+        let mine = me.is_some_and(|me| reaction.users.contains(&me));
+        let (ground, border, ink, weight) = if mine {
+            (
+                inks.accent_soft,
+                inks.accent,
+                inks.accent,
+                ambre_canvas::Weight::Bold,
+            )
+        } else {
+            (
+                inks.surface,
+                inks.line,
+                inks.dim,
+                ambre_canvas::Weight::Regular,
+            )
+        };
+        let corner = Px::<Surface>::new(rect.height() / 2.0);
+        fill_rounded(surface, rect, corner, ground, Some(border));
+        let label = chip_label(reaction);
+        // Both weights shape the box the bold one takes, so a pill keeps
+        // its width when it becomes the member's own.
+        let layout = shape(font_cx, cache, &label, FONT_UI, width, weight);
+        let left = painter_px(Px::<Surface>::new(rect.x0)) + SPACE_4;
+        let top = painter_px(Px::<Surface>::new(rect.y0)) + SPACE_1;
+        draw(
+            surface,
+            layout,
+            &label,
+            ambre_core::Point::new(left, top),
+            ink,
+        );
+    }
+}
+
+/// The box of each file chip of a row, as the pills give the reactions.
 fn file_chips(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
@@ -497,64 +1275,6 @@ fn chip_boxes(
     (boxes, y + line)
 }
 
-/// Paint the reaction chips of a row, their top-left at `at`. A chip
-/// that holds `me` takes the accent (`MURMURE-137`).
-fn draw_chips<S: DrawSurface>(
-    pen: Pen<'_, S>,
-    row: &RowWords,
-    at: Point,
-    width: Px<View>,
-    me: Option<Id<User>>,
-) {
-    let Pen {
-        surface,
-        font_cx,
-        cache,
-        palette,
-    } = pen;
-    let (boxes, _) = chips(font_cx, cache, row, width);
-    let (dx, dy) = (at.x, at.y);
-    for (reaction, b) in row.reactions.iter().zip(boxes) {
-        let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
-        let mine = me.is_some_and(|me| reaction.users.contains(&me));
-        if mine {
-            surface.fill_rect(at, selection_tint(palette.selection));
-            surface.stroke_rect(
-                at,
-                palette.selection,
-                ambre_core::Px::<ambre_core::Surface>::new(1.0),
-            );
-        } else {
-            surface.fill_rect(at, palette.header_bg);
-            surface.stroke_rect(
-                at,
-                palette.header_border,
-                ambre_core::Px::<ambre_core::Surface>::new(1.0),
-            );
-        }
-        let label = chip_label(reaction);
-        let layout = shape(
-            font_cx,
-            cache,
-            &label,
-            FONT_UI,
-            width,
-            ambre_canvas::Weight::Regular,
-        );
-        let (left, top) = (
-            painter_px(Px::<Surface>::new(at.x0)) + SPACE_4,
-            painter_px(Px::<Surface>::new(at.y0)) + SPACE_2,
-        );
-        draw(
-            surface,
-            layout,
-            &label,
-            ambre_core::Point::new(left, top),
-            palette.cell_text,
-        );
-    }
-}
-
 /// Paint the file chips of a row, their top-left at `at`, in the ink of
 /// a link: a click fetches the file.
 fn draw_files<S: DrawSurface>(
@@ -599,249 +1319,410 @@ fn draw_files<S: DrawSurface>(
     }
 }
 
-/// The preview or the file chip drawn under `(x, y)`: the file a click
-/// fetches. `None` off every one.
-fn file_at(
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    rows: &[LaidRow],
-    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
-    at: ambre_core::Point<Px<View>>,
-    width: Px<View>,
-    pics: Option<Pictured<'_>>,
-) -> Option<Attachment> {
-    let (x, y) = (at.x, at.y);
-    let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
-    let (row, line) = words.get(&i)?;
-    if row.files.is_empty() {
-        return None;
-    }
-    let previews_y = body_top(font_cx, cache, row, *line, top, width)
-        + text_height(body(font_cx, cache, row, width));
-    let (x, y) = (
-        surface_px(x - SPACE_8).get(),
-        surface_px(y - previews_y).get(),
-    );
-    let hit = |b: &Rect| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1;
-    if let Some((file, _)) = preview_boxes(row, pics, width)
-        .into_iter()
-        .find(|(_, b)| hit(b))
-    {
-        return Some(file.clone());
-    }
-    let y = y - surface_px(previews_height(row, pics)).get();
-    let (boxes, _) = file_chips(font_cx, cache, row, width);
-    boxes
-        .iter()
-        .zip(&row.files)
-        .find(|(b, _)| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)
-        .map(|(_, file)| file.clone())
-}
-
-/// The address of the link drawn under `(x, y)`, `None` off any link. An
-/// address the write rule would refuse opens nothing (`MURMURE-561`).
-fn link_at(
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    rows: &[LaidRow],
-    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
-    at: ambre_core::Point<Px<View>>,
-    width: Px<View>,
-) -> Option<ambre_core::LinkUrl> {
-    let (x, y) = (at.x, at.y);
-    let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
-    let (row, line) = words.get(&i)?;
-    let body_y = body_top(font_cx, cache, row, *line, top, width);
-    let layout = body(font_cx, cache, row, width);
-    let (x, y) = (surface_px(x - SPACE_8).get(), surface_px(y - body_y).get());
-    row.marks.iter().find_map(|mark| {
-        let TextStyle::Link(address) = &mark.style else {
-            return None;
-        };
-        let from =
-            Cursor::from_byte_index(layout, mark.bytes.start.to_usize(), Affinity::Downstream);
-        let to = Cursor::from_byte_index(layout, mark.bytes.end.to_usize(), Affinity::Upstream);
-        let hit = Selection::new(from, to)
-            .geometry(layout)
-            .iter()
-            .any(|(bb, _)| bb.x0 <= x && x < bb.x1 && bb.y0 <= y && y < bb.y1);
-        (hit && crate::logic::style::linkable(address)).then(|| address.clone())
+/// The words of a thread summary after its count: who replied last, and
+/// how long ago when the paint knows the clock (`MURMURE-742`).
+fn last_reply_words(words: &ThreadWords, days: Option<&Days<'_>>) -> Option<String> {
+    let (name, at) = words.last.as_ref()?;
+    let name = name.split_whitespace().next().unwrap_or(name);
+    Some(match days {
+        Some(days) => ambre_commands::trf!(
+            "Last reply from {} {}",
+            "Derni\u{e8}re r\u{e9}ponse de {} {}",
+            name,
+            ago(days.calendar.now.since(*at))
+        ),
+        None => ambre_commands::trf!(
+            "Last reply from {}",
+            "Derni\u{e8}re r\u{e9}ponse de {}",
+            name
+        ),
     })
 }
 
-/// The end of a selection under `(x, y)`: the byte of the body the layout
-/// puts there. A point above every row falls on the first one. A point below
-/// them falls on the last, so a drag past an edge reaches it.
-fn spot_at(
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    rows: &[LaidRow],
-    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
-    keys: &IdxVec<ListRow, RowKey>,
-    at: ambre_core::Point<Px<View>>,
-    width: Px<View>,
-) -> Option<Spot> {
-    let (x, y) = (at.x, at.y);
-    let &LaidRow { index: i, top, .. } = rows
-        .iter()
-        .find(|row| y < row.top + row.tall)
-        .or_else(|| rows.last())?;
-    let (row, line) = words.get(&i)?;
-    let body_y = body_top(font_cx, cache, row, *line, top, width);
-    let layout = body(font_cx, cache, row, width);
-    let cursor = Cursor::from_point(layout, (x - SPACE_8).get(), (y - body_y).get());
-    Some(Spot {
-        row: *keys.get(i)?,
-        byte: Pos::<Byte>::from_usize(cursor.index()),
-    })
-}
-
-ambre_core::define_flag! {
-    /// What a row of the list draws above its header.
-    enum LineAbove {
-        /// Nothing: its header opens it.
-        Nothing,
-        /// The unread line: the first unread message follows (`MURMURE-184`).
-        Unread,
+/// How long ago a span reads, coarse: a minute, an hour or a day at most.
+fn ago(span: ambre_core::TimeSpan<ambre_core::Ms>) -> String {
+    let minutes = span.get() / 60_000;
+    match minutes {
+        0 => ambre_commands::tr!("just now", "\u{e0} l'instant").to_owned(),
+        1..60 => ambre_commands::trf!("{} min ago", "il y a {}\u{a0}min", minutes),
+        60..1440 => ambre_commands::trf!("{} h ago", "il y a {}\u{a0}h", minutes / 60),
+        _ => ambre_commands::trf!("{} d ago", "il y a {}\u{a0}j", minutes / 1440),
     }
 }
 
-/// Where the body of a row whose top is at `top` starts: below the unread
-/// line and the header, as [`draw_row`] paints them.
-fn body_top(
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
+/// Paint the thread summary of a root, its top at `top` (`MURMURE-742`). It
+/// shows the faces of the latest repliers but `me`, then the count in the
+/// accent, then the last reply.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the pen, the row and the inks of one summary"
+)]
+fn draw_thread<S: DrawSurface>(
+    pen: Pen<'_, S>,
     row: &RowWords,
-    line: LineAbove,
+    words: &ThreadWords,
     top: Px<View>,
     width: Px<View>,
-) -> Px<View> {
-    let mut y = top + SPACE_2;
-    if line == LineAbove::Unread {
-        y += line_height(font_cx, cache, width);
-    }
-    y + header_height(font_cx, cache, row, width)
-}
-
-/// The height of a row's header and the space above it, nothing when the
-/// row opens no group.
-fn header_height(
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    row: &RowWords,
-    width: Px<View>,
-) -> Px<View> {
-    let Some(HeaderWords { author, time }) = &row.header else {
-        return Px::<View>::ZERO;
-    };
-    let author = text_height(shape(
-        font_cx,
-        cache,
-        author,
-        FONT_UI,
-        width,
-        ambre_canvas::Weight::Bold,
-    ));
-    let time = text_height(shape(
-        font_cx,
-        cache,
-        time,
-        FONT_UI,
-        width,
-        ambre_canvas::Weight::Regular,
-    ));
-    SPACE_4 + author.max(time)
-}
-
-/// Paint the control that brings the list back to its latest message, at
-/// the foot of a viewport of `size` (`MURMURE-505`). Returns the rectangle
-/// a press on it hits.
-pub fn paint_jump<S: DrawSurface>(
-    surface: &mut S,
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    size: Size<Px<View>>,
-    palette: &Palette,
-) -> Rect {
-    let (width, height) = (size.width, size.height);
-    let layout = shape(
-        font_cx,
-        cache,
-        JUMP_TO_LATEST,
-        FONT_UI,
-        width.max(Px::<View>::new(1.0)),
-        ambre_canvas::Weight::Bold,
-    );
-    let (wide, tall) = (
-        SPACE_8 * 2.0 + text_width(layout),
-        SPACE_4 * 2.0 + text_height(layout),
-    );
-    let x = ((width - wide) / 2.0).max(Px::<View>::ZERO);
-    let y = (height - tall - SPACE_8).max(Px::<View>::ZERO);
-    let rect = view_rect(x, y, x + wide, y + tall);
-    surface.fill_rect(rect, palette.header_bg);
-    surface.stroke_rect(
-        rect,
-        palette.header_border,
-        ambre_core::Px::<ambre_core::Surface>::new(1.0),
-    );
-    draw(
+    me: Option<Id<User>>,
+    inks: &Inks,
+    days: Option<&Days<'_>>,
+) {
+    let Pen {
         surface,
-        layout,
-        JUMP_TO_LATEST,
-        ambre_core::Point::new(x + SPACE_8, y + SPACE_4),
-        palette.selection,
-    );
-    rect
-}
-
-/// The height of the unread line: its words and the space above them.
-fn line_height(font_cx: &mut FontContext, cache: &mut TextCache, width: Px<View>) -> Px<View> {
-    SPACE_4
-        + text_height(shape(
+        font_cx,
+        cache,
+        ..
+    } = pen;
+    let mut x = TEXT_LEFT + SPACE_2;
+    let face_top = top + THREAD_PAD;
+    let faces = words.faces.iter().filter(|f| Some(f.who) != me).take(3);
+    for face in faces {
+        let rect = view_rect(x, face_top, x + THREAD_FACE, face_top + THREAD_FACE);
+        draw_face(
+            surface,
             font_cx,
             cache,
-            ambre_commands::shown(&UNREAD_LINE),
+            face,
+            rect,
+            (THREAD_FACE_CORNER, FACE_FONT),
+        );
+        x += THREAD_FACE + SPACE_4;
+    }
+    let middle = face_top + THREAD_FACE / 2.0;
+    if let Some(count) = &row.replies {
+        let layout = shape(
+            font_cx,
+            cache,
+            count,
             FONT_UI,
             width,
             ambre_canvas::Weight::Bold,
-        ))
+        );
+        let (wide, tall) = (text_width(layout), text_height(layout));
+        draw(
+            surface,
+            layout,
+            count,
+            ambre_core::Point::new(x, middle - tall / 2.0),
+            inks.accent,
+        );
+        x += wide + SPACE_4;
+    }
+    if let Some(last) = last_reply_words(words, days) {
+        let room = (TEXT_LEFT + width - x).max(Px::<View>::new(1.0));
+        let layout = shape(
+            font_cx,
+            cache,
+            &last,
+            FONT_UI,
+            room,
+            ambre_canvas::Weight::Regular,
+        );
+        let tall = text_height(layout).min(THREAD_FACE);
+        draw(
+            surface,
+            layout,
+            &last,
+            ambre_core::Point::new(x, middle - tall / 2.0),
+            inks.faint,
+        );
+    }
 }
 
-/// Paint the unread line whose top is at `top`: a rule across the list in
-/// the accent, its words over it. Returns where the row below starts.
-fn draw_line<S: DrawSurface>(
-    surface: &mut S,
+/// The height of a call card: its content between its paddings.
+fn card_tall(font_cx: &mut FontContext, cache: &mut TextCache, card: &CallCard) -> Px<View> {
+    let (title, started) = card_texts(font_cx, cache, card);
+    CARD_PAD_Y * 2.0 + CARD_ICON.max(title + started)
+}
+
+/// The heights of the two lines of a call card.
+fn card_texts(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
+    card: &CallCard,
+) -> (Px<View>, Px<View>) {
+    let wide = Px::<View>::new(1000.0);
+    let title = text_height(shape(
+        font_cx,
+        cache,
+        card.title(),
+        FONT_BODY,
+        wide,
+        ambre_canvas::Weight::Bold,
+    ));
+    let started = text_height(shape(
+        font_cx,
+        cache,
+        &card.started,
+        FONT_SMALL,
+        wide,
+        ambre_canvas::Weight::Regular,
+    ));
+    (title, started)
+}
+
+/// Where the parts of a call card lie, on the surface.
+#[derive(Debug, Clone, Copy)]
+struct CardParts {
+    frame: Rect,
+    icon: Rect,
+    /// The left edge of the faces, when the card is wide enough for them.
+    faces: Option<Px<View>>,
+    /// The `Join` button, while the member is out of a live call.
+    join: Option<Rect>,
+}
+
+/// Lay a call card out, its top at `top`, in a list `width` wide.
+fn card_parts(
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    card: &CallCard,
     top: Px<View>,
     width: Px<View>,
-    palette: &Palette,
-) -> Px<View> {
-    let wrap = (width - SPACE_8 * 2.0).max(Px::<View>::new(1.0));
-    let y = top + SPACE_4;
+    me: Option<Id<User>>,
+) -> CardParts {
+    let wide = text_column(width).min(CARD_MAX);
+    let tall = card_tall(font_cx, cache, card);
+    let (left, right) = (TEXT_LEFT, TEXT_LEFT + wide);
+    let frame = view_rect(left, top, right, top + tall);
+    let icon_top = top + (tall - CARD_ICON) / 2.0;
+    let icon = view_rect(
+        left + CARD_PAD_X,
+        icon_top,
+        left + CARD_PAD_X + CARD_ICON,
+        icon_top + CARD_ICON,
+    );
+    let mut edge = right - CARD_PAD_X;
+    let join = card.joinable(me).then(|| {
+        let label = ambre_commands::shown(&CALL_JOIN);
+        let layout = shape(
+            font_cx,
+            cache,
+            label,
+            FONT_BODY,
+            wide,
+            ambre_canvas::Weight::Bold,
+        );
+        let button = text_width(layout) + SPACE_6 * 2.0;
+        let y = top + (tall - JOIN_TALL) / 2.0;
+        let rect = view_rect(edge - button, y, edge, y + JOIN_TALL);
+        // The mockup's flex gap and the button's own margin.
+        edge = edge - button - SPACE_6 - SPACE_3;
+        rect
+    });
+    let faces = (!card.faces.is_empty() && wide >= CARD_FACES_FROM).then(|| {
+        let count = card.faces.len() as f32;
+        edge - CARD_FACE * count + CARD_FACE_OVERLAP * (count - 1.0)
+    });
+    CardParts {
+        frame,
+        icon,
+        faces,
+        join,
+    }
+}
+
+/// Paint a call card, its top at `top` (`MURMURE-745`): the phone, the
+/// title and who started it, the faces in the call and `Join`.
+fn draw_card<S: DrawSurface>(
+    pen: Pen<'_, S>,
+    card: &CallCard,
+    top: Px<View>,
+    width: Px<View>,
+    me: Option<Id<User>>,
+    inks: &Inks,
+    ground: Color,
+) {
+    let Pen {
+        surface,
+        font_cx,
+        cache,
+        ..
+    } = pen;
+    let parts = card_parts(font_cx, cache, card, top, width, me);
+    let live = card.state == CallState::Live;
+    let (fill, border, badge) = if live {
+        (
+            mix(inks.ok, ground, CARD_GROUND),
+            mix(inks.ok, inks.line, CARD_BORDER),
+            inks.ok,
+        )
+    } else {
+        (inks.sunken, inks.line, inks.faint)
+    };
+    fill_rounded(surface, parts.frame, CARD_CORNER, fill, Some(border));
+    fill_rounded(surface, parts.icon, Px::<Surface>::new(10.0), badge, None);
+    if let Ok(mut phone) = BezPath::from_svg(PHONE_PATH) {
+        // The 24 px box of the icon set, drawn 16 px wide at the icon's centre.
+        let (cx, cy) = (parts.icon.center().x, parts.icon.center().y);
+        phone.apply_affine(Affine::translate((cx - 8.0, cy - 8.0)) * Affine::scale(16.0 / 24.0));
+        // The icon set strokes 1.9 units of its 24 px box.
+        let stroke = ambre_draw::Stroke::new(1.9 * 16.0 / 24.0);
+        let white = Color::from_rgba8(255, 255, 255, 255);
+        surface.stroke_path(&phone, &Brush::Solid(white), &stroke);
+    }
+    let (title_tall, started_tall) = card_texts(font_cx, cache, card);
+    let text_left = painter_px(Px::<Surface>::new(parts.icon.x1)) + SPACE_6;
+    let text_top = painter_px(Px::<Surface>::new(parts.frame.y0))
+        + (painter_px(Px::<Surface>::new(parts.frame.y1))
+            - painter_px(Px::<Surface>::new(parts.frame.y0))
+            - title_tall
+            - started_tall)
+            / 2.0;
+    let wide = Px::<View>::new(1000.0);
     let layout = shape(
         font_cx,
         cache,
-        ambre_commands::shown(&UNREAD_LINE),
-        FONT_UI,
-        wrap,
+        card.title(),
+        FONT_BODY,
+        wide,
         ambre_canvas::Weight::Bold,
     );
-    let (wide, tall) = (text_width(layout), text_height(layout));
-    let middle = surface_px(y + tall / 2.0).get();
-    let rule_from = surface_px(SPACE_8 + wide + SPACE_4).get();
-    let rule_to = surface_px(width - SPACE_8).get();
-    let rule = Rect::new(rule_from, middle, rule_to, middle + 1.0);
-    surface.fill_rect(rule, palette.selection);
     draw(
         surface,
         layout,
-        ambre_commands::shown(&UNREAD_LINE),
-        ambre_core::Point::new(SPACE_8, y),
-        palette.selection,
+        card.title(),
+        ambre_core::Point::new(text_left, text_top),
+        inks.text,
     );
-    y + tall
+    let layout = shape(
+        font_cx,
+        cache,
+        &card.started,
+        FONT_SMALL,
+        wide,
+        ambre_canvas::Weight::Regular,
+    );
+    let at = ambre_core::Point::new(text_left, text_top + title_tall);
+    draw(surface, layout, &card.started, at, inks.dim);
+    if let Some(mut x) = parts.faces {
+        let face_top = painter_px(Px::<Surface>::new(parts.icon.center().y)) - CARD_FACE / 2.0;
+        for face in &card.faces {
+            let rect = view_rect(x, face_top, x + CARD_FACE, face_top + CARD_FACE);
+            let ring = Rect::new(rect.x0 - 2.0, rect.y0 - 2.0, rect.x1 + 2.0, rect.y1 + 2.0);
+            fill_rounded(surface, ring, Px::<Surface>::new(99.0), inks.surface, None);
+            draw_face(
+                surface,
+                font_cx,
+                cache,
+                face,
+                rect,
+                (Px::<Surface>::new(99.0), CARD_FACE_FONT),
+            );
+            x += CARD_FACE - CARD_FACE_OVERLAP;
+        }
+    }
+    if let Some(button) = parts.join {
+        fill_rounded(surface, button, Px::<Surface>::new(8.0), inks.ok, None);
+        let label = ambre_commands::shown(&CALL_JOIN);
+        let layout = shape(
+            font_cx,
+            cache,
+            label,
+            FONT_BODY,
+            wide,
+            ambre_canvas::Weight::Bold,
+        );
+        let (lw, lt) = (text_width(layout), text_height(layout));
+        let left = painter_px(Px::<Surface>::new(button.x0))
+            + (painter_px(Px::<Surface>::new(button.x1))
+                - painter_px(Px::<Surface>::new(button.x0))
+                - lw)
+                / 2.0;
+        let top = painter_px(Px::<Surface>::new(button.y0)) + (JOIN_TALL - lt) / 2.0;
+        let white = Color::from_rgba8(255, 255, 255, 255);
+        draw(
+            surface,
+            layout,
+            label,
+            ambre_core::Point::new(left, top),
+            white,
+        );
+    }
+}
+
+/// Paint the day divider whose label tops at `y`: the label in the middle,
+/// a rule on each side of it (`MURMURE-739`).
+fn draw_day<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    label: &str,
+    y: Px<View>,
+    width: Px<View>,
+    inks: &Inks,
+) {
+    let layout = shape(
+        font_cx,
+        cache,
+        label,
+        FONT_SMALL,
+        width,
+        ambre_canvas::Weight::Bold,
+    );
+    let (wide, tall) = (text_width(layout), text_height(layout));
+    let left = ((width - wide) / 2.0).max(EDGE);
+    let middle = surface_px(y + tall / 2.0).get().round();
+    let rules = [
+        (EDGE, left - SPACE_5),
+        (left + wide + SPACE_5, width - EDGE),
+    ];
+    for (from, to) in rules {
+        if to > from {
+            let rule = Rect::new(
+                surface_px(from).get(),
+                middle,
+                surface_px(to).get(),
+                middle + 1.0,
+            );
+            surface.fill_rect(rule, inks.line);
+        }
+    }
+    draw(
+        surface,
+        layout,
+        label,
+        ambre_core::Point::new(left, y),
+        inks.faint,
+    );
+}
+
+/// Paint the unread separator whose label tops at `y`: a rule across the
+/// list in the mention ink, `New` at its right end (`MURMURE-740`).
+fn draw_new<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    y: Px<View>,
+    width: Px<View>,
+    inks: &Inks,
+) {
+    let label = ambre_commands::shown(&UNREAD_LINE);
+    let layout = shape(
+        font_cx,
+        cache,
+        label,
+        FONT_XS,
+        width,
+        ambre_canvas::Weight::Bold,
+    );
+    let (wide, tall) = (text_width(layout), text_height(layout));
+    let left = width - EDGE - wide;
+    let middle = surface_px(y + tall / 2.0).get().round();
+    let rule = Rect::new(
+        surface_px(EDGE).get(),
+        middle,
+        surface_px(left - SPACE_4).get(),
+        middle + 1.0,
+    );
+    surface.fill_rect(rule, inks.mention);
+    draw(
+        surface,
+        layout,
+        label,
+        ambre_core::Point::new(left, y),
+        inks.mention,
+    );
 }
 
 /// The layout of one text of a row, shaped once and kept in the cache.
@@ -864,7 +1745,8 @@ pub(crate) fn shape<'c>(
 }
 
 /// The layout of a row's body, each of its marks shaped in (`MURMURE-565`).
-/// A body with no mark takes the same entry as its plain text.
+/// A mention takes the heavy face (`MURMURE-743`). A body with no mark takes
+/// the same entry as its plain text.
 fn body<'c>(
     font_cx: &mut FontContext,
     cache: &'c mut TextCache,
@@ -875,6 +1757,11 @@ fn body<'c>(
         .marks
         .iter()
         .map(|mark| look::shape(&mark.style, mark.bytes))
+        .chain(row.mentions.iter().map(|&range| SpanShape {
+            range,
+            weight: Some(ambre_core::Bounded::<ambre_core::FontWeight>::BOLD),
+            ..SpanShape::default()
+        }))
         .collect();
     cache.get_or_build_spans(font_cx, &row.body, FONT_BODY, width, &spans)
 }
@@ -887,11 +1774,8 @@ fn fill_bytes<S: DrawSurface>(
     body_y: Px<View>,
     color: Color,
 ) {
-    let from = Cursor::from_byte_index(layout, bytes.start.to_usize(), Affinity::Downstream);
-    let to = Cursor::from_byte_index(layout, bytes.end.to_usize(), Affinity::Upstream);
-    let (x, y) = (surface_px(SPACE_8).get(), surface_px(body_y).get());
-    for (bb, _) in Selection::new(from, to).geometry(layout) {
-        surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), color);
+    for rect in byte_boxes(layout, bytes, body_y) {
+        surface.fill_rect(rect, color);
     }
 }
 
@@ -988,41 +1872,22 @@ fn draw_previews<S: DrawSurface>(
     }
 }
 
-/// The height of a row, from the same layouts [`draw_row`] paints.
-fn measure(
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    row: &RowWords,
-    pics: Option<Pictured<'_>>,
-    width: Px<View>,
-) -> Px<View> {
-    let mut tall = SPACE_2 * 2.0 + header_height(font_cx, cache, row, width);
-    tall += text_height(body(font_cx, cache, row, width));
-    tall += previews_height(row, pics);
-    tall += file_chips(font_cx, cache, row, width).1;
-    tall += chips(font_cx, cache, row, width).1;
-    if let Some(replies) = &row.replies {
-        tall += text_height(shape(
-            font_cx,
-            cache,
-            replies,
-            FONT_UI,
-            width,
-            ambre_canvas::Weight::Regular,
-        ));
-    }
-    tall
-}
-
-/// Paint one row whose top is at `top`.
+/// Paint one row where `placed` lays it.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the pen, the row, its place and what decorates it"
+)]
 fn draw_row<S: DrawSurface>(
     pen: Pen<'_, S>,
     row: &RowWords,
-    top: Px<View>,
+    above: &Above,
+    placed: &Placed,
     width: Px<View>,
     me: Option<Id<User>>,
     pics: Option<Pictured<'_>>,
     played: &mut Played,
+    inks: &Inks,
+    days: Option<&Days<'_>>,
 ) {
     let Pen {
         surface,
@@ -1030,91 +1895,175 @@ fn draw_row<S: DrawSurface>(
         cache,
         palette,
     } = pen;
-    let x = SPACE_8;
-    let mut y = top + SPACE_2;
-    if let Some(HeaderWords { author, time }) = &row.header {
-        y += SPACE_4;
+    let text = text_column(width);
+    if let (Some(label), Some(y)) = (&above.day, placed.day) {
+        draw_day(surface, font_cx, cache, label, y, width, inks);
+    }
+    if let Some(y) = placed.unread {
+        draw_new(surface, font_cx, cache, y, width, inks);
+    }
+    if let (Some(words), Some(y)) = (&row.header, placed.header) {
+        let avatar = view_rect(EDGE, y, EDGE + AVATAR, y + AVATAR);
+        let face = Face {
+            who: words.who,
+            initials: words.initials.clone(),
+        };
+        draw_face(
+            surface,
+            font_cx,
+            cache,
+            &face,
+            avatar,
+            (AVATAR_CORNER, AVATAR_FONT),
+        );
         let layout = shape(
             font_cx,
             cache,
-            author,
-            FONT_UI,
-            width,
+            &words.author,
+            FONT_BODY,
+            text,
             ambre_canvas::Weight::Bold,
         );
-        let (wide, author_tall) = (text_width(layout), text_height(layout));
+        let (wide, author_line) = (text_width(layout), first_baseline(layout));
         draw(
             surface,
             layout,
-            author,
-            ambre_core::Point::new(x, y),
+            &words.author,
+            ambre_core::Point::new(TEXT_LEFT, y),
             palette.cell_text,
         );
         let layout = shape(
             font_cx,
             cache,
-            time,
-            FONT_UI,
-            width,
+            &words.time,
+            FONT_SMALL,
+            text,
             ambre_canvas::Weight::Regular,
         );
-        let time_tall = text_height(layout);
-        draw(
+        // The time shares the baseline of the name, as inline text does.
+        let time_top = y + author_line - first_baseline(layout);
+        let at = ambre_core::Point::new(TEXT_LEFT + wide + SPACE_3, time_top);
+        draw(surface, layout, &words.time, at, inks.faint);
+    }
+    if let Some(card) = &row.call {
+        if let Some(y) = placed.card {
+            let pen = Pen {
+                surface,
+                font_cx,
+                cache,
+                palette,
+            };
+            draw_card(pen, card, y, width, me, inks, palette.content_bg);
+        }
+    } else {
+        let ink = match row.ink {
+            BodyInk::Muted => palette.header_text,
+            BodyInk::Plain => palette.cell_text,
+        };
+        let layout = body(font_cx, cache, row, text);
+        let at = ambre_core::Point::new(TEXT_LEFT, placed.body);
+        draw_body(
             surface,
             layout,
-            time,
-            ambre_core::Point::new(x + wide + SPACE_4, y),
-            palette.header_text,
+            &row.body,
+            at,
+            ink,
+            palette,
+            &row.mentions,
+            inks.mention,
         );
-        y += author_tall.max(time_tall);
     }
-    let ink = match row.ink {
-        BodyInk::Muted => palette.header_text,
-        BodyInk::Plain => palette.cell_text,
-    };
-    let layout = body(font_cx, cache, row, width);
-    let body_tall = text_height(layout);
-    draw_body(
-        surface,
-        layout,
-        &row.body,
-        ambre_core::Point::new(x, y),
-        ink,
-        palette,
+    let at = Point::new(
+        surface_px(TEXT_LEFT).get(),
+        surface_px(placed.previews).get(),
     );
-    y += body_tall;
-    let at = Point::new(surface_px(x).get(), surface_px(y).get());
-    draw_previews(surface, row, pics, at, width, palette, played);
-    y += previews_height(row, pics);
-    let at = Point::new(surface_px(x).get(), surface_px(y).get());
-    draw_files(surface, font_cx, cache, row, at, width, palette);
-    y += file_chips(font_cx, cache, row, width).1;
-    let at = Point::new(surface_px(x).get(), surface_px(y).get());
-    let pen = Pen {
-        surface,
-        font_cx,
-        cache,
-        palette,
-    };
-    draw_chips(pen, row, at, width, me);
-    y += chips(font_cx, cache, row, width).1;
-    if let Some(replies) = &row.replies {
+    draw_previews(surface, row, pics, at, text, palette, played);
+    let at = Point::new(surface_px(TEXT_LEFT).get(), surface_px(placed.files).get());
+    draw_files(surface, font_cx, cache, row, at, text, palette);
+    if let Some(y) = placed.pills {
+        let pen = Pen {
+            surface,
+            font_cx,
+            cache,
+            palette,
+        };
+        draw_pills(
+            pen,
+            row,
+            ambre_core::Point::new(TEXT_LEFT, y),
+            text,
+            me,
+            inks,
+        );
+    }
+    if let (Some(words), Some(y)) = (&row.thread, placed.thread) {
+        let pen = Pen {
+            surface,
+            font_cx,
+            cache,
+            palette,
+        };
+        draw_thread(pen, row, words, y, text, me, inks, days);
+    }
+    if let (Some(line), Some(y)) = (&row.replies, placed.replies) {
         let layout = shape(
             font_cx,
             cache,
-            replies,
+            line,
             FONT_UI,
-            width,
+            text,
             ambre_canvas::Weight::Regular,
         );
         draw(
             surface,
             layout,
-            replies,
-            ambre_core::Point::new(x, y),
-            palette.selection,
+            line,
+            ambre_core::Point::new(TEXT_LEFT, y),
+            inks.accent,
         );
     }
+}
+
+/// Paint the control that brings the list back to its latest message, at
+/// the foot of a viewport of `size` (`MURMURE-505`). Returns the rectangle
+/// a press on it hits.
+pub fn paint_jump<S: DrawSurface>(
+    surface: &mut S,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+    size: Size<Px<View>>,
+    palette: &Palette,
+) -> Rect {
+    let (width, height) = (size.width, size.height);
+    let layout = shape(
+        font_cx,
+        cache,
+        JUMP_TO_LATEST,
+        FONT_UI,
+        width.max(Px::<View>::new(1.0)),
+        ambre_canvas::Weight::Bold,
+    );
+    let (wide, tall) = (
+        SPACE_8 * 2.0 + text_width(layout),
+        SPACE_4 * 2.0 + text_height(layout),
+    );
+    let x = ((width - wide) / 2.0).max(Px::<View>::ZERO);
+    let y = (height - tall - SPACE_8).max(Px::<View>::ZERO);
+    let rect = view_rect(x, y, x + wide, y + tall);
+    surface.fill_rect(rect, palette.header_bg);
+    surface.stroke_rect(
+        rect,
+        palette.header_border,
+        ambre_core::Px::<ambre_core::Surface>::new(1.0),
+    );
+    draw(
+        surface,
+        layout,
+        JUMP_TO_LATEST,
+        ambre_core::Point::new(x + SPACE_8, y + SPACE_4),
+        palette.selection,
+    );
+    rect
 }
 
 /// Emit every glyph run of `layout`, its top-left at `(x, y)`. `text` is
@@ -1145,7 +2094,12 @@ pub(crate) fn draw<S: DrawSurface>(
 }
 
 /// Emit every glyph run of a body, its top-left at `(x, y)`. An underlined
-/// run is a link: it takes the link ink and a rule under its baseline.
+/// run is a link: it takes the link ink and a rule under its baseline. A
+/// run inside a mention takes the mention ink (`MURMURE-743`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the layout, its place and its three inks"
+)]
 fn draw_body<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
@@ -1153,6 +2107,8 @@ fn draw_body<S: DrawSurface>(
     at: ambre_core::Point<Px<View>>,
     ink: Color,
     palette: &Palette,
+    mentions: &[Span<Byte>],
+    mention: Color,
 ) {
     let (x, y) = (at.x.get(), at.y.get());
     for line in layout.lines() {
@@ -1161,7 +2117,17 @@ fn draw_body<S: DrawSurface>(
                 continue;
             };
             let linked = run.style().underline.is_some();
-            let color = if linked { look::link_ink(palette) } else { ink };
+            let range = run.run().text_range();
+            let named = mentions
+                .iter()
+                .any(|m| m.start.to_usize() <= range.start && range.end <= m.end.to_usize());
+            let color = if linked {
+                look::link_ink(palette)
+            } else if named {
+                mention
+            } else {
+                ink
+            };
             let (left, baseline) = (x + run.offset(), y + run.baseline());
             let at = (f64::from(left), f64::from(baseline));
             surface.draw_glyphs(
@@ -1238,6 +2204,8 @@ pub(crate) mod tests {
                 selecting: Selecting::default(),
                 me: None,
                 pictures: None,
+                theme: Theme::Light,
+                calendar: None,
             },
             height,
         )
@@ -1262,6 +2230,12 @@ pub(crate) mod tests {
     }
 
     /// Each glyph run of `color`, as its top and its glyph count, top first.
+    /// The chrome inks of the light theme, which the decorations of a row
+    /// take.
+    fn inks() -> Inks {
+        Inks::of(Theme::Light)
+    }
+
     fn runs(surface: &RecordingSurface, color: Color) -> Vec<(f64, usize)> {
         let mut runs: Vec<(f64, usize)> = surface
             .ops()
@@ -1322,6 +2296,8 @@ pub(crate) mod tests {
             selecting: Selecting::default(),
             me: None,
             pictures: None,
+            theme: Theme::Light,
+            calendar: None,
         };
         let (surface, painted) = paint_from(focused(Pos::<ListRow>::new(98)), 300.0);
         let rings: Vec<Rect> = surface
@@ -1394,6 +2370,8 @@ pub(crate) mod tests {
             selecting: Selecting::default(),
             me: None,
             pictures: None,
+            theme: Theme::Light,
+            calendar: None,
         };
         let (_, painted) = paint_from(at((Pos::<ListRow>::new(10), Px::<View>::ZERO)), 200.0);
         assert_eq!(
@@ -1429,7 +2407,7 @@ pub(crate) mod tests {
             .map(|r| r.1)
             .collect();
         assert_eq!(counts, [3, 1, 4, 8]);
-        assert_eq!(runs(&surface, LIGHT.header_text).len(), 1);
+        assert_eq!(runs(&surface, inks().faint).len(), 1, "one time");
     }
 
     /// A deleted body paints muted, and a reply count in the accent
@@ -1442,6 +2420,8 @@ pub(crate) mod tests {
             document: Id::<Document>::mint(),
             replies: ambre_core::Count::<crate::message::Replies>::new(2),
             last_replier: None,
+            repliers: Vec::new(),
+            last_reply: None,
         });
         let mut list = MessageList::default();
         list.absorb(Id::<Segment>::mint(), vec![gone]);
@@ -1451,16 +2431,17 @@ pub(crate) mod tests {
         let muted: usize = runs(&surface, LIGHT.header_text).iter().map(|r| r.1).sum();
         assert_eq!(
             muted,
-            1 + ambre_commands::shown(&crate::ui::list::DELETED)
+            ambre_commands::shown(&crate::ui::list::DELETED)
                 .chars()
                 .count()
         );
-        assert!(!runs(&surface, LIGHT.selection).is_empty());
+        assert!(!runs(&surface, inks().accent).is_empty());
     }
 
-    /// The reactions of a message paint as one chip each under its body,
-    /// the member's own in the accent. The row grows to hold them. A click
-    /// on a chip names it; a deleted message shows none.
+    /// The reactions of a message paint as one pill each under its body,
+    /// the most chosen first, the member's own in the accent. The row grows
+    /// to hold them. A click on a pill names it; a deleted message shows
+    /// none (`MURMURE-741`).
     #[test]
     fn the_reactions_paint_as_chips_under_the_body() {
         use crate::message::Reaction;
@@ -1488,7 +2469,7 @@ pub(crate) mod tests {
 
         let (_, at) = paint(&list, 600.0);
         let bottom = at.rows[0].bounds.bottom.get();
-        let click = (SPACE_8.get() + 2.0, bottom - 2.0 * SPACE_2.get() - 2.0);
+        let click = (TEXT_LEFT.get() + 2.0, bottom - ROW_PAD.get() - 2.0);
         let selecting = Selecting {
             click: Some(view_at(click)),
             ..Selecting::default()
@@ -1501,31 +2482,40 @@ pub(crate) mod tests {
             selecting,
             me: Some(me),
             pictures: None,
+            theme: Theme::Light,
+            calendar: None,
         };
         let (surface, painted) = paint_from(shown, 600.0);
         assert!(tall(&painted) > tall(&plain), "the chips take room");
         assert_eq!(
             painted.chip,
-            Some((Pos::<ListRow>::ZERO, Emoji::from("\u{1F44D}")))
+            Some((Pos::<ListRow>::ZERO, Emoji::from("\u{1F389}"))),
+            "the pill two members chose comes first"
         );
-        let fills = |color: Color| -> Vec<Rect> {
+        let borders = |color: Color| -> Vec<Rect> {
             surface
                 .ops()
                 .iter()
                 .filter_map(|op| match op {
-                    DrawOp::FillRect { rect, color: c } if *c == color => Some(*rect),
+                    DrawOp::StrokePath {
+                        bounds,
+                        color: Some(c),
+                        ..
+                    } if *c == color => Some(*bounds),
                     _ => None,
                 })
                 .collect()
         };
-        let theirs = fills(LIGHT.header_bg);
-        let mine = fills(selection_tint(LIGHT.selection));
+        let theirs = borders(inks().line);
+        let mine = borders(inks().accent);
         let ([theirs], [mine]) = (theirs.as_slice(), mine.as_slice()) else {
-            panic!("one chip each: {theirs:?} {mine:?}");
+            panic!("one pill each: {theirs:?} {mine:?}");
         };
-        assert!(theirs.x1 < mine.x0, "left to right");
+        assert!(mine.x1 < theirs.x0, "left to right, the most chosen first");
         assert_eq!(theirs.y0, mine.y0, "on one line");
         assert!(mine.y1 <= f64::from(bottom));
+        let label: usize = runs(&surface, inks().accent).iter().map(|r| r.1).sum();
+        assert!(label > 0, "the member's own pill writes in the accent");
 
         reacted.deleted = crate::message::Deletion::Deleted;
         let mut gone = MessageList::default();
@@ -1534,9 +2524,9 @@ pub(crate) mod tests {
         let chips = surface
             .ops()
             .iter()
-            .filter(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_bg))
+            .filter(|op| matches!(op, DrawOp::StrokePath { .. }))
             .count();
-        assert_eq!(chips, 0, "a deleted message shows no chip");
+        assert_eq!(chips, 0, "a deleted message shows no pill");
     }
 
     /// The files of a message paint as one chip each under its body, in the
@@ -1570,8 +2560,8 @@ pub(crate) mod tests {
         let bottom = at.rows[0].bounds.bottom.get();
         let selecting = Selecting {
             click: Some(view_at((
-                SPACE_8.get() + 2.0,
-                bottom - 2.0 * SPACE_2.get() - 2.0,
+                TEXT_LEFT.get() + 2.0,
+                bottom - ROW_PAD.get() - 2.0,
             ))),
             ..Selecting::default()
         };
@@ -1583,6 +2573,8 @@ pub(crate) mod tests {
             selecting,
             me: None,
             pictures: None,
+            theme: Theme::Light,
+            calendar: None,
         };
         let (surface, painted) = paint_from(shown, 600.0);
         assert_eq!(painted.file, Some(file));
@@ -1621,6 +2613,8 @@ pub(crate) mod tests {
                 selecting: Selecting::default(),
                 me: None,
                 pictures: Some(Pictured { shelf, now, motion }),
+                theme: Theme::Light,
+                calendar: None,
             };
             paint_from(shown, 600.0)
         };
@@ -1689,6 +2683,8 @@ pub(crate) mod tests {
                 selecting: Selecting::default(),
                 me: None,
                 pictures: None,
+                theme: Theme::Light,
+                calendar: None,
             };
             let palette = &LIGHT;
             paint_list(
@@ -1790,12 +2786,13 @@ pub(crate) mod tests {
                 |op| matches!(op, DrawOp::FillRect { color, rect } if *color == want && rect.height() < 3.0),
             )
         };
+        // Inline code sits on a chip framed by the line (`MURMURE-744`).
         let tint = ops
             .iter()
             .position(
-                |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
+                |op| matches!(op, DrawOp::StrokePath { color: Some(c), .. } if *c == inks().line),
             )
-            .expect("the code tint");
+            .expect("the code chip");
         let first_glyph = ops
             .iter()
             .position(|op| matches!(op, DrawOp::Glyphs { .. }))
@@ -1817,14 +2814,14 @@ pub(crate) mod tests {
             let mut list = MessageList::default();
             list.absorb(Id::<Segment>::mint(), vec![sent]);
             let (surface, _) = paint(&list, 600.0);
-            let indent = surface_px(SPACE_8).get() + f64::from(look::BLOCK_INDENT.get());
+            let indent = surface_px(TEXT_LEFT).get() + f64::from(look::BLOCK_INDENT.get());
             let marks = surface.count(|op| {
                 matches!(op, DrawOp::FillRect { color, rect }
                     if *color == LIGHT.header_text
-                        && rect.x0 >= surface_px(SPACE_8).get() && rect.x1 <= indent)
+                        && rect.x0 >= surface_px(TEXT_LEFT).get() && rect.x1 <= indent)
             });
             let tints = surface.count(
-                |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
+                |op| matches!(op, DrawOp::FillRect { color, .. } if *color == inks().sunken),
             );
             (marks.get(), tints.get())
         };
@@ -1880,7 +2877,7 @@ pub(crate) mod tests {
             let [_, block @ .., (_, after)] = lines.as_slice() else {
                 panic!("the author and the body, got {lines:?}");
             };
-            let edge = surface_px(SPACE_8).get();
+            let edge = surface_px(TEXT_LEFT).get();
             let indent = edge + f64::from(look::BLOCK_INDENT.get());
             assert!(block.len() >= 2, "the block wraps, got {block:?}");
             assert!(
@@ -1904,12 +2901,13 @@ pub(crate) mod tests {
         let unread = messages.get(1).map(|m| m.id);
         list.absorb(Id::<Segment>::mint(), messages);
         let (plain, _) = paint(&list, 600.0);
-        assert!(runs(&plain, LIGHT.selection).is_empty());
+        assert!(runs(&plain, inks().mention).is_empty());
 
         let (surface, painted) = paint_above(&list, unread, 600.0);
         assert_eq!(painted.laid_out.get(), 2);
         assert_eq!(painted.line_shown, OnScreen::Shown);
-        let line = runs(&surface, LIGHT.selection);
+        // The separator reads `New` in the mention ink (`MURMURE-740`).
+        let line = runs(&surface, inks().mention);
         let [(line_y, glyphs)] = line.as_slice() else {
             panic!("one run of the line, got {line:?}");
         };
@@ -1927,7 +2925,7 @@ pub(crate) mod tests {
         let rules = surface
             .fill_colors()
             .iter()
-            .filter(|c| **c == LIGHT.selection)
+            .filter(|c| **c == inks().mention)
             .count();
         assert_eq!(rules, 1);
     }
@@ -1952,8 +2950,12 @@ pub(crate) mod tests {
         assert_eq!(painted.laid_out.get(), 2);
         let muted = runs(&surface, LIGHT.header_text);
         let body = runs(&surface, LIGHT.cell_text);
-        let [(band_y, _), .., (time_y, 1)] = muted.as_slice() else {
-            panic!("the band, then the time of the header, got {muted:?}");
+        let [(band_y, _), ..] = muted.as_slice() else {
+            panic!("the band, got {muted:?}");
+        };
+        let time = runs(&surface, inks().faint);
+        let [(time_y, 1)] = time.as_slice() else {
+            panic!("the time of the header, got {time:?}");
         };
         let [(author_y, 3), (body_y, 4)] = body.as_slice() else {
             panic!("the author, then the body, got {body:?}");
@@ -1997,6 +2999,8 @@ pub(crate) mod tests {
             },
             me: None,
             pictures: None,
+            theme: Theme::Light,
+            calendar: None,
         };
         let press = (SPACE_8.get(), first - SPACE_2.get() - 2.0);
         let (surface, painted) = paint_from(drag(press, (399.0, (top + second) / 2.0)), 600.0);
@@ -2057,6 +3061,7 @@ pub(crate) mod tests {
                 link: None,
                 chip: None,
                 file: None,
+                join: None,
                 pictures: Vec::new(),
                 next_frame: None,
             }
@@ -2069,3 +3074,8 @@ pub(crate) mod tests {
         );
     }
 }
+
+/// The look of a row, beside the tests of the painter.
+#[cfg(test)]
+#[path = "paint_look_tests.rs"]
+mod look_tests;

@@ -239,7 +239,7 @@ pub(crate) mod tests {
             .wait_for(
                 &format!("{shown} in the list of mentions"),
                 &format!(
-                    "return [...document.querySelectorAll('.murmure-mentions .murmure-mention')] \
+                    "return [...document.querySelectorAll('.murmure-mention-list .murmure-mention')] \
                        .some(o => o.textContent.includes({shown}));"
                 ),
                 STEP,
@@ -248,7 +248,7 @@ pub(crate) mod tests {
         // A press picks the member as a pointer does; the list takes it on `mousedown`.
         page.browser
             .script(
-                "const o = [...document.querySelectorAll('.murmure-mentions .murmure-mention')] \
+                "const o = [...document.querySelectorAll('.murmure-mention-list .murmure-mention')] \
                    .find(o => o.textContent.includes(arguments[0])); \
                  o.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); \
                  return true;",
@@ -258,7 +258,7 @@ pub(crate) mod tests {
         page.browser
             .wait_for(
                 &format!("{shown} picked"),
-                "return !document.querySelector('ul.murmure-mentions');",
+                "return !document.querySelector('ul.murmure-mention-list');",
                 STEP,
             )
             .await;
@@ -415,10 +415,10 @@ pub(crate) mod tests {
              channel header.",
         )
         .await;
-        send(
+        send_code(
             &c.karim,
-            CHANNEL,
-            "The 196 px band holds 4 faces. Beyond that, pages of nine: `MURMURE-654`.",
+            "The 196 px band holds 4 faces. Beyond that, pages of nine: `MURMURE-654`",
+            ".",
         )
         .await;
 
@@ -474,6 +474,31 @@ pub(crate) mod tests {
                 "document.querySelector('.murmure-invite-link-close')?.click(); return true;",
                 json!([]),
             )
+            .await;
+    }
+
+    /// Types `text`, which ends on the backtick that closes its inline code, then `rest` and
+    /// Enter. The composer turns a closed marker into its mark at its next frame. A person
+    /// types the next key a frame later, and gets the code chip (`MURMURE-197`). The seed
+    /// waits that frame, where a run of keys in one action would outpace it.
+    async fn send_code(page: &Page, text: &str, rest: &str) {
+        take_keys(page, CHANNEL).await;
+        let typed: Vec<Value> = text
+            .chars()
+            .map(String::from)
+            .flat_map(|k| {
+                [
+                    json!({ "type": "keyDown", "value": k }),
+                    json!({ "type": "keyUp", "value": k }),
+                ]
+            })
+            .collect();
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": typed }]))
+            .await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": typed_and_sent(rest) }]))
             .await;
     }
 

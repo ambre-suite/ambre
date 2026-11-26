@@ -53,9 +53,9 @@ pub const DELETED: ambre_commands::TitleWords = ambre_commands::words!(
 /// What follows the body of an edited message (`MURMURE-186`).
 pub const EDITED: &str = "(edited)";
 
-/// What the line above the first unread message reads (`MURMURE-184`).
-pub const UNREAD_LINE: ambre_commands::TitleWords =
-    ambre_commands::words!("New messages", "Nouveaux messages");
+/// What the line above the first unread message reads (`MURMURE-184`,
+/// `MURMURE-740`).
+pub const UNREAD_LINE: ambre_commands::TitleWords = ambre_commands::words!("New", "Nouveau");
 
 /// What the line under a reply also sent to the channel reads
 /// (`MURMURE-532`).
@@ -374,6 +374,10 @@ pub struct HeaderWords {
     pub author: String,
     /// The time the group's first message was sent, as the reader shows it.
     pub time: String,
+    /// The author, whose peer colour the avatar takes (`MURMURE-738`).
+    pub who: Id<User>,
+    /// The initials the avatar shows (`MURMURE-738`).
+    pub initials: String,
 }
 
 impl std::fmt::Debug for HeaderWords {
@@ -381,7 +385,8 @@ impl std::fmt::Debug for HeaderWords {
         f.debug_struct("HeaderWords")
             .field("author", &Len::<Byte>::of(self.author.len()))
             .field("time", &self.time)
-            .finish()
+            .field("who", &self.who)
+            .finish_non_exhaustive()
     }
 }
 
@@ -409,6 +414,105 @@ pub struct RowWords {
     /// The files under the body, one chip each, which a click fetches. A
     /// deleted message carries none.
     pub files: Vec<Attachment>,
+    /// The thread summary of a root: its faces and its last reply
+    /// (`MURMURE-742`). `None` on any other row.
+    pub thread: Option<ThreadWords>,
+    /// The bytes of each mention of a member in the body, which paint as a
+    /// chip (`MURMURE-743`).
+    pub mentions: Vec<Span<Byte>>,
+    /// The card of a call message, in place of its body (`MURMURE-745`).
+    pub call: Option<CallCard>,
+}
+
+/// What the summary of a thread shows beside its count (`MURMURE-742`).
+///
+/// `Debug` prints the length of the name alone: a member chose it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ThreadWords {
+    /// The latest repliers, newest first, each once.
+    pub faces: Vec<Face>,
+    /// Who replied last, and when.
+    pub last: Option<(String, Instant<Authored>)>,
+}
+
+impl std::fmt::Debug for ThreadWords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ThreadWords")
+            .field("faces", &self.faces.len())
+            .field("last", &self.last.as_ref().map(|(_, at)| at))
+            .finish()
+    }
+}
+
+/// A member as a small avatar: the peer colour of `who` under the initials.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Face {
+    pub who: Id<User>,
+    pub initials: String,
+}
+
+ambre_core::define_flag! {
+    /// Whether the call a card names still runs.
+    pub enum CallState {
+        /// The call ended: the card is muted and offers no join.
+        Ended,
+        /// The call runs.
+        Live,
+    }
+}
+
+/// The card a call message shows (`MURMURE-745`).
+///
+/// `Debug` prints the length of the name alone: a member chose it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct CallCard {
+    /// The call the card joins.
+    pub call: Id<ambre_core::id::Call>,
+    /// Whether the call runs.
+    pub state: CallState,
+    /// `Started by` the author, at the time of the message.
+    pub started: String,
+    /// Who is in the call, as the relay last answered.
+    pub faces: Vec<Face>,
+}
+
+impl std::fmt::Debug for CallCard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CallCard")
+            .field("call", &self.call)
+            .field("state", &self.state)
+            .field("started", &Len::<Byte>::of(self.started.len()))
+            .field("faces", &self.faces.len())
+            .finish()
+    }
+}
+
+impl CallCard {
+    /// What the title of the card reads.
+    pub fn title(&self) -> &'static str {
+        match self.state {
+            CallState::Live => ambre_commands::shown(&CALL_LIVE),
+            CallState::Ended => ambre_commands::shown(&CALL_ENDED),
+        }
+    }
+
+    /// Whether the card offers `Join` to `me`: the call runs and `me` is not
+    /// in it (`MURMURE-745`).
+    pub fn joinable(&self, me: Option<Id<User>>) -> bool {
+        self.state == CallState::Live
+            && !me.is_some_and(|me| self.faces.iter().any(|f| f.who == me))
+    }
+}
+
+/// What the `Join` button of a call card reads (`MURMURE-745`).
+pub const CALL_JOIN: ambre_commands::TitleWords = ambre_commands::words!("Join", "Rejoindre");
+
+/// The words of a face for `who`, named by `name`.
+fn face(who: Id<User>, name: &str) -> Face {
+    Face {
+        who,
+        initials: crate::ui::call_videos::initials_of(name),
+    }
 }
 
 impl std::fmt::Debug for RowWords {
@@ -421,6 +525,9 @@ impl std::fmt::Debug for RowWords {
             .field("replies", &self.replies)
             .field("reactions", &self.reactions.len())
             .field("files", &self.files.len())
+            .field("thread", &self.thread)
+            .field("mentions", &self.mentions.len())
+            .field("call", &self.call)
             .finish()
     }
 }
@@ -474,10 +581,16 @@ impl<'a> Row<'a> {
                 .map(ambre_core::Validated::into_string)
                 .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned())
         };
-        let header = (header == Header::Opens).then(|| HeaderWords {
-            author: name(message.author),
-            time: time_of(message.ts),
+        let header = (header == Header::Opens).then(|| {
+            let author = name(message.author);
+            HeaderWords {
+                initials: crate::ui::call_videos::initials_of(&author),
+                author,
+                time: time_of(message.ts),
+                who: message.author,
+            }
         });
+        let mut mentions = Vec::new();
         let (body, ink, marks) = match message.notice {
             Some(Notice::MemberAdded { member }) => {
                 let body = format!("{} joined the conversation", name(member));
@@ -499,6 +612,7 @@ impl<'a> Row<'a> {
             None => {
                 let (mut body, bytes) = message.shown_at(&name_of);
                 let marks = body_marks(message, &bytes);
+                mentions = mention_bytes(message, &bytes, &name_of);
                 if message.edited == Revision::Edited {
                     body = format!("{body} {EDITED}");
                 }
@@ -507,10 +621,11 @@ impl<'a> Row<'a> {
         };
         let replies = message
             .thread
+            .as_ref()
             .filter(|t| t.replies > ambre_core::Count::<crate::message::Replies>::ZERO)
             .map(|t| match t.replies.get() {
-                1 => "1 reply".to_owned(),
-                n => format!("{n} replies"),
+                1 => ambre_commands::tr!("1 reply", "1 r\u{e9}ponse").to_owned(),
+                n => ambre_commands::trf!("{} replies", "{} r\u{e9}ponses", n),
             })
             .or_else(|| {
                 message
@@ -527,6 +642,50 @@ impl<'a> Row<'a> {
         } else {
             message.attachments.clone()
         };
+        let thread = message
+            .thread
+            .as_ref()
+            .filter(|t| t.replies > ambre_core::Count::<crate::message::Replies>::ZERO)
+            .map(|t| ThreadWords {
+                faces: t
+                    .repliers
+                    .iter()
+                    .map(|&who| face(who, &name(who)))
+                    .collect(),
+                last: t
+                    .last_replier
+                    .zip(t.last_reply)
+                    .map(|(who, at)| (name(who), at)),
+            });
+        let call = message
+            .call
+            .as_ref()
+            .filter(|_| message.notice.is_none())
+            .map(|view| {
+                let members = match &view.members {
+                    Some(CallMembers::Live(members)) if !view.has_ended() => members.as_slice(),
+                    _ => &[],
+                };
+                CallCard {
+                    call: view.call,
+                    state: if view.has_ended() {
+                        CallState::Ended
+                    } else {
+                        CallState::Live
+                    },
+                    started: ambre_commands::trf!(
+                        "Started by {} \u{b7} {}",
+                        "Lanc\u{e9} par {} \u{b7} {}",
+                        first_name(&name(message.author)),
+                        time_of(message.ts)
+                    ),
+                    faces: members.iter().map(|&who| face(who, &name(who))).collect(),
+                }
+            });
+        // The pills run from the most chosen; a tie keeps emoji order
+        // (`MURMURE-741`).
+        let mut reactions = reactions;
+        reactions.sort_by_key(|r| std::cmp::Reverse(r.users.len()));
         RowWords {
             header,
             body,
@@ -535,6 +694,9 @@ impl<'a> Row<'a> {
             replies,
             reactions,
             files,
+            thread,
+            mentions,
+            call: call.filter(|_| message.deleted == Deletion::Live),
         }
     }
 
@@ -627,7 +789,36 @@ fn band_words(band: &Band, time_of: impl Fn(Instant<Authored>) -> String) -> Row
         replies: None,
         reactions: Vec::new(),
         files: Vec::new(),
+        thread: None,
+        mentions: Vec::new(),
+        call: None,
     }
+}
+
+/// The first word of `name`, as a card names who started a call.
+fn first_name(name: &str) -> &str {
+    name.split_whitespace().next().unwrap_or(name)
+}
+
+/// The bytes of the shown body that each mention of a named member takes,
+/// `bytes` giving where each char of its text starts there (`MURMURE-743`).
+fn mention_bytes(
+    message: &MessageView,
+    bytes: &IdxVec<Char, Pos<Byte>>,
+    name_of: &impl Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
+) -> Vec<Span<Byte>> {
+    message
+        .mentions
+        .iter()
+        .filter(|m| match m.target {
+            crate::message::MentionTarget::User(user) => name_of(user).is_some(),
+            crate::message::MentionTarget::Channel => true,
+        })
+        .filter_map(|m| {
+            let span = Span::<Byte>::new(*bytes.get(m.range.start)?, *bytes.get(m.range.end)?);
+            (!span.is_empty()).then_some(span)
+        })
+        .collect()
 }
 
 /// The style marks of `message` over the bytes of its shown body, `bytes`
@@ -778,8 +969,15 @@ fn at_bottom(
 ) -> Window {
     let mut shown = from_bottom(count, height, &mut *tall);
     shown.reverse();
-    let rows: Vec<(Pos<ListRow>, Px<View>, Px<View>)> =
-        shown.iter().map(|&(i, top)| (i, top, tall(i))).collect();
+    // Rows that fill less than the viewport start at its top (`MURMURE-737`).
+    let lift = match shown.first() {
+        Some(&(first, top)) if first == Pos::<ListRow>::ZERO && top > Px::<View>::ZERO => top,
+        _ => Px::<View>::ZERO,
+    };
+    let rows: Vec<(Pos<ListRow>, Px<View>, Px<View>)> = shown
+        .iter()
+        .map(|&(i, top)| (i, top - lift, tall(i)))
+        .collect();
     Window {
         oldest: OnScreen::from_bool(rows.first().is_some_and(|r| r.0 == Pos::<ListRow>::ZERO)),
         latest: OnScreen::from_bool(!rows.is_empty()),
@@ -1298,6 +1496,8 @@ pub(crate) mod tests {
             Some(HeaderWords {
                 author: "Ada".to_owned(),
                 time: "t7".to_owned(),
+                who: row.header.as_ref().map(|h| h.who).expect("a header"),
+                initials: "A".to_owned(),
             })
         );
     }
@@ -1335,6 +1535,8 @@ pub(crate) mod tests {
             document: Id::<Document>::mint(),
             replies: ambre_core::Count::<crate::message::Replies>::new(2),
             last_replier: None,
+            repliers: Vec::new(),
+            last_reply: None,
         });
         let row = Row::Message {
             message: &grouped,
@@ -1377,6 +1579,8 @@ pub(crate) mod tests {
             Some(HeaderWords {
                 author: UNKNOWN_MEMBER.to_owned(),
                 time: String::new(),
+                who: unknown.header.as_ref().map(|h| h.who).expect("a header"),
+                initials: "AM".to_owned(),
             })
         );
     }
@@ -1389,6 +1593,8 @@ pub(crate) mod tests {
             document: Id::<Document>::mint(),
             replies: ambre_core::Count::<crate::message::Replies>::new(replies),
             last_replier: None,
+            repliers: Vec::new(),
+            last_reply: None,
         };
         root.thread = Some(head(0));
         assert_eq!(words(&root, false).replies, None);
@@ -1527,9 +1733,12 @@ pub(crate) mod tests {
         );
         assert_eq!(
             tops(&short),
-            [(0, 60.0), (1, 80.0)],
-            "a short list sits at the bottom"
+            [(0, 0.0), (1, 20.0)],
+            "a short list starts at the top (MURMURE-737)"
         );
+        let unanchored = window(Len::<ListRow>::new(2), px(100.0), None, |_| px(20.0));
+        assert_eq!(tops(&unanchored), [(0, 0.0), (1, 20.0)]);
+        assert_eq!(unanchored.latest, OnScreen::Shown);
         assert_eq!(
             (short.oldest, short.latest),
             (OnScreen::Shown, OnScreen::Shown)

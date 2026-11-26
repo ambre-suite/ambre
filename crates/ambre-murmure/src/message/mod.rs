@@ -551,7 +551,7 @@ impl NarrowCount for Segments {
 }
 
 /// What a root shows of its thread (`MURMURE-106`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThreadHead {
     /// The thread document its `thread` field names.
     pub document: Id<Document>,
@@ -560,6 +560,11 @@ pub struct ThreadHead {
     pub replies: Count<Replies>,
     /// The author of the latest reply, `None` until the document is held.
     pub last_replier: Option<Id<User>>,
+    /// Each member who replied, once, the latest replier first, up to four
+    /// of them (`MURMURE-742`). Empty until the document is held.
+    pub repliers: Vec<Id<User>>,
+    /// When the latest reply was sent, `None` until the document is held.
+    pub last_reply: Option<ambre_bus::Instant<ambre_bus::Authored>>,
 }
 
 /// An event of the channel itself, shown in its message list.

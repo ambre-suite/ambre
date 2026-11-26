@@ -754,8 +754,8 @@ pub(super) fn copy_id(reply: Id<Message>) -> Id<Message> {
     Id::<Message>::from_bytes(bytes)
 }
 
-/// What a root shows of `thread`: its replies, deleted ones aside, and the
-/// author of the latest one.
+/// What a root shows of `thread`: its replies, deleted ones aside, the
+/// author and the time of the latest one, and its latest repliers.
 fn thread_head(document: Id<Document>, thread: &LoroDoc, channel: Id<Channel>) -> ThreadHead {
     let replies: Vec<MessageView> = read_messages(thread, channel)
         .into_iter()
@@ -765,6 +765,17 @@ fn thread_head(document: Id<Document>, thread: &LoroDoc, channel: Id<Channel>) -
         document,
         replies: ambre_core::Count::<crate::message::Replies>::of(replies.len()),
         last_replier: replies.last().map(|reply| reply.author),
+        // Four faces: the summary shows three once the member's own is aside.
+        repliers: replies.iter().rev().map(|reply| reply.author).fold(
+            Vec::with_capacity(4),
+            |mut faces, author| {
+                if faces.len() < 4 && !faces.contains(&author) {
+                    faces.push(author);
+                }
+                faces
+            },
+        ),
+        last_reply: replies.last().map(|reply| reply.ts),
     }
 }
 

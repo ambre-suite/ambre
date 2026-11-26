@@ -4772,7 +4772,7 @@ mod tests {
             shown.iter().any(|(_, event)| matches!(event,
                 MurmureEvent::Messages { segment, messages }
                     if *segment == active
-                        && messages[0].thread.is_some_and(|head| head.replies.get() == 1))),
+                        && messages[0].thread.as_ref().is_some_and(|head| head.replies.get() == 1))),
             "the root's head counts the reply, {shown:?}"
         );
     }
@@ -4929,7 +4929,7 @@ mod tests {
                 matches!(event,
                 MurmureEvent::Messages { segment, messages }
                     if *segment == active
-                        && messages[0].thread.is_some_and(|head| head.replies.get() == 0))
+                        && messages[0].thread.as_ref().is_some_and(|head| head.replies.get() == 0))
             });
             assert_eq!(counted, kind == "delete", "{kind}: {shown:?}");
         }
