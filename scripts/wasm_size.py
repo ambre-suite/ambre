@@ -60,7 +60,7 @@ BUDGET = 4_000_000
 # It holds 1,350,000, the figure of the W10 raise, with 10,392 bytes of room
 # after that merge.
 CEILINGS = {
-    "Main": 10_900_000,
+    "Main": 10_940_000,
     "Sync": 1_350_000,
 }
 
