@@ -760,6 +760,7 @@ mod tests {
     }
 
     /// Words of the EFF large list, the list a diceware roll draws from.
+    #[cfg(not(target_arch = "wasm32"))]
     const DICEWARE: &[&str] = &[
         "anchovy",
         "glider",
@@ -795,6 +796,7 @@ mod tests {
         "voucher",
     ];
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn phrase(picks: &[usize], separator: &str) -> String {
         picks
             .iter()
@@ -803,6 +805,7 @@ mod tests {
             .join(separator)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     proptest::proptest! {
         #[test]
         fn any_four_distinct_diceware_words_reach_the_floor(
@@ -982,6 +985,7 @@ mod tests {
         assert_eq!(chars.0.expose().capacity(), accented.len());
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     proptest::proptest! {
         /// Audit `W100`: a chain of four fragments at most never reaches the
         /// floor. A fragment is a common password or a part of a row. A
