@@ -3585,4 +3585,40 @@ pub(crate) mod tests {
         state.handle_sync_event(listing(2, word));
         assert!(walks(&state), "a new word walks the channel log again");
     }
+
+    /// `SYNC-311`: the documents a revoke on the log of a `meta` caps are
+    /// the open documents of that channel. The `meta` itself, a closed
+    /// document of the channel and an open document of another channel are
+    /// left out.
+    #[test]
+    fn the_open_documents_of_a_channel_are_those_its_meta_vouches_for() {
+        let (mut state, _rx) = bare_state();
+        let meta = Id::<Document>::from_bytes([0x31; 16]);
+        let other_meta = Id::<Document>::from_bytes([0x32; 16]);
+        let open = Id::<Document>::from_bytes([0x33; 16]);
+        let closed = Id::<Document>::from_bytes([0x34; 16]);
+        let elsewhere = Id::<Document>::from_bytes([0x35; 16]);
+        for (document_id, of) in [
+            (meta, meta),
+            (open, meta),
+            (closed, meta),
+            (elsewhere, other_meta),
+        ] {
+            state
+                .channel_metas
+                .insert(document_id, Id::<Meta>::from_document(of));
+        }
+        for document_id in [meta, open, elsewhere] {
+            state.documents.insert(
+                document_id,
+                SyncDocumentState::new(
+                    document_id,
+                    DocumentKey::generate(),
+                    DocType::Murmure,
+                    crate::Existence::OnRelay,
+                ),
+            );
+        }
+        assert_eq!(state.open_channel_documents(meta), vec![open]);
+    }
 }

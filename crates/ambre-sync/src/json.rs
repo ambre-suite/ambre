@@ -494,6 +494,22 @@ mod tests {
         assert!(from_slice::<Kind>(br#"{"Struct":[{"name":"x","n":7,"flag":false},-3]}"#).is_err());
     }
 
+    /// A unit variant sent as an object reads, or fails, as `serde_json`
+    /// reads it: its body is a `null`, and any other body is refused.
+    #[test]
+    fn a_unit_variant_in_an_object_reads_as_serde_json_reads_it() {
+        let bodies: [&[u8]; 3] = [br#"{"Unit":null}"#, br#"{"Unit":5}"#, br#"{"Unit":[]}"#];
+        for body in bodies {
+            let ours = from_slice::<Kind>(body).map_err(|e| e.to_string());
+            let theirs = serde_json::from_slice::<Kind>(body).map_err(|e| e.to_string());
+            assert_eq!(ours, theirs, "{}", String::from_utf8_lossy(body));
+        }
+        assert_eq!(
+            from_slice::<Kind>(br#"{"Unit":null}"#).ok(),
+            Some(Kind::Unit)
+        );
+    }
+
     /// The worker reads a word it does not know as an update to install from
     /// the start of this message.
     #[test]

@@ -180,13 +180,7 @@ impl SyncState {
             exchange_key,
             doc_key,
             expect_exchange_pub_key,
-            // The signing key the confirmed fingerprint covered, when this
-            // session showed it for that very exchange key (audit `P44`).
-            expect_signing_pub_key: self
-                .shown_identities
-                .get(&invitee)
-                .filter(|shown| shown.exchange == expect_exchange_pub_key)
-                .map(|shown| shown.signing),
+            expect_signing_pub_key: self.confirmed_signing_key(invitee, expect_exchange_pub_key),
             author,
             footing,
             rule: self.log_rule(document_id),
@@ -195,6 +189,21 @@ impl SyncState {
         crate::spawn(async move {
             sharing::invite_task(&http, params, &tx, &logic_tx).await;
         });
+    }
+
+    /// The signing key an invite of `invitee` pins: the one the confirmed
+    /// fingerprint covered, when this session showed it for `exchange`
+    /// itself (audit `P44`). `None` when it showed another exchange key, or
+    /// none.
+    fn confirmed_signing_key(
+        &self,
+        invitee: Id<User>,
+        exchange: FixedBytes<ambre_core::ExchangePublicKey>,
+    ) -> Option<FixedBytes<PublicKey>> {
+        self.shown_identities
+            .get(&invitee)
+            .filter(|shown| shown.exchange == exchange)
+            .map(|shown| shown.signing)
     }
 
     /// Resumes the invites that waited for the document's lazy creation
@@ -747,6 +756,29 @@ mod tests {
             crate::http::Url::<crate::RelayHost>::new(String::new()),
         );
         (state, rx)
+    }
+
+    /// Audit `P44`: an invite pins the signing key of the fingerprint this
+    /// session showed for the exchange key it wraps to. A fingerprint shown
+    /// for another exchange key pins nothing, and so does an invitee never
+    /// shown.
+    #[test]
+    fn an_invite_pins_the_signing_key_shown_with_its_exchange_key() {
+        let (mut state, _rx) = bare_state();
+        let invitee = Id::<User>::from_bytes([0x44; 16]);
+        let exchange = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0x45; 32]);
+        let signing = FixedBytes::<PublicKey>::from_array([0x46; 32]);
+        state
+            .shown_identities
+            .insert(invitee, ambre_crypto::IdentityKeys { exchange, signing });
+        assert_eq!(
+            state.confirmed_signing_key(invitee, exchange),
+            Some(signing)
+        );
+        let other = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0x47; 32]);
+        assert_eq!(state.confirmed_signing_key(invitee, other), None);
+        let stranger = Id::<User>::from_bytes([0x48; 16]);
+        assert_eq!(state.confirmed_signing_key(stranger, exchange), None);
     }
 
     /// Audits `P26`, `P27`: a document stands on the later of the footing
