@@ -192,6 +192,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::CloseSegment { .. } => "CloseSegment",
         SyncCommand::CreateAmendments { .. } => "CreateAmendments",
         SyncCommand::CreateThread { .. } => "CreateThread",
+        SyncCommand::FreshenReceipt { .. } => "FreshenReceipt",
         SyncCommand::TakeFinalizeLease { .. } => "TakeFinalizeLease",
         SyncCommand::FinalizeSegment { .. } => "FinalizeSegment",
         SyncCommand::TakeFoldLease { .. } => "TakeFoldLease",
@@ -303,7 +304,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 53;
+const SYNC_VARIANTS: usize = 54;
 const EVENT_VARIANTS: usize = 68;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -446,6 +447,16 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             root: Id::<Message>::mint(),
             thread: Id::<Document>::mint(),
+        },
+        SyncCommand::FreshenReceipt {
+            channel_id: chan,
+            segment,
+            root: Id::<Message>::mint(),
+            thread: Id::<Document>::mint(),
+            receipts: vec![ambre_bus::LinkReceipt {
+                thread: Id::<Document>::mint(),
+                signature: ambre_core::FixedBytes::from_array([6; 64]),
+            }],
         },
         SyncCommand::TakeFinalizeLease {
             channel_id: chan,

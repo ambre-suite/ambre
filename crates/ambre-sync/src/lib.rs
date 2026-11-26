@@ -2404,6 +2404,13 @@ impl SyncState {
                 root,
                 thread,
             } => self.handle_create_thread(channel_id, meta, segment, root, thread),
+            SyncCommand::FreshenReceipt {
+                channel_id,
+                segment,
+                root,
+                thread,
+                receipts,
+            } => self.handle_freshen_receipt(channel_id, segment, root, thread, receipts),
             SyncCommand::TakeFinalizeLease {
                 channel_id,
                 segment,

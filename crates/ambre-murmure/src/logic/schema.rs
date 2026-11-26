@@ -29,7 +29,7 @@ use ambre_core::crdt::CrdtName as _;
 ///
 /// Raise it in the commit that changes a key or a value type, and append the
 /// new section to `schema/shapes.txt`.
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(2);
 
 pub(crate) use ambre_crdt::Fields;
 
@@ -65,6 +65,11 @@ ambre_core::crdt_names! {
         /// receipt of each thread its `threads` root records, keyed by
         /// `Id<Message>` (`MURMURE-732`).
         Receipts = "receipts",
+        /// The `thread_receipts` root of a segment or of an amendments
+        /// document: the fresh link receipts members add after a rotation of
+        /// the link key. It holds one per thread and member, keyed by
+        /// [`FreshKey`] (`MURMURE-739`).
+        ThreadReceipts = "thread_receipts",
         /// The `messages` list of a segment, one [`MessageKey`] map per
         /// message.
         Messages = "messages",
@@ -296,14 +301,79 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
 ///
 /// A document with no version reads as 0 (`SCHEMA-005`). No Murmure document
 /// was ever written without one, so the walk finds no step from 0 and
-/// refuses it. Version 1 is the first layout, and no build before it shipped,
-/// so the list is empty.
+/// refuses it. Version 1 is the first layout.
 ///
 /// A step writes no operation (`MURMURE-566`). Each member signs its own
 /// writes, and the check refuses a change under any other identity, so a
 /// migration's writes would never travel. A later step therefore reads the
 /// document as it is and keeps its stamp.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: Version::new(1),
+    to: Version::new(2),
+    apply: fresh_receipts_v2,
+}];
+
+/// Version 1 to 2: a segment and an amendments document may hold the
+/// `thread_receipts` root (`MURMURE-739`).
+///
+/// The step writes nothing. A version 1 document holds no such root, and its
+/// one `thread_receipt` per root reads as a set of one.
+fn fresh_receipts_v2(_doc: &LoroDoc) -> Result<(), String> {
+    Ok(())
+}
+
+/// The key of a fresh link receipt in a `thread_receipts` root: the thread it
+/// proves, and the member who wrote it (`MURMURE-739`). Each member writes
+/// under their own key alone, so no member erases or shadows another's
+/// receipt. The root holds one entry per thread and member at most.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FreshKey {
+    pub(crate) thread: Id<Document>,
+    pub(crate) by: Id<ambre_core::id::User>,
+}
+
+impl FreshKey {
+    /// The map key, as the engine writes it: the thread, `:`, the member.
+    pub(crate) fn spell(self) -> String {
+        format!("{}:{}", self.thread, self.by)
+    }
+
+    /// The key `key` spells, or `None` for any other spelling. A reader looks
+    /// a key up as written, so a second spelling would be a second entry.
+    pub(crate) fn parse(key: &str) -> Option<Self> {
+        let (thread, by) = key.split_once(':')?;
+        let parsed = Self {
+            thread: Id::<Document>::parse_str(thread).ok()?,
+            by: Id::<ambre_core::id::User>::parse_str(by).ok()?,
+        };
+        (parsed.spell() == key).then_some(parsed)
+    }
+}
+
+/// The fresh link receipts the `thread_receipts` root of `doc` holds, each
+/// with the thread its key names (`MURMURE-739`). A value that is no
+/// signature proves nothing, and is left out.
+pub(crate) fn fresh_receipts(doc: &LoroDoc) -> Vec<ambre_bus::LinkReceipt> {
+    let Some(root) = held_root_map(doc, Root::ThreadReceipts.as_str()) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    root.for_each(|key, value| {
+        let signature = match value {
+            ValueOrContainer::Value(LoroValue::String(hex)) => {
+                ambre_core::FixedBytes::<ambre_core::Signature>::from_hex(&hex).ok()
+            }
+            _ => None,
+        };
+        if let (Some(key), Some(signature)) = (FreshKey::parse(key), signature) {
+            found.push(ambre_bus::LinkReceipt {
+                thread: key.thread,
+                signature,
+            });
+        }
+    });
+    found
+}
 
 /// The document kinds this build writes and reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -724,6 +724,89 @@ fn a_locked_record_carries_its_receipt_and_a_fold_keeps_it() {
     );
 }
 
+/// `MURMURE-739`, `MURMURE-740`: a member adds a fresh receipt in the
+/// amendments, for a thread a locked root names, under their own key alone.
+/// A fold carries it into the segment beside the first one.
+#[test]
+fn a_fresh_receipt_of_a_locked_root_rides_in_the_amendments_and_a_fold_keeps_it() {
+    use crate::logic::channel::{named_receipts, recorded_receipts};
+    type Receipt = ambre_core::FixedBytes<ambre_core::Signature>;
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["root"], author);
+    let root = alice.messages(segment).expect("held")[0].id;
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let receipt = Receipt::from_array([0x5c; 64]);
+    let (thread, recorded) = locked_thread_under(&mut alice, segment, root, Some(receipt));
+    let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
+    bob.apply_signed(
+        amendments,
+        Seq::<Relay>::new(2),
+        &recorded.delta,
+        signer(&alice, amendments, Id::<User>::mint()),
+    )
+    .expect("recorded");
+    let bob_user = Id::<User>::mint();
+    let fresh = Receipt::from_array([0x6d; 64]);
+    let written = bob
+        .write_fresh_receipt((segment, root), thread, fresh, bob_user)
+        .expect("write")
+        .expect("written");
+    assert_eq!(
+        written.document, amendments,
+        "a locked segment takes no delta"
+    );
+    alice
+        .apply_signed(
+            amendments,
+            Seq::<Relay>::new(3),
+            &written.delta,
+            signer(&bob, amendments, bob_user),
+        )
+        .expect("a fresh receipt of a recorded thread");
+    let first_held = ambre_bus::LinkReceipt {
+        thread,
+        signature: receipt,
+    };
+    let fresh_held = ambre_bus::LinkReceipt {
+        thread,
+        signature: fresh,
+    };
+    assert_eq!(
+        recorded_receipts(alice.doc(amendments).expect("held")),
+        [first_held, fresh_held]
+    );
+
+    let doc = bob.doc(amendments).expect("held");
+    let before = doc.oplog_vv();
+    crate::logic::schema::root_map(doc, Root::ThreadReceipts)
+        .insert(
+            &crate::logic::schema::FreshKey {
+                thread: Id::<Document>::mint(),
+                by: bob_user,
+            }
+            .spell(),
+            fresh.to_hex(),
+        )
+        .expect("forge");
+    assert_eq!(
+        alice.apply_signed(
+            amendments,
+            Seq::<Relay>::new(4),
+            &json_since(doc, &before),
+            signer(&bob, amendments, bob_user)
+        ),
+        Err(MurmureError::Refused(Refusal::ForeignReceipt)),
+        "a thread the amendments and the segment name nowhere"
+    );
+
+    alice.fold_in_place(segment).expect("fold");
+    assert_eq!(
+        named_receipts(alice.doc(segment.document_id()).expect("held")),
+        [first_held, fresh_held],
+        "the fold keeps the fresh receipt"
+    );
+}
+
 /// An edit and a delete the lock refused come back as replays. The segment
 /// reads as the relay holds it until they are written again.
 #[test]

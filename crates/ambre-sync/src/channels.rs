@@ -755,15 +755,30 @@ impl SyncState {
                 });
             }
         };
+        let step = crate::sharing::ThreadStep::Create {
+            meta_key,
+            author,
+            exchange_key,
+        };
+        self.spawn_thread_task(tx, segment, (channel_id, root, thread), step);
+    }
+
+    /// Run [`crate::sharing::thread_task`] for `thread`, the thread of
+    /// `root` in `channel_id`, and answer the Logic thread through `tx`.
+    fn spawn_thread_task(
+        &self,
+        tx: ambre_bus::conduit::UnboundedSender<SyncEvent>,
+        segment: Id<Segment>,
+        (channel_id, root, thread): (Id<Channel>, Id<Message>, Id<Document>),
+        step: crate::sharing::ThreadStep,
+    ) {
         let params = crate::sharing::ThreadParams {
             channel_id,
             root,
             thread,
-            meta_key,
-            author,
+            step,
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
-            exchange_key,
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
@@ -778,6 +793,26 @@ impl SyncState {
                 result,
             });
         });
+    }
+
+    /// Ask the relay for a fresh receipt of the link of `thread`, when none
+    /// of the `receipts` its root holds counts (`SYNC-334`). The answer
+    /// reaches the Logic thread as a registration that found the link held.
+    pub(crate) fn handle_freshen_receipt(
+        &self,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+        receipts: Vec<ambre_bus::LinkReceipt>,
+    ) {
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        if crate::sharing::fresh_needed(channel_id, thread, &receipts) {
+            let step = crate::sharing::ThreadStep::Held;
+            self.spawn_thread_task(tx, segment, (channel_id, root, thread), step);
+        }
     }
 
     /// Ask the relay to delete a channel with every document it groups

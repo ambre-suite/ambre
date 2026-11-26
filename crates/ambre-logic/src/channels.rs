@@ -4838,6 +4838,99 @@ mod tests {
         );
     }
 
+    /// A fresh receipt, as the Murmure threads spec states it. A reply in a
+    /// thread its root names hands the Sync worker every receipt the root
+    /// holds. A first reply, whose root names nothing yet, hands none. The
+    /// relay's fresh receipt then leaves in a delta of the root's segment.
+    #[test]
+    fn a_reply_in_a_named_thread_asks_a_fresh_receipt_and_writes_it() {
+        type Receipt = ambre_core::FixedBytes<ambre_core::Signature>;
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, active, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "first", false));
+        let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
+        let first = Receipt::from_array([0x5c; 64]);
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+            receipt: Some(first),
+        });
+        state.grant_identity(thread);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: thread,
+            role: ambre_bus::Role::Owner,
+        });
+        let asks = |sent: &[SyncCommand]| {
+            sent.iter()
+                .filter_map(|c| match c {
+                    SyncCommand::FreshenReceipt {
+                        channel_id,
+                        segment,
+                        root,
+                        thread,
+                        receipts,
+                    } => Some((*channel_id, *segment, *root, *thread, receipts.clone())),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        assert!(asks(&drain(&sync)).is_empty(), "a first reply asks nothing");
+
+        command(&mut state, channel_id, reply_to(root, "second", false));
+        assert_eq!(
+            asks(&drain(&sync)),
+            [(
+                channel_id,
+                active,
+                root,
+                thread,
+                vec![ambre_bus::LinkReceipt {
+                    thread,
+                    signature: first
+                }]
+            )]
+        );
+
+        let fresh = Receipt::from_array([0x6d; 64]);
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment: active,
+            root,
+            thread,
+            receipt: Some(fresh),
+        });
+        let written: Vec<(Id<Document>, String)> = drain(&sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::SendUpdate {
+                    document_id,
+                    payload,
+                    ..
+                } => Some((
+                    document_id,
+                    String::from_utf8_lossy(payload.as_bytes()).into_owned(),
+                )),
+                _ => None,
+            })
+            .collect();
+        let [(document, delta)] = written.as_slice() else {
+            panic!("one delta, {written:?}");
+        };
+        assert_eq!(*document, active.document_id());
+        assert!(delta.contains("thread_receipts") && delta.contains(&fresh.to_hex()));
+
+        command(&mut state, channel_id, reply_to(root, "third", false));
+        let [(.., receipts)] = asks(&drain(&sync)).try_into().expect("one ask");
+        let signatures: Vec<Receipt> = receipts.iter().map(|r| r.signature).collect();
+        assert!(
+            signatures.contains(&first) && signatures.contains(&fresh),
+            "the next reply hands the fresh receipt too, {receipts:?}"
+        );
+    }
+
     /// A member who reads the root's link opens a thread the relay holds
     /// whole (the Murmure threads spec). So the root names this client's own thread only
     /// once its first update left, and a thread lost before that names

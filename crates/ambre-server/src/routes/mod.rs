@@ -179,6 +179,10 @@ pub fn api_router(
             axum::routing::post(register_thread),
         )
         .route(
+            "/channels/{id}/threads/receipt",
+            axum::routing::post(thread_receipt),
+        )
+        .route(
             "/channels/{id}/segments/{segment}/fold-lease",
             axum::routing::post(take_fold_lease),
         )

@@ -61,6 +61,12 @@ pub(crate) const SCENARIO_CALL: Id<ambre_core::id::Call> =
 pub(crate) const SCENARIO_RECEIPT: ambre_core::FixedBytes<ambre_core::Signature> =
     FixedBytes::from_array([0x7e; 64]);
 
+/// The fresh link receipt each member of the scenario adds beside the first
+/// one (`MURMURE-739`). It differs from [`SCENARIO_RECEIPT`], so its reading
+/// names its own root.
+pub(crate) const SCENARIO_FRESH: ambre_core::FixedBytes<ambre_core::Signature> =
+    FixedBytes::from_array([0x6d; 64]);
+
 /// The segment a list index collapses to.
 pub(crate) const ANY: &str = "*";
 
@@ -95,15 +101,17 @@ pub(crate) fn entry() -> Vec<u8> {
 /// The maps keyed by an identifier, whose keys are values and not schema.
 /// The PeerID registry each document carries is one of them
 /// (`ambre-spec-op-authorship.md section 3`).
-pub(crate) const KEYED_BY_ID: [&str; 13] = [
+pub(crate) const KEYED_BY_ID: [&str; 15] = [
     "amendments:amendments",
     "amendments:peers",
     "amendments:receipts",
+    "amendments:thread_receipts",
     "amendments:threads",
     "meta:peers",
     "segment:messages/*/call_end",
     "segment:messages/*/reactions",
     "segment:peers",
+    "segment:thread_receipts",
     "space:categories",
     "space:channels",
     "space:peers",
@@ -341,6 +349,9 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
             crate::message::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
+    state
+        .write_fresh_receipt((segment, root), thread, SCENARIO_FRESH, AUTHOR)
+        .expect("a fresh receipt");
 }
 
 /// The root of the scenario's thread: the first message of its segment. It
@@ -439,6 +450,9 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
     state
         .thread_linked(segment, root, thread, Some(SCENARIO_RECEIPT))
         .expect("record");
+    state
+        .write_fresh_receipt((segment, root), thread, SCENARIO_FRESH, MEMBER)
+        .expect("a fresh receipt by amendment");
     // A fold writes the segment's header and the `meta` entry
     // (`MURMURE-075`, `MURMURE-076`).
     let amendments = state.amendments_id(segment).expect("amended");
@@ -656,10 +670,46 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 
 /// The canonical document of the version a step leaves: that version's
 /// layout, holding what the step rewrites. Each step reads its own, so a step
-/// added later never moves what an earlier one writes. The registry holds no
-/// step yet, so no version has one.
+/// added later never moves what an earlier one writes.
 fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
-    panic!("the step from version {from} has no canonical document: write one here")
+    match from.get() {
+        // A version 1 segment: one root, its thread and its one receipt.
+        1 => {
+            use crate::logic::schema::{MessageKey, Root};
+            let doc = LoroDoc::new();
+            doc.set_peer_id(SEGMENT_PEER).expect("a peer");
+            crate::logic::schema::write_header(
+                &doc,
+                DocumentKind::Segment,
+                Id::<ambre_core::id::Channel>::from_bytes([0x0c; 16]),
+                Instant::<Authored>::new(1_700_000_000_000),
+            )
+            .expect("a header");
+            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 1_i64)
+                .expect("version 1");
+            let root = crate::logic::schema::Fields::<MessageKey>::new(
+                crate::logic::schema::root_list(&doc, Root::Messages)
+                    .push_container(loro::LoroMap::new())
+                    .expect("a root"),
+            );
+            root.insert(
+                MessageKey::Id,
+                Id::<Message>::from_bytes([0x0d; 16]).to_string(),
+            )
+            .expect("an id");
+            root.insert(
+                MessageKey::Thread,
+                Id::<Document>::from_bytes([0x0e; 16]).to_string(),
+            )
+            .expect("a thread");
+            root.insert(MessageKey::Receipt, SCENARIO_RECEIPT.to_hex())
+                .expect("a receipt");
+            doc.commit();
+            doc
+        }
+        _ => panic!("the step from version {from} has no canonical document: write one here"),
+    }
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical

@@ -38,6 +38,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-735` | `POST` | A fold MUST carry the link receipt of a recorded thread into its root, beside the thread. | this spec section 3; `MURMURE-484`, `MURMURE-732` | `ambre_murmure::logic::amending_tests::a_locked_record_carries_its_receipt_and_a_fold_keeps_it` -- after the fold, the segment holds the receipt beside the thread | none | verified |
 | `MURMURE-737` | `POST` | Given a removal whose census set threads apart (`SYNC-333`), the view MUST ask the owner, in one question that names each of those threads, whether to erase them. | this spec section 3; `ambre-spec-membership.md`, `SYNC-333` | `ambre_logic::channels::tests::a_confirmed_erasure_runs_the_revoke_again_with_its_threads_alone` -- the threads set apart reach the view; `ambre_murmure::tests::chrome_relay::the_unproven_threads_question_erases_on_erase_and_keeps_on_keep` -- the question opens and names each thread | none | verified |
 | `MURMURE-738` | `POST` | Erase MUST run each removal the census set apart again, with the erasure of the threads it set apart that the owner confirmed, and of no other. Keep MUST send nothing. | this spec section 3; `MURMURE-737`; `ambre-spec-membership.md`, `SYNC-333` | `ambre_logic::channels::tests::a_confirmed_erasure_runs_the_revoke_again_with_its_threads_alone` -- a confirmation of no thread set apart runs nothing, and one that names a thread past them runs the revoke again under its id, erasing the thread set apart alone; `ambre_murmure::tests::chrome_relay::the_unproven_threads_question_erases_on_erase_and_keeps_on_keep` -- Keep sends nothing, and Erase sends the erasure of the named threads once | none | verified |
+| `MURMURE-739` | `POST` | The check MUST accept a fresh link receipt only under the key of its writer and of a thread the document names. It MUST refuse a value that reads as no signature, and any removal. | this spec section 3, a fresh receipt; `MURMURE-733`; `ambre-spec-budgets.md section 6`, the fresh link receipts row | `ambre_murmure::logic::thread_tests::a_member_adds_a_fresh_receipt_under_their_own_key_alone` -- each member adds one beside the first receipt, and a removal names all three. An entry under another member's key, of a thread no root names, of no signature, under another spelling, or removed, is refused with its delta; `ambre_murmure::logic::amending_tests::a_fresh_receipt_of_a_locked_root_rides_in_the_amendments_and_a_fold_keeps_it` -- the same in the amendments | none | verified |
+| `MURMURE-740` | `POST` | A fold MUST carry each fresh link receipt of the amendments into its segment. | this spec section 3, a fresh receipt; `MURMURE-735`, `MURMURE-739` | `ambre_murmure::logic::amending_tests::a_fresh_receipt_of_a_locked_root_rides_in_the_amendments_and_a_fold_keeps_it` -- after the fold, the segment yields the first receipt and the fresh one | none | verified |
+| `MURMURE-741` | `POST` | Given a reply in a thread its root names, the client MUST hand the Sync worker every receipt the root holds. It MUST write a receipt the Sync worker answers for that root under its own key, unless the root holds it. | this spec section 3, a fresh receipt; `MURMURE-739`; `ambre-spec-membership.md`, `SYNC-334` | `ambre_logic::channels::tests::a_reply_in_a_named_thread_asks_a_fresh_receipt_and_writes_it` -- a first reply asks nothing, and a later one hands the first receipt. The answer leaves in a delta of the root's segment, and the next reply hands both; `ambre_murmure::logic::thread_tests::a_member_adds_a_fresh_receipt_under_their_own_key_alone` -- a receipt the root holds, or one of a thread it does not name, takes no entry | none | verified |
 | `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | `ambre_murmure::logic::thread_tests::an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread` -- each change writes the thread, and a delete leaves the count; `::another_member_reacts_to_a_reply_and_never_edits_it` -- the check takes a reaction, and an edit is refused; `ambre_logic::channels::tests::a_change_on_a_reply_leaves_for_its_thread` -- each change leaves under the thread | none | verified |
 | `MURMURE-538` | `POST` | An edit of a reply also sent to the channel MUST write the same edit to its copy. | this spec section 3; `MURMURE-109`; `MURMURE-084` | `ambre_logic::channels::tests::a_copy_follows_the_edit_and_the_delete_of_its_reply` -- the edit leaves under the thread, then under the copy's segment, where the copy reads it; `ambre_murmure::logic::thread_tests::a_copy_is_found_from_its_reply` -- the copy is found from its reply, and a reply sent alone has none; `ambre_murmure::logic::channel::threading::copy_id_tests::a_copy_differs_from_its_reply_and_from_every_other_copy` -- over generated identifiers, a copy never takes its reply's identifier, and two replies never share a copy | none | verified |
 | `MURMURE-539` | `POST` | A delete of a reply also sent to the channel MUST delete its copy too. | this spec section 3; `MURMURE-109`; `MURMURE-087` | `ambre_logic::channels::tests::a_copy_follows_the_edit_and_the_delete_of_its_reply` -- the copy reads deleted and empty, and a reaction stayed on the reply | none | verified |
@@ -72,7 +75,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 29 `verified`, 6 `unimplemented`. The engine tests hold the thread document, the
+* **Verification.** 32 `verified`, 6 `unimplemented`. The engine tests hold the thread document, the
   link, the count, the changes on a reply, a locked root and the mentions. The Logic tests hold the
   waits, the race, the watch and the read cursor. The Sync tests hold the signal, the light thread
   and the number a read reaches. The view's host tests hold the read a thread shown sends.
@@ -128,6 +131,18 @@ the record of a locked root (`MURMURE-732`). The delta that names the thread thu
 proof, and no later delta of another member replaces it (`MURMURE-733`). A removal names each
 receipt with its thread (`MURMURE-734`), and a fold keeps it (`MURMURE-735`). The census then
 refuses to erase a thread whose receipt verifies (`ambre-spec-membership.md`, `SYNC-330`).
+
+**A fresh receipt.** A rotation of the link key makes every older receipt count as none
+(`ambre-spec-zero-knowledge.md`, `ZK-058`). So a reply in a thread its root names hands the Sync
+worker every receipt the root holds. When none counts, the Sync worker asks the relay for the receipt
+of the link it holds (`SYNC-334`), and the client writes it (`MURMURE-741`).
+
+The receipt goes into the `thread_receipts` root of the segment, or of its amendments once locked.
+Its key names the thread and the writer, and only that writer writes it (`MURMURE-739`). So a member
+erases or shadows no receipt of another, and a garbage entry costs a hostile member its own entry
+alone. The root holds one entry per member at most (`ambre-spec-budgets.md section 6`). The census
+counts the thread when any receipt verifies, and a fold carries the entries into the segment
+(`MURMURE-740`).
 
 **A thread with no proof.** A member can name a thread with code of its own, under no receipt. A
 relay can hide that thread, and nothing tells it from a phantom. So the census erases no such
@@ -187,6 +202,8 @@ is `crates/ambre-murmure/src/logic/runtime/threads.rs`, and the Sync side is `th
 | The copy's identifier derives from its reply's | a key on the copy naming its reply | a new key raises the frozen schema version, and an older build refuses every newer document whole |
 | The author writes the change to both | the copy reads its text through the reply | a member who holds no thread would still read a deleted text |
 | The receipt takes a key of its own beside `thread` | the receipt inside the value of `thread` | every reader of the field parses one document identifier, so a joined value would name no thread for them. No release froze the shape yet, so the key enters section `v1` (`SCHEMA-019`) |
+| A fresh receipt is one entry per thread and member | an append-only set of receipts, capped by a count | a hostile member fills the cap with garbage signatures, and no member can add the receipt that counts. The check cannot tell garbage apart: each client holds its own link key, so a check that verified would split the verdict (`MURMURE-079`) |
+| A fresh receipt is one entry per thread and member | a fresh receipt in place of the first one | a member would replace a receipt that counts for a client that still holds the older key |
 | The receipt is text in hex | binary bytes | a delta carries the document as JSON, which reads a byte string back as a list of numbers. The sender and the receiver would then hold two values |
 
 ---

@@ -513,10 +513,13 @@ key of its own relay into a copy of the files, with no rebuild (`ambre-spec-serv
 **A rotation retires the older key whole.** A leaked seed signs any receipt, and a receipt over a
 thread that does not exist blocks each removal of its channel. A new seed is the only answer, so
 the slot holds the new key alone, and the older key counts nothing (`ZK-058`). The relay signs
-again each link its store holds, under the new key, at the next registration
-(`ambre-spec-sequencer.md`, `SRV-370`). A link the leak forged is in no store, so it gets no new
-receipt. The browser asks for the Sync worker again before each use, so a reload takes the new key
-(`ambre-spec-server.md`, `SRV-371`).
+each held link again under the new key, at a registration or an ask (`ambre-spec-sequencer.md`,
+`SRV-370`, `SRV-374`). A link the leak forged is in no
+store, so it gets no new receipt. The browser asks for the Sync worker again before each use, so a
+reload takes the new key (`ambre-spec-server.md`, `SRV-371`).
+
+The ask stores nothing (`ambre-spec-sequencer.md`, `SRV-375`). The relay learns that this member asked
+about this thread, as it learns each fetch of a document of the channel. Nothing of `ZK-015` widens.
 
 **A reader checks a patched client.** The patch changes 32 bytes of the Sync worker alone
 (`SRV-367`). A reader sets them to zero with `scripts/link_key.py zero`. The file then has the

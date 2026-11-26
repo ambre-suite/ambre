@@ -348,7 +348,9 @@ pub enum LogicEvent {
     /// answering [`SyncCommand::CreateThread`](crate::SyncCommand::CreateThread).
     /// A registration that lost its race names the winner's, and the Sync
     /// worker deleted its own (`SRV-214`). `receipt` is the relay's
-    /// signature over the link, which the root keeps (`SRV-363`).
+    /// signature over the link, which the root keeps (`SRV-363`). It also
+    /// answers [`SyncCommand::FreshenReceipt`](crate::SyncCommand::FreshenReceipt)
+    /// with a fresh receipt that counts (`SYNC-334`).
     ThreadLinked {
         channel_id: Id<Channel>,
         segment: Id<Segment>,

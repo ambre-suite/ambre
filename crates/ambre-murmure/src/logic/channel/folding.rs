@@ -551,6 +551,24 @@ fn fold_into(
             message.insert(MessageKey::Edited, true)?;
         }
     }
+    // The fold erases the amendments, so each fresh receipt they hold moves
+    // into the segment, in key order, so two folds write alike
+    // (`MURMURE-740`).
+    if let Some(fresh) = schema::held_root_map(amendments, Root::ThreadReceipts.as_str()) {
+        let mut entries = Vec::new();
+        fresh.for_each(|key, value| {
+            if let loro::ValueOrContainer::Value(loro::LoroValue::String(hex)) = value {
+                entries.push((key.to_owned(), hex.to_string()));
+            }
+        });
+        entries.sort_unstable();
+        let target = crate::logic::schema::root_map(segment, Root::ThreadReceipts);
+        for (key, hex) in entries {
+            if schema::string_value(target.get(&key)).as_deref() != Some(hex.as_str()) {
+                target.insert(&key, hex)?;
+            }
+        }
+    }
     let header = crate::logic::schema::header(segment);
     header.insert(HeaderKey::Folded, amendments_id.to_string())?;
     header.insert(

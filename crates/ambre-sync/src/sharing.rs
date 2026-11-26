@@ -1449,19 +1449,49 @@ pub(crate) struct ThreadParams {
     pub channel_id: Id<Channel>,
     pub root: Id<Message>,
     pub thread: Id<Document>,
-    /// The current key of the channel's `meta`, which opens every document
-    /// of the channel.
-    pub meta_key: DocumentKey,
-    /// This user, who creates the document.
-    pub author: Author,
+    pub step: ThreadStep,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
-    pub exchange_key: StaticSecret,
+}
+
+/// What [`thread_task`] asks the relay before it reads the link.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a task holds one step, moved once, so a box would only add an allocation"
+)]
+pub(crate) enum ThreadStep {
+    /// Create the thread document, then register it for the root
+    /// (`SRV-213`).
+    Create {
+        /// The current key of the channel's `meta`, which opens every
+        /// document of the channel.
+        meta_key: DocumentKey,
+        /// This user, who creates the document.
+        author: Author,
+        exchange_key: StaticSecret,
+    },
+    /// Ask the receipt of the link the relay holds for the root, and create
+    /// nothing (`SYNC-334`). The worker asks only when no receipt of the root
+    /// counts ([`fresh_needed`]). One task serves both, so the worker holds
+    /// one copy of the path that reads a link.
+    Held,
+}
+
+/// Whether a root that holds `receipts` for `thread` needs a fresh receipt:
+/// none of them counts under the pinned link key (`SYNC-334`).
+pub(crate) fn fresh_needed(
+    channel_id: Id<Channel>,
+    thread: Id<Document>,
+    receipts: &[ambre_bus::LinkReceipt],
+) -> bool {
+    !crate::erasure::linked(channel_id, thread, receipts)
 }
 
 /// Create the thread document of a root under the key of `meta`, then
 /// register it for the root (`SRV-213`). Returns the document the relay
 /// holds for the root, with the relay's receipt of that link (`SRV-363`).
+/// [`ThreadStep::Held`] creates nothing and asks that receipt alone
+/// (`SYNC-334`).
 ///
 /// A registration that lost its race deletes the document it created
 /// (`SYNC-169`). A failed request deletes nothing, as for amendments.
@@ -1476,26 +1506,37 @@ pub(crate) async fn thread_task<H: ShareHttp>(
     p: ThreadParams,
 ) -> Result<(Id<Document>, Option<FixedBytes<Signature>>), http::HttpError> {
     let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
-    let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
-    let body = http::CreateDocumentRequest {
-        doc_type: ambre_core::DocType::Murmure,
-        name_enc: None,
-        doc_key_enc,
-        document_id: Some(p.thread),
-        entry: Some(entry),
-        space: ambre_core::DocumentScope::Personal,
+    let route = match &p.step {
+        ThreadStep::Create {
+            meta_key,
+            author,
+            exchange_key,
+        } => {
+            let (doc_key_enc, entry) = creation(p.thread, meta_key, exchange_key, author)?;
+            let body = http::CreateDocumentRequest {
+                doc_type: ambre_core::DocType::Murmure,
+                name_enc: None,
+                doc_key_enc,
+                document_id: Some(p.thread),
+                entry: Some(entry),
+                space: ambre_core::DocumentScope::Personal,
+            };
+            http.post_json::<_, http::CreateDocumentResponse>(&base.route("/documents"), &body)
+                .await?;
+            "threads"
+        }
+        ThreadStep::Held => "threads/receipt",
     };
-    http.post_json::<_, http::CreateDocumentResponse>(&base.route("/documents"), &body)
-        .await?;
     let body = http::RegisterThreadRequest {
         root: p.root,
         thread: p.thread,
     };
-    let url = base.route(format!("/channels/{}/threads", p.channel_id));
+    let url = base.route(format!("/channels/{}/{route}", p.channel_id));
     let linked = http
         .post_json::<_, http::ThreadResponse>(&url, &body)
         .await?;
-    if linked.created == ambre_core::Creation::Existing {
+    let created = matches!(p.step, ThreadStep::Create { .. });
+    if created && linked.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{}", p.thread));
         if let Err(e) = http.delete(&url, &()).await {
             crate::log::warning!(
@@ -4025,16 +4066,84 @@ mod tests {
         );
     }
 
+    /// Holds `SYNC-334`. A root under a receipt that counts needs no fresh
+    /// one, whatever else it holds. One under none asks the receipt of the
+    /// link the relay holds, creates and deletes nothing, and takes the
+    /// answer only when it counts. A receipt over another thread, over
+    /// another channel or by another key gives nothing.
+    #[tokio::test]
+    async fn a_root_under_no_receipt_that_counts_asks_a_fresh_one() {
+        let thread = Id::<Document>::mint();
+        let mut params = thread_params(thread);
+        params.step = ThreadStep::Held;
+        let (channel, root) = (params.channel_id, params.root);
+        let held = |signature| ambre_bus::LinkReceipt { thread, signature };
+        let garbage = FixedBytes::<Signature>::from_array([7; 64]);
+        let valid = dev_receipt(channel, thread);
+        assert!(!fresh_needed(
+            channel,
+            thread,
+            &[held(garbage), held(valid)]
+        ));
+        assert!(fresh_needed(channel, thread, &[held(garbage)]));
+        assert!(fresh_needed(channel, thread, &[]));
+
+        let answer = |receipt: Option<FixedBytes<Signature>>| {
+            let mut answer = serde_json::json!({ "thread": thread.to_string(), "created": false });
+            if let Some(receipt) = receipt {
+                answer["receipt"] = serde_json::to_value(receipt).unwrap();
+            }
+            answer
+        };
+        let http = FakeHttp::new(vec![Ok(answer(Some(valid)))]);
+        assert_eq!(
+            thread_task(&http, params).await,
+            Ok((thread, Some(valid))),
+            "the relay's fresh receipt passes through"
+        );
+        assert!(
+            matches!(http.calls().as_slice(), [Call::Post(url, body)]
+                if url.ends_with(&format!("/api/channels/{channel}/threads/receipt"))
+                    && body["root"] == root.to_string()),
+            "one ask, of that link, and no document created or deleted"
+        );
+
+        let unproven = [
+            None,
+            Some(garbage),
+            Some(dev_receipt(channel, Id::<Document>::mint())),
+            Some(dev_receipt(Id::<Channel>::mint(), thread)),
+            Some(FixedBytes::from_array(
+                ed25519_dalek::Signer::sign(
+                    &author().signing_key,
+                    ambre_protocol::thread_erasure::link_transcript(channel, thread).as_bytes(),
+                )
+                .to_bytes(),
+            )),
+        ];
+        for receipt in unproven {
+            let http = FakeHttp::new(vec![Ok(answer(receipt))]);
+            let mut p = thread_params(thread);
+            (p.channel_id, p.step) = (channel, ThreadStep::Held);
+            assert!(
+                thread_task(&http, p).await.is_err(),
+                "{receipt:?} is no fresh receipt"
+            );
+        }
+    }
+
     fn thread_params(thread: Id<Document>) -> ThreadParams {
         ThreadParams {
             channel_id: Id::<Channel>::mint(),
             root: Id::<Message>::mint(),
             thread,
-            meta_key: DocumentKey::generate(),
-            author: author(),
+            step: ThreadStep::Create {
+                meta_key: DocumentKey::generate(),
+                author: author(),
+                exchange_key: keypair(1).0,
+            },
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
-            exchange_key: keypair(1).0,
         }
     }
 

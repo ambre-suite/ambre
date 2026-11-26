@@ -34,7 +34,7 @@ pub mod chrome;
 
 pub use logic::channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY, FOLD_DELAY, FinalSnapshot, FoldSnapshot,
-    Linked, LinkedOpening, Named, Relocated, Replay, Replied, SEGMENT_MESSAGES,
+    Linked, LinkedOpening, Named, Relocated, Replay, Replied, RootProof, SEGMENT_MESSAGES,
     SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, SeekStep, Sent, Settled, Successor, SweepStep, Swept,
     ThreadLinked, ThreadTarget,
 };
