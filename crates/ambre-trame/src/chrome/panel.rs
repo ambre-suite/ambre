@@ -73,6 +73,15 @@ fn reach(id: StaticKey<ambre_core::Properties>) -> String {
 }
 
 /// The label of the property `id`, from its description.
+/// The title of the property `id` in the interface language, which a field
+/// shows as its label: the field reads the words of its property.
+fn title(id: StaticKey<ambre_core::Properties>) -> &'static str {
+    panel::PROPERTIES
+        .iter()
+        .find(|p| p.id == id)
+        .map_or("", |p| ambre_commands::shown(&p.title))
+}
+
 fn label(id: StaticKey<ambre_core::Properties>) -> String {
     panel::PROPERTIES
         .iter()
@@ -132,10 +141,10 @@ pub(super) fn number_format(style: StyleState, on_style: Callback<StylePatch>) -
     view! {
         <Select
             label=label(panel::NUMBER_FORMAT)
-            choices=NUMBER_FORMATS.iter().map(|(_, l)| ChoiceView::text(*l)).collect()
+            choices=NUMBER_FORMATS.iter().map(|(_, l)| ChoiceView::text(ambre_commands::shown(l))).collect()
             selected=selected
             on_pick=pick
-            placeholder="Custom"
+            placeholder=ambre_commands::tr!("Custom", "Personnalis\u{e9}")
             reach=Reach::Property(panel::NUMBER_FORMAT)
         />
     }
@@ -155,7 +164,7 @@ pub(super) fn fill(
                 icon=icondata::BiColorFillSolid
                 current=style.bg
                 default=Signal::derive(move || theme_bg_default(theme.get()))
-                reset_label="No fill (transparent)"
+                reset_label=ambre_commands::tr!("No fill (transparent)", "Aucun remplissage (transparent)")
                 on_pick=Callback::new(move |bg: Option<Rgb>| {
                     on_style.run(StylePatch { bg: Some(bg), ..Default::default() })
                 })
@@ -202,7 +211,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
             })
         };
         view! {
-            <Field label="Name">
+            <Field label=ambre_commands::tr!("Name", "Nom")>
                 <input
                     class="ambre-kit-text"
                     type="text"
@@ -225,16 +234,16 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                     }
                 />
             </Field>
-            <Field label="Freeze">
+            <Field label=title(panel::FREEZE)>
                 <Select
                     label=label(panel::FREEZE)
                     choices=command_choices(
                         &panel::FREEZE_COMMANDS,
-                        &["None", "Up to this row", "Up to this column"],
+                        &[ambre_commands::tr!("None", "Aucun"), ambre_commands::tr!("Up to this row", "Jusqu'\u{e0} cette ligne"), ambre_commands::tr!("Up to this column", "Jusqu'\u{e0} cette colonne")],
                     )
                     selected=place(&panel::FREEZE_COMMANDS, |s| panel::freeze_choice(s.frozen))
                     on_pick=run_place(&panel::FREEZE_COMMANDS, on_command)
-                    placeholder="Rows and columns"
+                    placeholder=ambre_commands::tr!("Rows and columns", "Lignes et colonnes")
                     reach=Reach::Property(panel::FREEZE)
                 />
             </Field>
@@ -244,16 +253,16 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
 
     let print_section = move || {
         view! {
-            <Field label="Paper">
+            <Field label=title(panel::PAPER)>
                 <Select
                     label=label(panel::PAPER)
-                    choices=command_choices(&panel::PAPER_COMMANDS, &["A4", "A3", "Letter", "Legal"])
+                    choices=command_choices(&panel::PAPER_COMMANDS, &["A4", "A3", ambre_commands::tr!("Letter", "Lettre US"), ambre_commands::tr!("Legal", "L\u{e9}gal US")])
                     selected=place(&panel::PAPER_COMMANDS, |s| Some(panel::paper_choice(s.page.paper)))
                     on_pick=run_place(&panel::PAPER_COMMANDS, on_command)
                     reach=Reach::Property(panel::PAPER)
                 />
             </Field>
-            <Field label="Orientation">
+            <Field label=title(panel::ORIENTATION)>
                 <SegmentBar
                     label=label(panel::ORIENTATION)
                     choices=vec![
@@ -265,13 +274,13 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                     reach=Reach::Property(panel::ORIENTATION)
                 />
             </Field>
-            <Field label="Margins">
+            <Field label=title(panel::MARGINS)>
                 <Select
                     label=label(panel::MARGINS)
-                    choices=command_choices(&panel::MARGIN_COMMANDS, &["Normal", "Narrow", "Wide"])
+                    choices=command_choices(&panel::MARGIN_COMMANDS, &[ambre_commands::tr!("Normal", "Normales"), ambre_commands::tr!("Narrow", "\u{c9}troites"), ambre_commands::tr!("Wide", "Larges")])
                     selected=place(&panel::MARGIN_COMMANDS, |s| panel::margin_choice(s.page.margins))
                     on_pick=run_place(&panel::MARGIN_COMMANDS, on_command)
-                    placeholder="Custom"
+                    placeholder=ambre_commands::tr!("Custom", "Personnalis\u{e9}")
                     reach=Reach::Property(panel::MARGINS)
                 />
             </Field>
@@ -308,46 +317,46 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 .map(Pos::<ChoiceRow>::from_usize)
         });
         view! {
-            <Field label="Number">{number_format(style, on_style)}</Field>
-            <Field label="Decimals">
+            <Field label=ambre_commands::tr!("Number", "Nombre")>{number_format(style, on_style)}</Field>
+            <Field label=title(panel::DECIMALS)>
                 <span class="ambre-kit-control" data-reach=reach(panel::DECIMALS)>
                     <IconButton
                         icon=icondata::LuDecimalsArrowLeft
-                        label="Fewer decimals"
+                        label=ambre_commands::tr!("Fewer decimals", "Moins de d\u{e9}cimales")
                         availability=decimals
                         on_press=Callback::new(move |()| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::FEWER), ..Default::default() }))
                     />
                     <IconButton
                         icon=icondata::LuDecimalsArrowRight
-                        label="More decimals"
+                        label=ambre_commands::tr!("More decimals", "Plus de d\u{e9}cimales")
                         availability=decimals
                         on_press=Callback::new(move |()| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::MORE), ..Default::default() }))
                     />
                 </span>
             </Field>
-            <Field label="Font">
+            <Field label=title(panel::FONT)>
                 <span class="ambre-kit-control" data-reach=reach(panel::FONT)>
                     <FontPopover style=style on_style=on_style />
                 </span>
             </Field>
-            <Field label="Size">
+            <Field label=title(panel::SIZE)>
                 <span class="ambre-kit-control" data-reach=reach(panel::SIZE)>
                     <FontSizeSelect
                         current=Signal::derive(move || style.size.get())
                         on_pick=Callback::new(move |size: Option<FontSize>| {
                             on_style.run(StylePatch { size: Some(size), ..Default::default() });
                         })
-                        auto_label="Default"
+                        auto_label=ambre_commands::tr!("Default", "Par d\u{e9}faut")
                     />
                 </span>
             </Field>
-            <Field label="Style">
+            <Field label=ambre_commands::tr!("Style", "Style")>
                 {toggle(registry::BOLD, Signal::derive(move || Pressed::from_bool(style.bold.get().as_bool())))}
                 {toggle(registry::ITALIC, Signal::derive(move || Pressed::from_bool(style.italic.get().as_bool())))}
                 <span class="ambre-kit-control" data-reach=reach(panel::UNDERLINE)>
                     <IconButton
                         icon=icondata::BsTypeUnderline
-                        label="Underline"
+                        label=title(panel::UNDERLINE)
                         pressed=Some(Signal::derive(move || Pressed::from_bool(style.underline.get().as_bool())))
                         on_press=Callback::new(move |()| on_style.run(StylePatch {
                             underline: Some(style.underline.get_untracked().flipped()),
@@ -358,7 +367,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 <span class="ambre-kit-control" data-reach=reach(panel::STRIKETHROUGH)>
                     <IconButton
                         icon=icondata::BsTypeStrikethrough
-                        label="Strikethrough"
+                        label=title(panel::STRIKETHROUGH)
                         pressed=Some(Signal::derive(move || Pressed::from_bool(style.strikethrough.get().as_bool())))
                         on_press=Callback::new(move |()| on_style.run(StylePatch {
                             strikethrough: Some(style.strikethrough.get_untracked().flipped()),
@@ -367,14 +376,14 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                     />
                 </span>
             </Field>
-            <Field label="Colours">
+            <Field label=ambre_commands::tr!("Colours", "Couleurs")>
                 <span class="ambre-kit-control" data-reach=reach(panel::TEXT_COLOUR)>
                     <ColorPopover
                         title=label(panel::TEXT_COLOUR)
                         icon=icondata::BiFontColorRegular
                         current=style.fg
                         default=Signal::derive(move || theme_fg_default(theme.get()))
-                        reset_label="Automatic"
+                        reset_label=ambre_commands::tr!("Automatic", "Automatique")
                         on_pick=Callback::new(move |fg: Option<Rgb>| {
                             on_style.run(StylePatch { fg: Some(fg), ..Default::default() })
                         })
@@ -382,10 +391,10 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 </span>
                 {fill(style, theme, on_style)}
             </Field>
-            <Field label="Horizontal">
+            <Field label=ambre_commands::tr!("Horizontal", "Horizontal")>
                 <SegmentBar
                     label=label(panel::H_ALIGN)
-                    choices=H_ALIGNS.iter().map(|(_, i, l)| ChoiceView::icon(*l, i)).collect()
+                    choices=H_ALIGNS.iter().map(|(_, i, l)| ChoiceView::icon(ambre_commands::shown(l), i)).collect()
                     selected=h_place
                     on_pick=Callback::new(move |p: Pos<ChoiceRow>| {
                         if let Some((a, _, _)) = p.to_index().and_then(|i| H_ALIGNS.get(i)) {
@@ -395,10 +404,10 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                     reach=Reach::Property(panel::H_ALIGN)
                 />
             </Field>
-            <Field label="Vertical">
+            <Field label=ambre_commands::tr!("Vertical", "Vertical")>
                 <SegmentBar
                     label=label(panel::V_ALIGN)
-                    choices=V_ALIGNS.iter().map(|(_, i, l)| ChoiceView::icon(*l, i)).collect()
+                    choices=V_ALIGNS.iter().map(|(_, i, l)| ChoiceView::icon(ambre_commands::shown(l), i)).collect()
                     selected=v_place
                     on_pick=Callback::new(move |p: Pos<ChoiceRow>| {
                         if let Some((a, _, _)) = p.to_index().and_then(|i| V_ALIGNS.get(i)) {
@@ -410,7 +419,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                 <span class="ambre-kit-control" data-reach=reach(panel::WRAP)>
                     <IconButton
                         icon=icondata::BsTextWrap
-                        label="Wrap text"
+                        label=title(panel::WRAP)
                         pressed=Some(Signal::derive(move || Pressed::from_bool(style.wrap.get().as_bool())))
                         on_press=Callback::new(move |()| on_style.run(StylePatch {
                             wrap: Some(style.wrap.get_untracked().flipped()),
@@ -419,7 +428,7 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
                     />
                 </span>
             </Field>
-            <Field label="Borders">
+            <Field label=title(panel::BORDERS)>
                 <span class="ambre-kit-control" data-reach=reach(panel::BORDERS)>
                     <BordersPopover style=style on_style=on_style />
                 </span>
@@ -489,28 +498,37 @@ pub fn trame_panel(signals: TramePanelSignals) -> PanelContent {
             .iter()
             .filter_map(|&key| {
                 Some(match key {
-                    k if k == panel::SHEET => {
-                        PanelSection::new(k, "Sheet", icondata::MdiTableLarge, sheet_section)
-                    }
-                    k if k == panel::CELLS => {
-                        PanelSection::new(k, "Cells", icondata::MdiFormatPaint, cells)
-                    }
+                    k if k == panel::SHEET => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Sheet", "Feuille"),
+                        icondata::MdiTableLarge,
+                        sheet_section,
+                    ),
+                    k if k == panel::CELLS => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Cells", "Cellules"),
+                        icondata::MdiFormatPaint,
+                        cells,
+                    ),
                     k if k == panel::ROWS_COLS => PanelSection::new(
                         k,
-                        "Rows and columns",
+                        ambre_commands::tr!("Rows and columns", "Lignes et colonnes"),
                         icondata::MdiTableRowPlusAfter,
                         rows_cols,
                     ),
                     k if k == panel::SORT_FILTER => PanelSection::new(
                         k,
-                        "Sort and filter",
+                        ambre_commands::tr!("Sort and filter", "Trier et filtrer"),
                         icondata::MdiFilterOutline,
                         sort_filter,
                     ),
-                    k if k == panel::PRINT => {
-                        PanelSection::new(k, "Print", icondata::LuPrinter, print_section)
-                            .folded_first()
-                    }
+                    k if k == panel::PRINT => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Print", "Imprimer"),
+                        icondata::LuPrinter,
+                        print_section,
+                    )
+                    .folded_first(),
                     _ => return None,
                 })
             })

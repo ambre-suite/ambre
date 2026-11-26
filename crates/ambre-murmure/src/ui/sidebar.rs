@@ -643,11 +643,11 @@ impl PhoneTab {
 
     /// The name of the tab, which its button shows and announces (`MURMURE-719`).
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            Self::Channels => "Channels",
-            Self::Direct => "Direct messages",
-            Self::Search => "Search",
+            Self::Channels => ambre_commands::tr!("Channels", "Canaux"),
+            Self::Direct => ambre_commands::tr!("Direct messages", "Messages directs"),
+            Self::Search => ambre_commands::tr!("Search", "Rechercher"),
         }
     }
 
@@ -856,6 +856,19 @@ impl LiveCalls {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `SETTINGS-053`: a word of the Murmure chrome shows in the interface
+    /// language of the page: the tabs of the phone bar and the notices.
+    #[test]
+    fn the_phone_tabs_and_the_notices_read_the_interface_language() {
+        ambre_commands::show_locale(ambre_commands::Locale::Fr);
+        let tabs: Vec<&str> = PhoneTab::ALL.iter().map(|t| t.label()).collect();
+        let notice = ambre_commands::shown(&crate::ui::notices::CHANNEL_NOT_OPENED);
+        ambre_commands::show_locale(ambre_commands::Locale::En);
+        assert_eq!(tabs, ["Canaux", "Messages directs", "Rechercher"]);
+        assert!(notice.starts_with("Ce canal"), "{notice}");
+        assert_eq!(PhoneTab::Channels.label(), "Channels");
+    }
 
     /// The debug form of the sidebar counts the peers of a direct message,
     /// and names none of them.

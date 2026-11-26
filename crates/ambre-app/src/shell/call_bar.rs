@@ -294,9 +294,10 @@ fn RosterButton(
             .get()
             .into_iter()
             .map(|member| {
-                let name = relay
-                    .member_name(member)
-                    .map_or_else(|| "A participant".to_owned(), |n| n.as_str().to_owned());
+                let name = relay.member_name(member).map_or_else(
+                    || ambre_chrome::commands::tr!("A participant", "Un participant").to_owned(),
+                    |n| n.as_str().to_owned(),
+                );
                 let (titled, pressed, icon) = (pinned.clone(), pinned.clone(), pinned.clone());
                 // A pin acts on one participant, so it runs no verb of the palette.
                 let tip = Signal::derive(move || CommandTip::of(pin_command(member, titled.get())));
@@ -466,13 +467,13 @@ fn DevicePanel(
         <div class="murmure-call-panel" role="group" aria-label="Call devices">
             <DeviceSelect
                 kind=DeviceKind::Microphone
-                label="Microphone"
+                label=ambre_chrome::commands::tr!("Microphone", "Micro")
                 entries=Signal::derive(move || panel.get().microphones)
             />
             {move || panel.get().speakers.map(|speakers| view! {
                 <DeviceSelect
                     kind=DeviceKind::Speaker
-                    label="Speaker"
+                    label=ambre_chrome::commands::tr!("Speaker", "Haut-parleur")
                     entries=Signal::derive(move || speakers.clone())
                 />
             })}
@@ -556,7 +557,7 @@ fn CallVolumes(
                     <Slider
                         text=name.clone()
                         of=SliderOf::Volume
-                        name=format!("Volume of {name}")
+                        name=ambre_chrome::commands::trf!("Volume of {name}", "Volume de {name}")
                         value=Signal::derive(move || slider_of_volume(volumes.get().of(member)))
                         drag=drag
                         on_input=on_volume
@@ -569,9 +570,9 @@ fn CallVolumes(
         <div class="murmure-call-volumes" role="group" aria-label="Call volumes">
             {move || offers.then(&volume_rows)}
             <Slider
-                text="Microphone gain".to_owned()
+                text=ambre_chrome::commands::tr!("Microphone gain", "Gain du micro").to_owned()
                 of=SliderOf::Gain
-                name="Microphone gain".to_owned()
+                name=ambre_chrome::commands::tr!("Microphone gain", "Gain du micro").to_owned()
                 value=Signal::derive(move || slider_of_gain(gain_shown.get().factor()))
                 drag=gain_drag
                 on_input=on_gain
@@ -583,11 +584,11 @@ fn CallVolumes(
                     prop:checked=move || gain_checked.get() == Gain::Automatic
                     on:change=on_automatic
                 />
-                "Automatic gain"
+                {ambre_chrome::commands::tr!("Automatic gain", "Gain automatique")}
             </label>
             <meter
                 class="murmure-call-meter"
-                aria-label="Microphone level"
+                aria-label=ambre_chrome::commands::tr!("Microphone level", "Niveau du micro")
                 min="0"
                 max="1"
                 prop:value=move || f64::from(level.get().get())
@@ -862,7 +863,10 @@ pub(super) fn CallFloat(
         from_name
             .get()
             .and_then(|(channel, _)| relay.sidebar.with(|s| s.name_of(channel)))
-            .map_or_else(|| "Call".to_owned(), Validated::into_string)
+            .map_or_else(
+                || ambre_chrome::commands::tr!("Call", "Appel").to_owned(),
+                Validated::into_string,
+            )
     });
     let participants = crate::call_volumes::participants();
     let faces = Signal::derive(move || {
@@ -960,7 +964,7 @@ pub(super) fn CallFloat(
                 node_ref=node
                 class="murmure-call-float"
                 role="region"
-                aria-label="Call in progress"
+                aria-label=ambre_chrome::commands::tr!("Call in progress", "Appel en cours")
                 data-mini=move || match (mini.get(), mini_shows.get()) {
                     (Mini::Folded, _) => None,
                     (Mini::Open, MiniShows::Faces) => Some("faces"),
@@ -983,7 +987,7 @@ pub(super) fn CallFloat(
                 <button
                     r#type="button"
                     class="murmure-float-grip"
-                    aria-label=move || format!("Back to the call of {}", channel_name.get())
+                    aria-label=move || ambre_chrome::commands::trf!("Back to the call of {}", "Revenir \u{e0} l'appel de {}", channel_name.get())
                     on:click=move |_| back.run(())
                     on:pointerdown=move |ev: web_sys::PointerEvent| {
                         if ev.pointer_type() == "mouse" {
@@ -1000,8 +1004,8 @@ pub(super) fn CallFloat(
                     r#type="button"
                     class="murmure-float-faces"
                     aria-label=move || match mini.get() {
-                        Mini::Folded => "Show the video of the call",
-                        Mini::Open => "Hide the video of the call",
+                        Mini::Folded => ambre_chrome::commands::tr!("Show the video of the call", "Afficher la vid\u{e9}o de l'appel"),
+                        Mini::Open => ambre_chrome::commands::tr!("Hide the video of the call", "Masquer la vid\u{e9}o de l'appel"),
                     }
                     aria-pressed=move || {
                         ambre_chrome::Pressed::from_bool(mini.get() == Mini::Open).aria()

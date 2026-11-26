@@ -1465,7 +1465,9 @@ impl MurmureView {
         .collect();
         // An edit names itself in the strip, and how to leave it.
         let typing = match writes_in {
-            Some(of) if self.composer.editing(of) => Some(EDITING_LINE.to_owned()),
+            Some(of) if self.composer.editing(of) => {
+                Some(ambre_commands::shown(&EDITING_LINE).to_owned())
+            }
             _ => typing_line(&names),
         };
         let pen = Pen {

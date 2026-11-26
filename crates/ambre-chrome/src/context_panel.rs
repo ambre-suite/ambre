@@ -244,8 +244,14 @@ impl PanelContent {
 /// The words of the button that moves the panel to the other side.
 fn dock_label(side: DockSide) -> &'static str {
     match side {
-        DockSide::Right => "Dock the panel to the left",
-        DockSide::Left => "Dock the panel to the right",
+        DockSide::Right => ambre_commands::tr!(
+            "Dock the panel to the left",
+            "Ancrer le panneau \u{e0} gauche"
+        ),
+        DockSide::Left => ambre_commands::tr!(
+            "Dock the panel to the right",
+            "Ancrer le panneau \u{e0} droite"
+        ),
     }
 }
 
@@ -405,7 +411,7 @@ pub fn ContextPanel(
         <aside
             class="ambre-ctx-panel"
             node_ref=panel_ref
-            aria-label="Context panel"
+            aria-label=ambre_commands::tr!("Context panel", "Panneau contextuel")
             data-side=move || side.get().as_str()
             data-fold=move || fold.get().as_str()
             style:--ctx-panel-w=move || format!("{}px", width.get().get().get())
@@ -414,7 +420,7 @@ pub fn ContextPanel(
                 class="ambre-ctx-edge"
                 role="separator"
                 aria-orientation="vertical"
-                aria-label="Panel width"
+                aria-label=ambre_commands::tr!("Panel width", "Largeur du panneau")
                 aria-valuemin=PanelWidth::MIN.get().get()
                 aria-valuemax=PanelWidth::MAX.get().get()
                 aria-valuenow=move || width.get().get().get()
@@ -431,7 +437,7 @@ pub fn ContextPanel(
                         <crate::IconButton
                         look=crate::IconLook::Ghost
                             icon=side_icon(side.get(), Fold::Rail)
-                            label="Open the panel"
+                            label=ambre_commands::tr!("Open the panel", "Ouvrir le panneau")
                             chord=Some(PANEL_CHORD)
                             size=crate::ControlSize::Large
                                                         on_press=Callback::new(move |()| fold.set(Fold::Open))
@@ -467,7 +473,7 @@ pub fn ContextPanel(
                             <crate::IconButton
                         look=crate::IconLook::Ghost
                                 icon=side_icon(side.get(), Fold::Open)
-                                label="Collapse the panel"
+                                label=ambre_commands::tr!("Collapse the panel", "R\u{e9}duire le panneau")
                                 chord=Some(PANEL_CHORD)
                                                                 on_press=Callback::new(move |()| fold.set(Fold::Rail))
                                 {..}

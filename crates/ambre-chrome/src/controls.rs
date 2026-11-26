@@ -717,7 +717,7 @@ pub fn Stepper(
                 type="text"
                 inputmode="decimal"
                 aria-label=label
-                placeholder=move || text.get().is_none().then_some("Mixed")
+                placeholder=move || text.get().is_none().then_some(ambre_commands::tr!("Mixed", "Mixte"))
                 prop:value=move || text.get().unwrap_or_default()
                 on:change=move |ev| on_text.run(event_target_value(&ev))
             />

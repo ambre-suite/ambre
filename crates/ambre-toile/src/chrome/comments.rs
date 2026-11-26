@@ -67,9 +67,9 @@ pub fn CommentsPanel(
 
                     <div class="ambre-comments-filter">
                         {[
-                            (ThreadFilter::All, "All"),
-                            (ThreadFilter::Open, "Open"),
-                            (ThreadFilter::Resolved, "Resolved"),
+                            (ThreadFilter::All, ambre_commands::tr!("All", "Tous")),
+                            (ThreadFilter::Open, ambre_commands::tr!("Open", "Ouverts")),
+                            (ThreadFilter::Resolved, ambre_commands::tr!("Resolved", "R\u{e9}solus")),
                         ]
                             .into_iter()
                             .map(|(f, label)| view! {
@@ -133,7 +133,7 @@ pub fn CommentsPanel(
                                     <input
                                         type="text"
                                         class="ambre-comments-input"
-                                        placeholder="Reply"
+                                        placeholder=ambre_commands::tr!("Reply", "R\u{e9}pondre")
                                         prop:value=move || reply.get()
                                         on:input=move |ev| reply.set(event_target_value(&ev))
                                         on:keydown=move |ev: web_sys::KeyboardEvent| {
@@ -144,7 +144,7 @@ pub fn CommentsPanel(
                                         }
                                     />
                                     <button class="ambre-comments-send" on:click=move |_| send_reply()>
-                                        "Send"
+                                        {ambre_commands::tr!("Send", "Envoyer")}
                                     </button>
                                     <button
                                         class="ambre-comments-resolve"
@@ -211,7 +211,7 @@ pub fn CommentComposer(
                     <input
                         type="text"
                         class="ambre-comment-composer-input"
-                        placeholder="Comment"
+                        placeholder=ambre_commands::tr!("Comment", "Commentaire")
                         node_ref=field
                         prop:value=move || body.get()
                         on:input=move |ev| body.set(event_target_value(&ev))
@@ -224,7 +224,7 @@ pub fn CommentComposer(
                         }
                     />
                     <button class="ambre-comment-composer-post" on:click=move |_| post()>
-                        "Post"
+                        {ambre_commands::tr!("Post", "Publier")}
                     </button>
                 </div>
             }

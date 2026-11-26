@@ -45,17 +45,22 @@ pub fn row_of(keys: &IdxVec<ListRow, RowKey>, key: RowKey) -> Option<Pos<ListRow
 pub const GROUP_SPAN: TimeSpan<Ms> = TimeSpan::<Ms>::new(5 * 60 * 1000);
 
 /// What a deleted message shows in place of its body (`MURMURE-185`).
-pub const DELETED: &str = "This message was deleted.";
+pub const DELETED: ambre_commands::TitleWords = ambre_commands::words!(
+    "This message was deleted.",
+    "Ce message a \u{e9}t\u{e9} supprim\u{e9}."
+);
 
 /// What follows the body of an edited message (`MURMURE-186`).
 pub const EDITED: &str = "(edited)";
 
 /// What the line above the first unread message reads (`MURMURE-184`).
-pub const UNREAD_LINE: &str = "New messages";
+pub const UNREAD_LINE: ambre_commands::TitleWords =
+    ambre_commands::words!("New messages", "Nouveaux messages");
 
 /// What the line under a reply also sent to the channel reads
 /// (`MURMURE-532`).
-pub const FROM_THREAD: &str = "Replied in a thread";
+pub const FROM_THREAD: ambre_commands::TitleWords =
+    ambre_commands::words!("Replied in a thread", "A r\u{e9}pondu dans un fil");
 
 /// What the control of a list read higher up reads (`MURMURE-505`).
 pub const JUMP_TO_LATEST: &str = "Jump to latest";
@@ -67,10 +72,12 @@ pub const JUMP_HINT: &str = "Newer messages below. Press End to jump to latest."
 pub const UNKNOWN_MEMBER: &str = "A member";
 
 /// What a call message says while its call runs, before who is in it.
-pub const CALL_LIVE: &str = "Call in progress";
+pub const CALL_LIVE: ambre_commands::TitleWords =
+    ambre_commands::words!("Call in progress", "Appel en cours");
 
 /// What a call message says once its call ended (`MURMURE-592`).
-pub const CALL_ENDED: &str = "Call ended";
+pub const CALL_ENDED: ambre_commands::TitleWords =
+    ambre_commands::words!("Call ended", "Appel termin\u{e9}");
 
 /// The messages of one channel or one thread, in the order the list shows
 /// them: oldest at the top (`MURMURE-182`).
@@ -109,14 +116,23 @@ pub struct Band {
 
 /// What a band names when the keys of its segment never reached this
 /// device (`MURMURE-218`).
-pub const BAND_KEYS: &str = "the keys for these messages have not reached this device.";
+pub const BAND_KEYS: ambre_commands::TitleWords = ambre_commands::words!(
+    "the keys for these messages have not reached this device.",
+    "les cl\u{e9}s de ces messages ne sont pas encore arriv\u{e9}es sur cet appareil."
+);
 
 /// What a band names when its segment opened under its key and failed
 /// its check (`MURMURE-220`).
-pub const BAND_DAMAGED: &str = "these messages could not be verified.";
+pub const BAND_DAMAGED: ambre_commands::TitleWords = ambre_commands::words!(
+    "these messages could not be verified.",
+    "ces messages n'ont pas pu \u{ea}tre v\u{e9}rifi\u{e9}s."
+);
 
 /// The remedy a band names for a cause that asking again may clear.
-pub const BAND_RETRY: &str = "Click, tap or press Enter to try again.";
+pub const BAND_RETRY: ambre_commands::TitleWords = ambre_commands::words!(
+    "Click, tap or press Enter to try again.",
+    "Cliquez, touchez ou appuyez sur Entr\u{e9}e pour r\u{e9}essayer."
+);
 
 impl Band {
     /// Whether asking again may clear its cause (`MURMURE-513`). A segment
@@ -413,15 +429,23 @@ impl std::fmt::Debug for RowWords {
 /// `MURMURE-592`). Before the relay answers, it says the call alone.
 fn call_words(view: &CallView, name: &impl Fn(Id<User>) -> String) -> String {
     if view.has_ended() {
-        return CALL_ENDED.to_owned();
+        return ambre_commands::shown(&CALL_ENDED).to_owned();
     }
     match &view.members {
         Some(CallMembers::Live(members)) if !members.is_empty() => {
             let names: Vec<String> = members.iter().map(|m| name(*m)).collect();
-            format!("{CALL_LIVE}: {}", names.join(", "))
+            format!(
+                "{}: {}",
+                ambre_commands::shown(&CALL_LIVE),
+                names.join(", ")
+            )
         }
-        Some(CallMembers::Live(_)) => format!("{CALL_LIVE}: nobody yet"),
-        Some(CallMembers::Gone) | None => CALL_LIVE.to_owned(),
+        Some(CallMembers::Live(_)) => format!(
+            "{}: {}",
+            ambre_commands::shown(&CALL_LIVE),
+            ambre_commands::tr!("nobody yet", "personne pour l'instant")
+        ),
+        Some(CallMembers::Gone) | None => ambre_commands::shown(&CALL_LIVE).to_owned(),
     }
 }
 
@@ -459,9 +483,11 @@ impl<'a> Row<'a> {
                 let body = format!("{} joined the conversation", name(member));
                 (body, BodyInk::Muted, Vec::new())
             }
-            None if message.deleted == Deletion::Deleted => {
-                (DELETED.to_owned(), BodyInk::Muted, Vec::new())
-            }
+            None if message.deleted == Deletion::Deleted => (
+                ambre_commands::shown(&DELETED).to_owned(),
+                BodyInk::Muted,
+                Vec::new(),
+            ),
             None if message.call.is_some() => {
                 let body = message
                     .call
@@ -486,7 +512,11 @@ impl<'a> Row<'a> {
                 1 => "1 reply".to_owned(),
                 n => format!("{n} replies"),
             })
-            .or_else(|| message.also_in_thread.map(|_| FROM_THREAD.to_owned()));
+            .or_else(|| {
+                message
+                    .also_in_thread
+                    .map(|_| ambre_commands::shown(&FROM_THREAD).to_owned())
+            });
         let reactions = if message.notice.is_some() || message.deleted == Deletion::Deleted {
             Vec::new()
         } else {
@@ -560,14 +590,32 @@ pub fn file_label(file: &Attachment) -> String {
 /// the channel, so it names no failure and no remedy (`MURMURE-219`).
 fn band_words(band: &Band, time_of: impl Fn(Instant<Authored>) -> String) -> RowWords {
     let span = match band.to {
-        Some(to) => format!("Messages from {} to {}", time_of(band.from), time_of(to)),
-        None => format!("Messages since {}", time_of(band.from)),
+        Some(to) => ambre_commands::trf!(
+            "Messages from {} to {}",
+            "Messages de {} \u{e0} {}",
+            time_of(band.from),
+            time_of(to)
+        ),
+        None => ambre_commands::trf!(
+            "Messages since {}",
+            "Messages depuis {}",
+            time_of(band.from)
+        ),
     };
     let body = match band.cause {
-        Unreadable::KeyNotReceived => format!("{span}: {BAND_KEYS} {BAND_RETRY}"),
-        Unreadable::Damaged => format!("{span}: {BAND_DAMAGED} {BAND_RETRY}"),
-        Unreadable::BeforeHistoryBoundary => format!(
+        Unreadable::KeyNotReceived => format!(
+            "{span}: {} {}",
+            ambre_commands::shown(&BAND_KEYS),
+            ambre_commands::shown(&BAND_RETRY)
+        ),
+        Unreadable::Damaged => format!(
+            "{span}: {} {}",
+            ambre_commands::shown(&BAND_DAMAGED),
+            ambre_commands::shown(&BAND_RETRY)
+        ),
+        Unreadable::BeforeHistoryBoundary => ambre_commands::trf!(
             "The history before {} was not shared with you.",
+            "L'historique ant\u{e9}rieur \u{e0} {} n'a pas \u{e9}t\u{e9} partag\u{e9} avec vous.",
             time_of(band.to.unwrap_or(band.from))
         ),
     };
@@ -1073,13 +1121,21 @@ pub(crate) mod tests {
         let words = Row::Band(&keys).words(|_| None, |ts| format!("t{}", ts.get()));
         assert_eq!(
             words.body,
-            format!("Messages from t20 to t30: {BAND_KEYS} {BAND_RETRY}")
+            format!(
+                "Messages from t20 to t30: {} {}",
+                ambre_commands::shown(&BAND_KEYS),
+                ambre_commands::shown(&BAND_RETRY)
+            )
         );
         assert_eq!(words.ink, BodyInk::Muted);
         assert!(words.header.is_none() && words.replies.is_none());
         assert_eq!(
             band_body(&band(Unreadable::Damaged, 20, None)),
-            format!("Messages since t20: {BAND_DAMAGED} {BAND_RETRY}")
+            format!(
+                "Messages since t20: {} {}",
+                ambre_commands::shown(&BAND_DAMAGED),
+                ambre_commands::shown(&BAND_RETRY)
+            )
         );
         assert_eq!(
             band_body(&band(Unreadable::BeforeHistoryBoundary, 20, Some(30))),
@@ -1235,7 +1291,7 @@ pub(crate) mod tests {
         let mut gone = message(Id::<User>::mint(), Instant::<Authored>::new(7), "");
         gone.deleted = crate::message::Deletion::Deleted;
         let row = words(&gone, true);
-        assert_eq!(row.body, DELETED);
+        assert_eq!(row.body, ambre_commands::shown(&DELETED));
         assert_eq!(row.ink, BodyInk::Muted);
         assert_eq!(
             row.header,
@@ -1349,7 +1405,10 @@ pub(crate) mod tests {
         let mut copy = message(Id::<User>::mint(), Instant::<Authored>::new(0), "ok");
         assert_eq!(words(&copy, false).replies, None);
         copy.also_in_thread = Some(Id::<Document>::mint());
-        assert_eq!(words(&copy, false).replies.as_deref(), Some(FROM_THREAD));
+        assert_eq!(
+            words(&copy, false).replies.as_deref(),
+            Some(ambre_commands::shown(&FROM_THREAD))
+        );
         let row = Row::Message {
             message: &copy,
             header: Header::Joined,
@@ -1358,7 +1417,10 @@ pub(crate) mod tests {
             |_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             |_| "t".to_owned(),
         );
-        assert_eq!(heard, format!("Ada, t: ok. {FROM_THREAD}"));
+        assert_eq!(
+            heard,
+            format!("Ada, t: ok. {}", ambre_commands::shown(&FROM_THREAD))
+        );
     }
 
     /// Resting on the latest message, the walk measures only the rows the

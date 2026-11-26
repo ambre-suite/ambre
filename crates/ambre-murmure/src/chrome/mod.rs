@@ -82,8 +82,8 @@ pub fn panel_open(pane: MurmurePane) -> ambre_chrome::Openness {
 /// The accessible name of the panel: what it holds.
 pub fn panel_label(pane: MurmurePane) -> &'static str {
     match pane {
-        MurmurePane::Members { .. } => "Members",
-        _ => "Thread",
+        MurmurePane::Members { .. } => ambre_commands::tr!("Members", "Membres"),
+        _ => ambre_commands::tr!("Thread", "Fil"),
     }
 }
 
@@ -122,7 +122,7 @@ pub fn ChannelHeader(
             <Show when=move || pane.get() != MurmurePane::ChannelList>
                 <button
                     class="icon murmure-back"
-                    aria-label="Back"
+                    aria-label=ambre_commands::tr!("Back", "Retour")
                     on:click=move |_| pane.update(|p| *p = p.back())
                 >
                     "\u{2039}"
@@ -135,7 +135,7 @@ pub fn ChannelHeader(
                     aria-pressed=move || ambre_chrome::Pressed::from_bool(members_open()).aria()
                     on:click=toggle_members
                 >
-                    "Members"
+                    {ambre_commands::tr!("Members", "Membres")}
                 </button>
             </Show>
             {children.map(|children| children())}
@@ -170,12 +170,12 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
             <input
                 class="murmure-members-filter"
                 type="search"
-                aria-label="Find a member"
-                placeholder="Find a member"
+                aria-label=ambre_commands::tr!("Find a member", "Trouver un membre")
+                placeholder=ambre_commands::tr!("Find a member", "Trouver un membre")
                 prop:value=move || query.get()
                 on:input=move |ev| query.set(event_target_value(&ev))
             />
-            <ul aria-label="Members">
+            <ul aria-label=ambre_commands::tr!("Members", "Membres")>
                 {move || {
                     let me = relay.me.get();
                     let here = watchers.get();
@@ -196,7 +196,7 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
                                         }
                                     })
                                 });
-                            member_view(member, watching, choose.map(|choose| (choose, "Message")))
+                            member_view(member, watching, choose.map(|choose| (choose, ambre_commands::tr!("Message", "\u{c9}crire"))))
                         })
                         .collect_view()
                 }}
@@ -238,19 +238,19 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
                     aria-expanded=move || open.get().aria()
                     on:click=move |_| open.update(|o| *o = o.toggled())
                 >
-                    "Invite"
+                    {ambre_commands::tr!("Invite", "Inviter")}
                 </button>
                 <Show when=move || open.get() == ambre_chrome::Openness::Open>
                     <div class="murmure-invite-picker">
                         <input
                             class="murmure-invite-filter"
                             type="search"
-                            aria-label="Find a member to invite"
-                            placeholder="Find a member"
+                            aria-label=ambre_commands::tr!("Find a member to invite", "Trouver un membre \u{e0} inviter")
+                            placeholder=ambre_commands::tr!("Find a member", "Trouver un membre")
                             prop:value=move || query.get()
                             on:input=move |ev| query.set(event_target_value(&ev))
                         />
-                        <ul aria-label="Invite a member">
+                        <ul aria-label=ambre_commands::tr!("Invite a member", "Inviter un membre")>
                             {move || {
                                 found()
                                     .into_iter()
@@ -263,7 +263,7 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
                                             open.set(ambre_chrome::Openness::Closed);
                                             query.set(String::new());
                                         });
-                                        member_view(member, Watching::Elsewhere, Some((choose, "Invite")))
+                                        member_view(member, Watching::Elsewhere, Some((choose, ambre_commands::tr!("Invite", "Inviter"))))
                                     })
                                     .collect_view()
                             }}
@@ -294,8 +294,8 @@ fn member_view(
 ) -> impl IntoView {
     let (state, word) = match member.presence {
         _ if watching == Watching::Here => ("here", "In this channel"),
-        Presence::Online => ("online", "Online"),
-        Presence::Offline => ("offline", "Offline"),
+        Presence::Online => ("online", ambre_commands::tr!("Online", "En ligne")),
+        Presence::Offline => ("offline", ambre_commands::tr!("Offline", "Hors ligne")),
     };
     let color = ambre_draw::peer_rgb(&member.user_id);
     let display_name = member.display_name;
@@ -462,7 +462,8 @@ impl std::fmt::Debug for SearchBox {
 }
 
 /// The heading of the matches of a channel with no name read yet.
-const UNNAMED_CHANNEL: &str = "Unnamed channel";
+const UNNAMED_CHANNEL: ambre_commands::TitleWords =
+    ambre_commands::words!("Unnamed channel", "Canal sans nom");
 
 /// The matches of one channel, as the result list shows them.
 ///
@@ -879,12 +880,26 @@ impl MurmureRelay {
             let direct = s.is_direct(channel_id);
             let name = s.name_of(channel_id);
             let title = match (direct, mention, name) {
-                (true, _, Some(name)) => format!("New message from {}", name.as_str()),
-                (true, _, None) => "New direct message".to_owned(),
-                (false, MentionState::Mentioned, Some(name)) => {
-                    format!("You were mentioned in {}", name.as_str())
+                (true, _, Some(name)) => ambre_commands::trf!(
+                    "New message from {}",
+                    "Nouveau message de {}",
+                    name.as_str()
+                ),
+                (true, _, None) => {
+                    ambre_commands::tr!("New direct message", "Nouveau message direct").to_owned()
                 }
-                (false, MentionState::Mentioned, None) => "You were mentioned".to_owned(),
+                (false, MentionState::Mentioned, Some(name)) => {
+                    ambre_commands::trf!(
+                        "You were mentioned in {}",
+                        "Vous avez \u{e9}t\u{e9} mentionn\u{e9} dans {}",
+                        name.as_str()
+                    )
+                }
+                (false, MentionState::Mentioned, None) => ambre_commands::tr!(
+                    "You were mentioned",
+                    "Vous avez \u{e9}t\u{e9} mentionn\u{e9}"
+                )
+                .to_owned(),
                 (false, MentionState::Unmentioned, _) => return None,
             };
             Some(Notice {
@@ -1275,7 +1290,7 @@ impl MurmureRelay {
                         .map(|member| PaletteEntry {
                             key: PaletteKey::Member(member.user_id),
                             label: member.display_name.as_str().to_owned(),
-                            hint: Some("Member"),
+                            hint: Some(ambre_commands::tr!("Member", "Membre")),
                         }),
                 );
             });
@@ -1760,9 +1775,10 @@ pub fn SpaceList(
             .into_iter()
             .enumerate()
             .map(|(rank, h)| {
-                let name = h
-                    .name
-                    .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string);
+                let name = h.name.map_or_else(
+                    || ambre_commands::shown(&UNNAMED_SPACE).to_owned(),
+                    Validated::into_string,
+                );
                 let choice = ambre_chrome::ChoiceView::text(name);
                 match SHOW_SPACE
                     .get(rank)
@@ -1786,11 +1802,11 @@ pub fn SpaceList(
         });
         view! {
             <ambre_chrome::Select
-                label="Switch space"
+                label=ambre_commands::tr!("Switch space", "Changer d'espace")
                 choices=choices
                 selected=selected
                 on_pick=on_pick
-                placeholder="No space yet"
+                placeholder=ambre_commands::tr!("No space yet", "Aucun espace pour l'instant")
             />
         }
     };
@@ -1851,7 +1867,7 @@ pub fn PhoneTabs(relay: MurmureRelay) -> impl IntoView {
     });
     view! {
         <nav class="murmure-tabs" aria-label="Murmure">
-            <ambre_chrome::SegmentBar label="Murmure views" choices=choices selected=selected on_pick=on_pick />
+            <ambre_chrome::SegmentBar label=ambre_commands::tr!("Murmure views", "Vues de Murmure") choices=choices selected=selected on_pick=on_pick />
         </nav>
     }
 }
@@ -1867,7 +1883,8 @@ fn name_typed(text: &str) -> Option<Validated<Name>> {
 }
 
 /// The heading of a space whose catalogue names none yet.
-const UNNAMED_SPACE: &str = "Unnamed space";
+const UNNAMED_SPACE: ambre_commands::TitleWords =
+    ambre_commands::words!("Unnamed space", "Espace sans nom");
 
 /// The words and the class of one control that asks for a line of text.
 #[derive(Clone, Copy)]
@@ -1876,32 +1893,35 @@ struct PromptWords {
     /// `-field` to it.
     class: StaticKey<ambre_core::CssClasses>,
     /// The words of the toggle.
-    toggle: &'static str,
+    toggle: ambre_commands::TitleWords,
     /// The accessible name of the field.
-    label: &'static str,
+    label: ambre_commands::TitleWords,
     /// The words of the submit button.
-    submit: &'static str,
+    submit: ambre_commands::TitleWords,
 }
 
 const NEW_SPACE: PromptWords = PromptWords {
     class: StaticKey::new("murmure-new-space"),
-    toggle: "New space",
-    label: "Name of the new space",
-    submit: "Create",
+    toggle: ambre_commands::words!("New space", "Nouvel espace"),
+    label: ambre_commands::words!("Name of the new space", "Nom du nouvel espace"),
+    submit: ambre_commands::words!("Create", "Cr\u{e9}er"),
 };
 
 const NEW_CHANNEL: PromptWords = PromptWords {
     class: StaticKey::new("murmure-new-channel"),
-    toggle: "New channel",
-    label: "Name of the new channel",
-    submit: "Create",
+    toggle: ambre_commands::words!("New channel", "Nouveau canal"),
+    label: ambre_commands::words!("Name of the new channel", "Nom du nouveau canal"),
+    submit: ambre_commands::words!("Create", "Cr\u{e9}er"),
 };
 
 const INVITE_TO_SPACE: PromptWords = PromptWords {
     class: StaticKey::new("murmure-space-invite"),
-    toggle: "Invite",
-    label: "Email of the user to invite",
-    submit: "Invite",
+    toggle: ambre_commands::words!("Invite", "Inviter"),
+    label: ambre_commands::words!(
+        "Email of the user to invite",
+        "Adresse e-mail de la personne \u{e0} inviter"
+    ),
+    submit: ambre_commands::words!("Invite", "Inviter"),
 };
 
 /// A toggle that opens a form of one field. A submit hands the words typed
@@ -1932,19 +1952,19 @@ fn PromptControl(
             aria-expanded=move || open.get().aria()
             on:click=move |_| open.update(|o| *o = o.toggled())
         >
-            {words.toggle}
+            {ambre_commands::shown(&words.toggle)}
         </button>
         <Show when=move || open.get() == ambre_chrome::Openness::Open>
             <form class=class on:submit=submit>
                 <input
                     class=format!("{class}-field")
                     r#type="text"
-                    aria-label=words.label
-                    placeholder=words.label
+                    aria-label=ambre_commands::shown(&words.label)
+                    placeholder=ambre_commands::shown(&words.label)
                     prop:value=move || text.get()
                     on:input=move |ev| text.set(event_target_value(&ev))
                 />
-                <button r#type="submit">{words.submit}</button>
+                <button r#type="submit">{ambre_commands::shown(&words.submit)}</button>
             </form>
         </Show>
     }
@@ -1986,8 +2006,8 @@ pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
                     node_ref=input
                     class="murmure-search-field"
                     type="search"
-                    aria-label="Search messages"
-                    placeholder="Search messages"
+                    aria-label=ambre_commands::shown(&crate::ui::commands::SEARCH_TITLE)
+                    placeholder=ambre_commands::shown(&crate::ui::commands::SEARCH_TITLE)
                     prop:value=move || relay.search.with(|s| s.query.clone())
                     on:input=on_input
                     on:keydown=on_keydown
@@ -2037,10 +2057,10 @@ pub fn DeleteConfirm(
             open=open
             on_close=Callback::new(move |()| cancel())
             class={StaticKey::<ambre_core::CssClasses>::new("murmure-delete")}
-            label="Delete message"
+            label=ambre_commands::shown(&crate::ui::commands::DELETE_TITLE)
         >
-            <h2>"Delete this message?"</h2>
-            <p>"It is deleted for every member of the channel. This cannot be undone."</p>
+            <h2>{ambre_commands::tr!("Delete this message?", "Supprimer ce message\u{a0}?")}</h2>
+            <p>{ambre_commands::tr!("It is deleted for every member of the channel. This cannot be undone.", "Il est supprim\u{e9} pour chaque membre du canal. Cette action est irr\u{e9}versible.")}</p>
             // Cancel comes first, so the focus the dialog opens on is never
             // the irreversible choice.
             <div class="ambre-dialog-actions">
@@ -2083,18 +2103,18 @@ pub fn ChannelMentionConfirm(
             open=open
             on_close=Callback::new(move |()| relay.cancel_all())
             class={StaticKey::<ambre_core::CssClasses>::new("murmure-all")}
-            label="Mention the whole channel"
+            label=ambre_commands::tr!("Mention the whole channel", "Mentionner tout le canal")
         >
             <h2>{title}</h2>
-            <p>"Each member of the channel is notified of this message."</p>
+            <p>{ambre_commands::tr!("Each member of the channel is notified of this message.", "Chaque membre du canal est notifi\u{e9} de ce message.")}</p>
             // Cancel comes first, so the focus the dialog opens on notifies
             // nobody.
             <div class="ambre-dialog-actions">
                 <button class="murmure-all-cancel" on:click=move |_| relay.cancel_all()>
-                    "Cancel"
+                    {ambre_commands::tr!("Cancel", "Annuler")}
                 </button>
                 <button class="ambre-btn-primary murmure-all-confirm" on:click=confirm>
-                    "Send"
+                    {ambre_commands::tr!("Send", "Envoyer")}
                 </button>
             </div>
         </ambre_chrome::Dialog>
@@ -2203,7 +2223,7 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
                 <ul
                     class="murmure-mentions"
                     role="listbox"
-                    aria-label="Mention a member"
+                    aria-label=ambre_commands::tr!("Mention a member", "Mentionner un membre")
                     style:left=format!("{x}px")
                     style:top=format!("{y}px")
                 >
@@ -2233,7 +2253,7 @@ pub fn MarkBarPanel(
                     let label = crate::ui::markers::MARK_BAR
                         .iter()
                         .find(|(shown, _)| *shown == style)
-                        .map(|(_, label)| (*label).to_owned())
+                        .map(|(_, label)| ambre_commands::shown(label).to_owned())
                         .unwrap_or_default();
                     let pressed = match cover {
                         Cover::Whole => Pressed::On,
@@ -2282,22 +2302,24 @@ pub fn EmojiPicker(
         }
     };
     let title = move || match relay.picking.get() {
-        Some(Picking::Reaction(_)) => "Add a reaction",
-        _ => "Insert an emoji",
+        Some(Picking::Reaction(_)) => {
+            ambre_commands::tr!("Add a reaction", "Ajouter une r\u{e9}action")
+        }
+        _ => ambre_commands::tr!("Insert an emoji", "Ins\u{e9}rer un emoji"),
     };
     view! {
         <ambre_chrome::Dialog
             open=open
             on_close=Callback::new(move |()| relay.picking.set(None))
             class={StaticKey::<ambre_core::CssClasses>::new("murmure-emoji")}
-            label="Emoji"
+            label=ambre_commands::tr!("Emoji", "Emoji")
         >
             <h2>{title}</h2>
             <input
                 r#type="search"
                 class="murmure-emoji-search"
-                aria-label="Search emoji"
-                placeholder="Search emoji"
+                aria-label=ambre_commands::tr!("Search emoji", "Rechercher un emoji")
+                placeholder=ambre_commands::tr!("Search emoji", "Rechercher un emoji")
                 prop:value=move || query.get()
                 on:input=move |ev| query.set(event_target_value(&ev))
                 on:keydown=move |ev| {
@@ -2332,7 +2354,7 @@ pub fn EmojiPicker(
             </div>
             <div class="ambre-dialog-actions">
                 <button class="murmure-emoji-cancel" on:click=move |_| relay.picking.set(None)>
-                    "Cancel"
+                    {ambre_commands::tr!("Cancel", "Annuler")}
                 </button>
             </div>
         </ambre_chrome::Dialog>
@@ -2350,15 +2372,15 @@ pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
         <ambre_chrome::Dialog
             open=relay.keys
             class={StaticKey::<ambre_core::CssClasses>::new("murmure-keys")}
-            label="Keyboard shortcuts"
+            label=ambre_commands::shown(&crate::ui::commands::KEYS_TITLE)
         >
-            <h2>"Keyboard shortcuts"</h2>
+            <h2>{ambre_commands::shown(&crate::ui::commands::KEYS_TITLE)}</h2>
             <table class="murmure-keys-table">
                 <thead>
                     <tr>
-                        <th scope="col">"Key"</th>
-                        <th scope="col">"Action"</th>
-                        <th scope="col">"Where"</th>
+                        <th scope="col">{ambre_commands::tr!("Key", "Cl\u{e9}")}</th>
+                        <th scope="col">{ambre_commands::tr!("Action", "Action")}</th>
+                        <th scope="col">{ambre_commands::tr!("Where", "O\u{f9}")}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2384,7 +2406,7 @@ pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
             </table>
             <div class="ambre-dialog-actions">
                 <button class="murmure-keys-close" on:click=move |_| relay.keys.set(ambre_chrome::Openness::Closed)>
-                    "Close"
+                    {ambre_commands::tr!("Close", "Fermer")}
                 </button>
             </div>
         </ambre_chrome::Dialog>
@@ -2400,7 +2422,7 @@ fn search_group_view(
     view! {
         <section class="murmure-search-group">
             <h3 class="murmure-search-channel">
-                {group.name.map_or_else(|| UNNAMED_CHANNEL.to_owned(), Validated::into_string)}
+                {group.name.map_or_else(|| ambre_commands::shown(&UNNAMED_CHANNEL).to_owned(), Validated::into_string)}
                 <span class="murmure-search-segments">{group.coverage}</span>
             </h3>
             <ul>
@@ -2446,14 +2468,30 @@ struct GroupWords {
 impl GroupWords {
     fn of(group: SidebarGroup) -> Self {
         let (word, title, hint) = match group {
-            SidebarGroup::Category { .. } => ("category", "Channels", "Channel"),
-            SidebarGroup::Private => ("private", "Private channels", "Private channel"),
-            SidebarGroup::Direct => ("direct", "Direct messages", "Direct message"),
-            SidebarGroup::ToJoin => ("to-join", "Channels to join", "To join"),
+            SidebarGroup::Category { .. } => (
+                "category",
+                ambre_commands::tr!("Channels", "Canaux"),
+                ambre_commands::tr!("Channel", "Canal"),
+            ),
+            SidebarGroup::Private => (
+                "private",
+                ambre_commands::tr!("Private channels", "Canaux priv\u{e9}s"),
+                ambre_commands::tr!("Private channel", "Canal priv\u{e9}"),
+            ),
+            SidebarGroup::Direct => (
+                "direct",
+                ambre_commands::tr!("Direct messages", "Messages directs"),
+                ambre_commands::tr!("Direct message", "Message direct"),
+            ),
+            SidebarGroup::ToJoin => (
+                "to-join",
+                ambre_commands::tr!("Channels to join", "Canaux \u{e0} rejoindre"),
+                ambre_commands::tr!("To join", "\u{c0} rejoindre"),
+            ),
         };
         let unnamed = match group {
-            SidebarGroup::Direct => "Direct message",
-            _ => "Private channel",
+            SidebarGroup::Direct => ambre_commands::tr!("Direct message", "Message direct"),
+            _ => ambre_commands::tr!("Private channel", "Canal priv\u{e9}"),
         };
         Self {
             word,
@@ -2563,7 +2601,7 @@ fn entry_view(
                 .collect_view()
         });
         Some(view! {
-            <span class="murmure-call-live" aria-label=format!("Call in progress, {count} in it")>
+            <span class="murmure-call-live" aria-label=ambre_commands::trf!("Call in progress, {count} in it", "Appel en cours, {count} participants")>
                 <span class="murmure-call-live-icon" aria-hidden="true"></span>
                 {faces}
                 <span class="murmure-call-live-count">{count}</span>

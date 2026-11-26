@@ -141,7 +141,7 @@ pub fn FindPanel(
                         <input
                             type="text"
                             class="ambre-find-input"
-                            placeholder="Find"
+                            placeholder=ambre_commands::tr!("Find", "Rechercher")
                             node_ref=find_ref
                             on:input=move |ev| {
                                 let v = event_target_value(&ev);
@@ -180,17 +180,17 @@ pub fn FindPanel(
                         </span>
                         <button
                             class="ambre-find-prev"
-                            aria-label="Previous match"
+                            aria-label=ambre_commands::tr!("Previous match", "R\u{e9}sultat pr\u{e9}c\u{e9}dent")
                             on:click=move |_| step(StepDirection::Backward)
                         >
-                            "Prev"
+                            {ambre_commands::tr!("Prev", "Pr\u{e9}c.")}
                         </button>
                         <button
                             class="ambre-find-next"
-                            aria-label="Next match"
+                            aria-label=ambre_commands::tr!("Next match", "R\u{e9}sultat suivant")
                             on:click=move |_| step(StepDirection::Forward)
                         >
-                            "Next"
+                            {ambre_commands::tr!("Next", "Suivant")}
                         </button>
                     </div>
 
@@ -204,7 +204,7 @@ pub fn FindPanel(
                                     on_toggle();
                                 }
                             />
-                            <span>"Match case"</span>
+                            <span>{ambre_commands::tr!("Match case", "Respecter la casse")}</span>
                         </label>
                         <label>
                             <input
@@ -215,7 +215,7 @@ pub fn FindPanel(
                                     on_toggle();
                                 }
                             />
-                            <span>"Whole word"</span>
+                            <span>{ambre_commands::tr!("Whole word", "Mot entier")}</span>
                         </label>
                     </div>
                 </div>

@@ -622,8 +622,9 @@ impl Switchboard {
                 let names: Vec<&str> = members.iter().map(Validated::as_str).collect();
                 effects.push(Effect::Notice(Notice::new(
                     ToastKind::Warning,
-                    format!(
+                    ambre_chrome::commands::trf!(
                         "The new key could not be shared with {}: their key is unreadable",
+                        "La nouvelle cl\u{e9} n'a pas pu \u{ea}tre partag\u{e9}e avec {}\u{a0}: sa cl\u{e9} est illisible",
                         names.join(", ")
                     ),
                 )));
@@ -763,11 +764,17 @@ impl Switchboard {
                     inviter: *inviter,
                 });
                 let shown_in = match self.page {
-                    Page::Document => "the share dialog",
-                    Page::Murmure => "the toolbar",
+                    Page::Document => ambre_chrome::commands::tr!(
+                        "the share dialog",
+                        "la fen\u{ea}tre de partage"
+                    ),
+                    Page::Murmure => {
+                        ambre_chrome::commands::tr!("the toolbar", "la barre d'outils")
+                    }
                 };
-                let notice = format!(
+                let notice = ambre_chrome::commands::trf!(
                     "Invited {}. Send them the invite link {shown_in} shows.",
+                    "{} est invit\u{e9}. Envoyez-lui le lien d'invitation que {shown_in} affiche.",
                     display_name.as_str()
                 );
                 effects.push(Effect::Notice(Notice::new(ToastKind::Success, notice)));

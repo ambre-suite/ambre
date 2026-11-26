@@ -27,9 +27,13 @@ pub fn selection_announcement(
     data: &[DisplayElement],
 ) -> Option<String> {
     match selection {
-        [] => Some("Nothing selected".to_owned()),
+        [] => Some(ambre_commands::tr!("Nothing selected", "Aucune s\u{e9}lection").to_owned()),
         [id] => data.iter().find(|e| e.id == *id).map(element_announcement),
-        many => Some(format!("{} elements selected", many.len())),
+        many => Some(ambre_commands::trf!(
+            "{} elements selected",
+            "{} \u{e9}l\u{e9}ments s\u{e9}lectionn\u{e9}s",
+            many.len()
+        )),
     }
 }
 
@@ -41,35 +45,35 @@ fn element_announcement(element: &DisplayElement) -> String {
         out.extend(text.trim().chars().take(TEXT_LIMIT.to_usize()));
     }
     if element.locked == crate::message::LockState::Locked {
-        out.push_str(", locked");
+        out.push_str(ambre_commands::tr!(", locked", ", verrouill\u{e9}"));
     }
     out
 }
 
 fn kind_name(element: &DisplayElement) -> &'static str {
     match element.kind {
-        ElementKind::Sticky => "Sticky note",
-        ElementKind::Shape(ShapeKind::Rect) => "Rectangle",
-        ElementKind::Shape(ShapeKind::Ellipse) => "Ellipse",
-        ElementKind::Shape(ShapeKind::Triangle) => "Triangle",
-        ElementKind::Shape(ShapeKind::Line) => "Line",
-        ElementKind::Shape(ShapeKind::Path) => "Path",
-        ElementKind::Text => "Text",
-        ElementKind::Image => "Image",
-        ElementKind::Frame => "Frame",
-        ElementKind::Group => "Group",
-        ElementKind::Drawing => "Drawing",
-        ElementKind::Embed => "Web page",
+        ElementKind::Sticky => ambre_commands::tr!("Sticky note", "Note adh\u{e9}sive"),
+        ElementKind::Shape(ShapeKind::Rect) => ambre_commands::tr!("Rectangle", "Rectangle"),
+        ElementKind::Shape(ShapeKind::Ellipse) => ambre_commands::tr!("Ellipse", "Ellipse"),
+        ElementKind::Shape(ShapeKind::Triangle) => ambre_commands::tr!("Triangle", "Triangle"),
+        ElementKind::Shape(ShapeKind::Line) => ambre_commands::tr!("Line", "Ligne"),
+        ElementKind::Shape(ShapeKind::Path) => ambre_commands::tr!("Path", "Trac\u{e9}"),
+        ElementKind::Text => ambre_commands::tr!("Text", "Texte"),
+        ElementKind::Image => ambre_commands::tr!("Image", "Image"),
+        ElementKind::Frame => ambre_commands::tr!("Frame", "Cadre"),
+        ElementKind::Group => ambre_commands::tr!("Group", "Groupe"),
+        ElementKind::Drawing => ambre_commands::tr!("Drawing", "Dessin"),
+        ElementKind::Embed => ambre_commands::tr!("Web page", "Page web"),
         ElementKind::DocEmbed => match element.geom {
             DisplayGeom::DocEmbed {
                 doc_type: DocType::Trame,
                 ..
-            } => "Embedded spreadsheet",
+            } => ambre_commands::tr!("Embedded spreadsheet", "Classeur int\u{e9}gr\u{e9}"),
             DisplayGeom::DocEmbed {
                 doc_type: DocType::Toile,
                 ..
-            } => "Embedded whiteboard",
-            _ => "Embedded document",
+            } => ambre_commands::tr!("Embedded whiteboard", "Tableau blanc int\u{e9}gr\u{e9}"),
+            _ => ambre_commands::tr!("Embedded document", "Document int\u{e9}gr\u{e9}"),
         },
     }
 }
@@ -110,6 +114,40 @@ mod tests {
             link: None,
             group: None,
         }
+    }
+
+    /// `SETTINGS-052`: a word of the Toile chrome shows in the interface
+    /// language of the page: the board announces its selection in French.
+    #[test]
+    fn a_board_announces_its_selection_in_the_interface_language() {
+        let note = element(
+            1,
+            ElementKind::Sticky,
+            DisplayGeom::Sticky("Lait".into()),
+            crate::message::LockState::Locked,
+        );
+        let a = note.id.clone();
+        let data = vec![note];
+        ambre_commands::show_locale(ambre_commands::Locale::Fr);
+        let french = selection_announcement(std::slice::from_ref(&a), &data);
+        let none = selection_announcement(&[], &data);
+        let many = selection_announcement(&[a.clone(), a.clone()], &data);
+        let address = crate::message::AddressError::NotHttps.message();
+        ambre_commands::show_locale(ambre_commands::Locale::En);
+        assert_eq!(
+            french.as_deref(),
+            Some("Note adh\u{e9}sive, Lait, verrouill\u{e9}")
+        );
+        assert_eq!(none.as_deref(), Some("Aucune s\u{e9}lection"));
+        assert_eq!(
+            many.as_deref(),
+            Some("2 \u{e9}l\u{e9}ments s\u{e9}lectionn\u{e9}s")
+        );
+        assert!(address.starts_with("Seules"), "{address}");
+        assert_eq!(
+            selection_announcement(std::slice::from_ref(&a), &data).as_deref(),
+            Some("Sticky note, Lait, locked")
+        );
     }
 
     /// `CHROME-023`: a board announces its selection. One element says its

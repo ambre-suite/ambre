@@ -173,8 +173,12 @@ impl Entry {
     pub fn label(&self, kind: DeviceKind) -> &str {
         match (self, kind) {
             (Self::Device(device), _) => device.label.as_str(),
-            (Self::Default, DeviceKind::Microphone) => "Default microphone",
-            (Self::Default, DeviceKind::Speaker) => "Default speaker",
+            (Self::Default, DeviceKind::Microphone) => {
+                ambre_commands::tr!("Default microphone", "Micro par d\u{e9}faut")
+            }
+            (Self::Default, DeviceKind::Speaker) => {
+                ambre_commands::tr!("Default speaker", "Haut-parleur par d\u{e9}faut")
+            }
         }
     }
 }
@@ -204,7 +208,10 @@ impl Names {
     /// What the panel says while the names are hidden.
     pub fn hint(self) -> Option<&'static str> {
         match self {
-            Self::Hidden => Some("Device names show once the microphone is allowed"),
+            Self::Hidden => Some(ambre_commands::tr!(
+                "Device names show once the microphone is allowed",
+                "Les noms des appareils s'affichent une fois le micro autoris\u{e9}"
+            )),
             Self::Shown => None,
         }
     }
@@ -269,8 +276,14 @@ impl Fallback {
     /// What the header tells the user, until a choice or the end of the call.
     pub fn notice(self) -> &'static str {
         match self {
-            Self::Microphone => "Microphone gone: the call sends the default microphone",
-            Self::Speaker => "Speaker gone: the call plays on the default speaker",
+            Self::Microphone => ambre_commands::tr!(
+                "Microphone gone: the call sends the default microphone",
+                "Micro disparu\u{a0}: l'appel utilise le micro par d\u{e9}faut"
+            ),
+            Self::Speaker => ambre_commands::tr!(
+                "Speaker gone: the call plays on the default speaker",
+                "Haut-parleur disparu\u{a0}: l'appel passe par le haut-parleur par d\u{e9}faut"
+            ),
         }
     }
 }

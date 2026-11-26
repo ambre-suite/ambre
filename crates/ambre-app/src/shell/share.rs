@@ -39,10 +39,19 @@ fn standing_badge(standing: MemberStanding) -> Option<impl IntoView> {
     let (label, title) = match standing {
         MemberStanding::Verified => return None,
         MemberStanding::Unverified => (
-            "Unverified",
-            "No signed entry links this member to the document's creator",
+            ambre_chrome::commands::tr!("Unverified", "Non v\u{e9}rifi\u{e9}"),
+            ambre_chrome::commands::tr!(
+                "No signed entry links this member to the document's creator",
+                "Aucune entr\u{e9}e sign\u{e9}e ne relie ce membre au cr\u{e9}ateur du document"
+            ),
         ),
-        MemberStanding::Revoked => ("Revoked", "A signed entry removed this member"),
+        MemberStanding::Revoked => (
+            ambre_chrome::commands::tr!("Revoked", "R\u{e9}voqu\u{e9}"),
+            ambre_chrome::commands::tr!(
+                "A signed entry removed this member",
+                "Une entr\u{e9}e sign\u{e9}e a retir\u{e9} ce membre"
+            ),
+        ),
     };
     Some(view! { <span class="ambre-share-member-standing" title=title>{label}</span> })
 }
@@ -94,8 +103,8 @@ pub(crate) fn ShareMembers(
                                 RowAction::Revoke => view! {
                                     <button
                                         class="ambre-share-revoke"
-                                        title="Revoke access"
-                                        aria-label="Revoke access"
+                                        title=ambre_chrome::commands::tr!("Revoke access", "R\u{e9}voquer l'acc\u{e8}s")
+                                        aria-label=ambre_chrome::commands::tr!("Revoke access", "R\u{e9}voquer l'acc\u{e8}s")
                                         on:click=move |_| {
                                             if let Some(document_id) = current_doc.get_untracked() {
                                                 send.run(RestCommand::RevokeFromDocument {
@@ -105,7 +114,7 @@ pub(crate) fn ShareMembers(
                                             }
                                         }
                                     >
-                                        "Revoke"
+                                        {ambre_chrome::commands::tr!("Revoke", "R\u{e9}voquer")}
                                     </button>
                                 }
                                 .into_any(),
@@ -115,15 +124,15 @@ pub(crate) fn ShareMembers(
                                         fallback=move || view! {
                                             <button
                                                 class="ambre-share-leave"
-                                                title="Leave this document"
+                                                title=ambre_chrome::commands::tr!("Leave this document", "Quitter ce document")
                                                 on:click=move |_| confirm_leave.set(true)
                                             >
-                                                "Leave"
+                                                {ambre_chrome::commands::tr!("Leave", "Quitter")}
                                             </button>
                                         }
                                     >
                                         <span class="ambre-share-leave-ask">
-                                            "Only an owner can invite you back."
+                                            {ambre_chrome::commands::tr!("Only an owner can invite you back.", "Seul un propri\u{e9}taire peut vous inviter \u{e0} nouveau.")}
                                         </span>
                                         <button
                                             class="ambre-share-leave-confirm"
@@ -134,10 +143,10 @@ pub(crate) fn ShareMembers(
                                                 }
                                             }
                                         >
-                                            "Leave document"
+                                            {ambre_chrome::commands::tr!("Leave document", "Quitter le document")}
                                         </button>
                                         <button on:click=move |_| confirm_leave.set(false)>
-                                            "Cancel"
+                                            {ambre_chrome::commands::tr!("Cancel", "Annuler")}
                                         </button>
                                     </Show>
                                 }
@@ -199,7 +208,7 @@ pub(crate) fn MurmureInviteLink(link: RwSignal<Option<InviteLink>>) -> impl Into
                     class="murmure-invite-link-close"
                     on:click=move |_| link.set(None)
                 >
-                    "Close"
+                    {ambre_chrome::commands::tr!("Close", "Fermer")}
                 </button>
             </div>
         </Show>
@@ -248,7 +257,7 @@ fn InviteLinkField(shown: Signal<Option<InviteLink>>) -> impl IntoView {
         <Show when=move || shown().is_some()>
             <div class="ambre-share-link">
                 <label class="ambre-share-link-label">
-                    "Send this invite link to the person you invited"
+                    {ambre_chrome::commands::tr!("Send this invite link to the person you invited", "Envoyez ce lien d'invitation \u{e0} la personne invit\u{e9}e")}
                     <input
                         r#type="text"
                         readonly=true
@@ -263,13 +272,13 @@ fn InviteLinkField(shown: Signal<Option<InviteLink>>) -> impl IntoView {
                     />
                 </label>
                 <button r#type="button" class="ambre-share-link-copy" on:click=on_copy>
-                    "Copy link"
+                    {ambre_chrome::commands::tr!("Copy link", "Copier le lien")}
                 </button>
                 <span class="ambre-share-link-outcome" role="status">
                     {move || match outcome.get() {
                         Some((l, CopyOutcome::Copied)) if shown() == Some(l) => "Copied",
                         Some((l, CopyOutcome::Refused)) if shown() == Some(l) => {
-                            "The browser refused the copy: select the link and copy it."
+                            ambre_chrome::commands::tr!("The browser refused the copy: select the link and copy it.", "Le navigateur a refus\u{e9} la copie\u{a0}: s\u{e9}lectionnez le lien et copiez-le.")
                         }
                         _ => "",
                     }}

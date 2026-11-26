@@ -1383,7 +1383,6 @@ ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::in_channel() |
 ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	the text of the search box as the DOM hands it, blank included; a SearchQuery parses from it inside
 ambre-murmure | src/chrome/mod.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome/mod.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the bool the one constructor of PageVisibility reads into its variant
-ambre-murmure | src/chrome/mod.rs | crate::chrome | UNNAMED_CHANNEL | const | &str	free-text	the heading a person reads over the search matches of a channel with no name read yet
 ambre-murmure | src/chrome/mod.rs | crate::chrome | SearchBox.query | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome/mod.rs | crate::chrome | SearchGroup.coverage | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome/mod.rs | crate::chrome | SearchGroup.matches | field | Vec<(MessageRef,String)>	free-text	text, label or user content
@@ -1396,10 +1395,6 @@ ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::create_channel
 ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::create_space(name) | param | String	free-text	the text of the new space field as the DOM hands it, blank included; a Name parses from it inside
 ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::invite_to_space(email) | param | String	free-text	the text of the invite field as the DOM hands it, blank included; the Email is built from it inside, trimmed
 ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptControl(on_submit) | param | Callback<String,Option<LogicCommand>>	free-text	the callable a submit hands the text of its field to, as the DOM hands it
-ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptWords.label | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptWords.submit | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptWords.toggle | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome/mod.rs | crate::chrome | UNNAMED_SPACE | const | &str	free-text	the heading a person reads over a space whose catalogue names none yet
 ambre-murmure | src/chrome/mod.rs | crate::chrome | name_typed(text) | param | &str	free-text	the text of a name field as the DOM hands it; a Name parses from it inside
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | KeyPlace::words() | ret | &'static str	free-text	the closed set's display label: the words the shortcut list shows for the place
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | KeyRow.action | field | String	free-text	text, label or user content
@@ -1409,9 +1404,7 @@ ambre-murmure | src/ui/commands.rs | crate::ui::commands | PendingEdit.text | fi
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | RegionKey.action | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | asked_all_title() | ret | String	free-text	text, label or user content
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | region_key(action) | param | &'static str	free-text	text, label or user content
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Asking.query | field | String	free-text	text, label or user content
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | COMPOSER_HINT | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer.said | field | Option<String>	free-text	text, label or user content
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::blank() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::close_with(found) | param | impl FnOnce(&str,&[Span<Char>])->Option<markers::Closed>	free-text	text, label or user content
@@ -1429,7 +1422,6 @@ ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::show_chords
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::take_said() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::take_typed() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::text(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | EDITING_LINE | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Editing.original | field | String	free-text	text, label or user content
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | History.last | field | String	free-text	text, label or user content
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | History.redo | field | Vec<String>	free-text	text, label or user content
@@ -1467,14 +1459,9 @@ ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | name_of() | ret | Option<&'
 ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | search(query) | param | &str	free-text	the words a user types in the picker's search box, matched against the English names
 ambre-murmure | src/logic/error.rs | crate::logic::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
 ambre-murmure | src/logic/error.rs | crate::logic::error | MurmureError::WrongKind.found | field | String	generic	the stored kind word a document carried where another kind was expected, echoed in the refusal
-ambre-murmure | src/ui/list.rs | crate::ui::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/list.rs | crate::ui::list | BAND_KEYS | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/list.rs | crate::ui::list | BAND_RETRY | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | Band::retries() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/ui/list.rs | crate::ui::list | Conversations::absorb() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/ui/list.rs | crate::ui::list | DELETED | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | EDITED | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/list.rs | crate::ui::list | FROM_THREAD | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | JUMP_HINT | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | JUMP_TO_LATEST | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | MessageList::is_empty() | ret | bool	generic	state flag/predicate
@@ -1485,7 +1472,6 @@ ambre-murmure | src/ui/list.rs | crate::ui::list | Row<'a>::words(time_of) | par
 ambre-murmure | src/ui/list.rs | crate::ui::list | RowWords.body | field | String	free-text	text, label or user content
 ambre-murmure | src/ui/list.rs | crate::ui::list | RowWords.replies | field | Option<String>	free-text	text, label or user content
 ambre-murmure | src/ui/list.rs | crate::ui::list | UNKNOWN_MEMBER | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/list.rs | crate::ui::list | UNREAD_LINE | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | band_words(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
 ambre-murmure | src/ui/list.rs | crate::ui::list | chip_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/ui/list.rs | crate::ui::list | file_label() | ret | String	free-text	text, label or user content
@@ -1498,7 +1484,6 @@ ambre-murmure | src/ui/markers.rs | crate::ui::markers | DraftEdit.after | field
 ambre-murmure | src/ui/markers.rs | crate::ui::markers | DraftEdit.before | field | &'a str	free-text	the text of a draft a member typed, before an edit; Debug prints its length alone
 ambre-murmure | src/ui/markers.rs | crate::ui::markers | FENCE | const | &str	generic	the fence of a code block, a token the marker parser matches back in a draft: part of the codec of the marks
 ambre-murmure | src/ui/markers.rs | crate::ui::markers | LIST_MARKER | const | &str	generic	the marker of a list item, a token the marker parser matches back in a draft: part of the codec of the marks
-ambre-murmure | src/ui/markers.rs | crate::ui::markers | MARK_BAR | const | [(TextStyle,&str);3]	free-text	the title a person reads on each control of the format bar, the words Prose gives the same mark
 ambre-murmure | src/ui/markers.rs | crate::ui::markers | QUOTE_MARKER | const | &str	generic	the marker of a quote, a token the marker parser matches back in a draft: part of the codec of the marks
 ambre-murmure | src/ui/markers.rs | crate::ui::markers | Unmarked.after | field | String	free-text	the text of a draft a member typed, with both markers gone; Debug prints its length alone
 ambre-murmure | src/ui/markers.rs | crate::ui::markers | Unmarked.between | field | String	free-text	the text of a draft a member typed, with the close marker gone alone; Debug prints its length alone
@@ -1533,11 +1518,6 @@ ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | offers(query)
 ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | query_at() | ret | Option<(Pos<Byte>,&str)>	free-text	text, label or user content
 ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | query_at(text) | param | &str	free-text	the draft text an @ query is read from; the caret and the @ are ByteOffset
 ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | MentionList.entries | field | IdxVec<MentionEntry,String>	free-text	text, label or user content
-ambre-murmure | src/ui/notices.rs | crate::ui::notices | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/notices.rs | crate::ui::notices | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/notices.rs | crate::ui::notices | DIRECT_MESSAGE_NOT_OPENED | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/notices.rs | crate::ui::notices | ROOT_LOST | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/notices.rs | crate::ui::notices | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/notices.rs | crate::ui::notices | warning_of() | ret | Option<&'static str>	free-text	the fixed UI text of a warning toast
 ambre-murmure | src/logic/opening.rs | crate::logic::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/ui/paint.rs | crate::ui::paint | PLACEHOLDER_ASPECT | const | f32	math	a scalar multiplier: a ratio, the width-to-height aspect of a picture not decoded yet
@@ -2379,7 +2359,6 @@ ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_announcement() | ret | 
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&str>	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | kind_name() | ret | &'static str	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | selection_announcement() | ret | Option<String>	free-text	label, message or user text
-ambre-toile | src/ui/grid.rs | crate::ui::grid | TINTS | const | [(&str,ambre_core::Rgba);6]	free-text	the name a person reads on each background swatch of the board section
 ambre-toile | src/ui/arrow.rs | crate::ui::arrow | holds_element() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	free-text	the comment body the user typed in the panel
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text
@@ -2461,11 +2440,7 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::pressed_empty_boar
 ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | param | impl Fn(&Id<Element>)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | EDIT_LOST | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | LIVE_STROKE_TAIL | const | usize	local	the trailing live-stroke points redrawn each frame, read once by its take
-ambre-toile | src/ui/view.rs | crate::ui::view | NOTHING_TO_ZOOM | const | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_CONTAINS | const | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_HOLDS | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.announce_next_data | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.data_dirty | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.detected_mouse | field | bool	generic	local state flag or value, not a mode selector
@@ -2528,11 +2503,6 @@ ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.filt
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FILTER_OPS | const | &[(FilterOp,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopover(values) | param | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | col_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_BUTTONS | const | &[(BorderPreset,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_STYLES | const | &[(BorderStyle,&str)]	free-text	the label a person reads beside each border style of the picker
-ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | H_ALIGNS | const | &[(HAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NUMBER_FORMATS | const | &[(CellFormat,&str)]	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	generic	the column letters of an A1 reference, the input of their parse into a column position
@@ -3547,8 +3517,6 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | pieces(peer) | par
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(end) | param | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
-ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_ENDED | const | &str	free-text	UI text/label const
-ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_LIVE | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | MessageList::show_call() | ret | bool	generic	state flag/predicate: whether a message of the list changed
 ambre-murmure | src/ui/list.rs | crate::ui::list | call_words() | ret | String	free-text	text, label or user content
 ambre-murmure | src/ui/list.rs | crate::ui::list | call_words(name) | param | &impl Fn(Id<User>)->String	free-text	text, label or user content: the display name of a member
@@ -5017,7 +4985,6 @@ ambre-logic | src/persistence.rs | crate::persistence | pinned_keys(row) | param
 ambre-prose | src/commands.rs | crate::commands | formats_selection() | ret | bool	generic	predicate result
 ambre-sync | src/census.rs | crate::census | Census::awaits() | ret | bool	generic	predicate result
 ambre-chrome | src/kit.rs | crate::kit | swatch_row(none_label) | param | &'static str	free-text	text, label or user content
-ambre-chrome | src/color.rs | crate::color | INLINE | const | [(&str,&str,Rgb);7]	free-text	the name a person reads and the CSS text of each inline swatch, beside its colour
 ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
 ambre-chrome | src/kit.rs | crate::kit | <PrintLength<Mm> as FieldLength>::of_field(value) | param | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
 ambre-chrome | src/kit.rs | crate::kit | <Px<StoredBoard> as FieldLength>::to_field() | ret | f64	generic	the number the one length field computes in; each length type converts to it at this boundary alone
@@ -5130,3 +5097,5 @@ ambre-murmure | src/logic/schema.rs | crate::logic::schema | FreshKey::parse(key
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | FreshKey::spell() | ret | String	foreign-api	the thread_receipts map key that LoroMap::insert and get take as &str, spelled from its two identifiers
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | fresh_receipts_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-sync | src/sharing.rs | crate::sharing | fresh_needed() | ret | bool	generic	predicate answer: whether no receipt a root holds counts under the pinned link key, selects no mode
+ambre-chrome | src/color.rs | crate::color | INLINE | const | [(ambre_commands::TitleWords,&str,Rgb);7]	free-text	the name and the CSS text of each inline swatch a person reads and picks
+ambre-trame | src/chrome/panel.rs | crate::chrome::panel | title() | ret | &'static str	free-text	the title of a property a person reads, in the interface language

@@ -90,7 +90,10 @@ pub(crate) async fn paste_from_clipboard(
 
     if !found {
         tracing::warn!("clipboard read unavailable for the Paste button (use Ctrl+V)");
-        toasts.warning("Could not read the clipboard; use Ctrl+V to paste");
+        toasts.warning(ambre_chrome::commands::tr!(
+            "Could not read the clipboard; use Ctrl+V to paste",
+            "Impossible de lire le presse-papiers\u{a0}; collez avec Ctrl+V"
+        ));
         return;
     }
 
@@ -950,7 +953,10 @@ fn read_ambre_file(
 ) {
     wasm_bindgen_futures::spawn_local(async move {
         let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await else {
-            toasts.error("Ambre could not read that file");
+            toasts.error(ambre_chrome::commands::tr!(
+                "Ambre could not read that file",
+                "Ambre n'a pas pu lire ce fichier"
+            ));
             return;
         };
         let picked = ambre_core::Payload::<ambre_core::PickedContainer>::new(
@@ -1015,7 +1021,10 @@ pub(crate) fn open_plaintext_container(
                     toasts,
                 ));
             }
-            None => toasts.error("Sign in to open that file"),
+            None => toasts.error(ambre_chrome::commands::tr!(
+                "Sign in to open that file",
+                "Connectez-vous pour ouvrir ce fichier"
+            )),
         },
     );
 }
@@ -1055,7 +1064,10 @@ fn read_container(
     let header = match ambre_client_core::docfile::read_ambre_plaintext(container) {
         Ok(header) => header,
         Err(e) => {
-            toasts.error(format!("Ambre cannot open that file: {e}"));
+            toasts.error(ambre_chrome::commands::trf!(
+                "Ambre cannot open that file: {e}",
+                "Ambre ne peut pas ouvrir ce fichier\u{a0}: {e}"
+            ));
             return None;
         }
     };
@@ -1063,8 +1075,9 @@ fn read_container(
     // rather than a blank page. `DocType::creatable` is the same predicate
     // the new-document picker offers, so the two cannot disagree.
     if !ambre_bus::DocType::creatable().contains(&header.doc_type) {
-        toasts.error(format!(
+        toasts.error(ambre_chrome::commands::trf!(
             "Ambre cannot open a {} yet",
+            "Ambre ne peut pas encore ouvrir un {}",
             header.doc_type.generic_label()
         ));
         return None;
@@ -1083,7 +1096,10 @@ async fn store_container(
     let store = match ambre_logic::persistence::PersistenceStore::open().await {
         Ok(Ok(store)) => store,
         _ => {
-            toasts.error("Ambre could not open its local store for that file");
+            toasts.error(ambre_chrome::commands::tr!(
+                "Ambre could not open its local store for that file",
+                "Ambre n'a pas pu ouvrir son stockage local pour ce fichier"
+            ));
             return;
         }
     };
@@ -1091,7 +1107,10 @@ async fn store_container(
     // and an open transaction goes with it.
     let committed = store.save_snapshot_committed(document_id, sealed).await;
     if committed != Ok(ambre_logic::persistence::Commit::Landed) {
-        toasts.error("Ambre could not store that file locally");
+        toasts.error(ambre_chrome::commands::tr!(
+            "Ambre could not store that file locally",
+            "Ambre n'a pas pu stocker ce fichier localement"
+        ));
         return;
     }
 

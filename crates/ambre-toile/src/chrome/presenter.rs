@@ -75,34 +75,34 @@ pub fn PresenterPanel(
                     <div class="ambre-presenter-nav">
                         <button
                             class="ambre-presenter-prev"
-                            aria-label="Previous slide"
+                            aria-label=ambre_commands::tr!("Previous slide", "Diapositive pr\u{e9}c\u{e9}dente")
                             on:click=move |_| on_intent.run(PresenterIntent::Prev)
                         >
-                            "Prev"
+                            {ambre_commands::tr!("Prev", "Pr\u{e9}c.")}
                         </button>
                         <span class="ambre-presenter-count">
                             {move || slide_counter_label(slide.get())}
                         </span>
                         <button
                             class="ambre-presenter-next"
-                            aria-label="Next slide"
+                            aria-label=ambre_commands::tr!("Next slide", "Diapositive suivante")
                             on:click=move |_| on_intent.run(PresenterIntent::Next)
                         >
-                            "Next"
+                            {ambre_commands::tr!("Next", "Suivant")}
                         </button>
                         <button
                             class="ambre-presenter-exit"
-                            aria-label="Exit presentation"
+                            aria-label=ambre_commands::tr!("Exit presentation", "Quitter la pr\u{e9}sentation")
                             on:click=move |_| on_intent.run(PresenterIntent::Exit)
                         >
-                            "Exit"
+                            {ambre_commands::tr!("Exit", "Quitter")}
                         </button>
                         // Broadcast my playback position to peers. Active
                         // styling reflects the current toggle.
                         <button
                             class="ambre-presenter-broadcast"
                             class:active=move || broadcasting.get().is_on()
-                            aria-label="Broadcast position"
+                            aria-label=ambre_commands::tr!("Broadcast position", "Diffuser la position")
                             on:click=move |_| {
                                 let next = if broadcasting.get().is_on() {
                                     Broadcast::Private
@@ -112,7 +112,7 @@ pub fn PresenterPanel(
                                 on_intent.run(PresenterIntent::ToggleBroadcast(next))
                             }
                         >
-                            "Broadcast"
+                            {ambre_commands::tr!("Broadcast", "Diffuser")}
                         </button>
                         // Follow the current broadcaster. Shown only when a
                         // peer is actively broadcasting; toggles follow on / off.
@@ -122,7 +122,7 @@ pub fn PresenterPanel(
                                     <button
                                         class="ambre-presenter-follow"
                                         class:active=move || following.get().is_some()
-                                        aria-label="Follow presenter"
+                                        aria-label=ambre_commands::tr!("Follow presenter", "Suivre le pr\u{e9}sentateur")
                                         on:click=move |_| {
                                             let next = if following.get().is_some() {
                                                 None
@@ -132,7 +132,7 @@ pub fn PresenterPanel(
                                             on_intent.run(PresenterIntent::Follow(next));
                                         }
                                     >
-                                        "Follow"
+                                        {ambre_commands::tr!("Follow", "Suivre")}
                                     </button>
                                 }
                             })
@@ -140,8 +140,8 @@ pub fn PresenterPanel(
                     </div>
                     <textarea
                         class="ambre-presenter-notes"
-                        aria-label="Speaker notes"
-                        placeholder="Speaker notes"
+                        aria-label=ambre_commands::tr!("Speaker notes", "Notes de l'orateur")
+                        placeholder=ambre_commands::tr!("Speaker notes", "Notes de l'orateur")
                         node_ref=notes_ref
                         on:input=move |ev| {
                             let new = event_target_value(&ev);

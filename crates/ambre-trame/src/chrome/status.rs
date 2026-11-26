@@ -132,7 +132,7 @@ pub fn StatusBar(
         <ZoomChip
             zoom=zoom
             range=crate::ui::grid::TrameUiState::ZOOM_RANGE
-            title="Grid zoom (scales the sheet only, not the toolbar)"
+            title=ambre_commands::tr!("Grid zoom (scales the sheet only, not the toolbar)", "Zoom de la grille (agrandit la feuille seule, pas la barre d'outils)")
         />
     }
 }

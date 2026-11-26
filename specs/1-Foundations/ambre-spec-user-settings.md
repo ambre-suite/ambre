@@ -70,6 +70,10 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 | `SETTINGS-047` | `POST` | A word of the Prose chrome MUST show in the interface language of the page. | this spec section 3, the interface language | `ambre_prose::view::slash::language_tests::the_slash_menu_reads_and_finds_its_items_in_the_interface_language` | none | verified |
 | `SETTINGS-048` | `POST` | A change of the interface language MUST show every word in the new language, the titles at once and the rest from the next load of the page. | this spec section 3, the interface language; `SETTINGS-035` | `ambre_logic::settings_flow::tests::a_language_change_reloads_the_page_after_its_copy` -- the reload follows its copy; `ambre_app::local_store::tests::the_page_reloads_once_the_copy_before_the_reload_landed` -- wasm tier, no reload while a write is in flight; `ambre_app::shell::app_root::tests::the_header_ends_on_share_and_the_avatar_menu` -- wasm tier, the pick writes the boot hint first | none | verified |
 | `SETTINGS-049` | `POST` | After a reload, the page MUST keep the interface language of its local copy over an earlier one the relay replays. | this spec section 3, the interface language; `SETTINGS-035` | `ambre_logic::settings_flow::tests::the_reloaded_page_keeps_the_language_of_its_copy_over_the_replay` | none | verified |
+| `SETTINGS-051` | `POST` | A word of the Trame chrome MUST show in the interface language of the page. | this spec section 3, the interface language | `ambre_trame::ui::locale::tests::the_locale_notice_reads_the_interface_language` | none | verified |
+| `SETTINGS-052` | `POST` | A word of the Toile chrome MUST show in the interface language of the page. | this spec section 3, the interface language | `ambre_toile::ui::a11y::tests::a_board_announces_its_selection_in_the_interface_language` | none | verified |
+| `SETTINGS-053` | `POST` | A word of the Murmure chrome MUST show in the interface language of the page. | this spec section 3, the interface language | `ambre_murmure::ui::sidebar::tests::the_phone_tabs_and_the_notices_read_the_interface_language` | none | verified |
+| `SETTINGS-054` | `POST` | A word of the shell and of the shared chrome MUST show in the interface language of the page. | this spec section 3, the interface language | `ambre_app::doc_list::tests::the_band_headings_read_the_interface_language`; `ambre_chrome::color::tests::the_swatches_name_their_colour_in_the_interface_language` | none | verified |
 
 ### 1.4 Change a setting
 
@@ -97,7 +101,7 @@ prefix is `SETTINGS`, and it belongs to this document alone.
 * **Boundary.** the settings document is sealed like any document (`ZK-001`), and no setting leaves
   in another field (`ZK-054`). The relay learns which document holds the settings, and the size and
   time of each delta (`ZK-055`).
-* **Verification.** 50 `verified`.
+* **Verification.** 54 `verified`.
 
 ---
 
@@ -230,7 +234,10 @@ and every other tag shows English. A stored tag of none takes the browser's lang
 holds one language, and every label that reads it redraws on a change (`SETTINGS-043`). Each title
 carries its words in every language, on its description (`SETTINGS-044`).
 
-Every other word reads the language once, where the view draws it (`SETTINGS-047`). A change of
+Every other word reads the language once, where the view draws it: in Prose (`SETTINGS-047`),
+Trame (`SETTINGS-051`), Toile (`SETTINGS-052`), Murmure (`SETTINGS-053`) and the shell
+(`SETTINGS-054`). A field of a context panel reads the title of its property. A control that names
+a command reads the title of that command, not words of its own. A change of
 language reloads the page once the local copy holds it (`SETTINGS-048`). The change leaves for
 the relay after the coalescing delay, as any change does. The copy opens before the relay answers,
 so the reloaded page keeps the new language over an earlier one the relay replays (`SETTINGS-049`).

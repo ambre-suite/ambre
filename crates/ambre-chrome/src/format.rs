@@ -82,11 +82,11 @@ pub fn FontSizeSelect(
     view! {
         <span class="ambre-font-size">
             <crate::Select
-                label="Font size"
+                label=ambre_commands::tr!("Font size", "Taille de police")
                 choices=choices
                 selected=selected
                 on_pick=pick
-                placeholder="Custom"
+                placeholder=ambre_commands::tr!("Custom", "Personnalis\u{e9}")
             />
         </span>
     }
@@ -267,7 +267,7 @@ pub fn FormatBar(
             style:transform="translateX(-50%)"
             style:z-index="62"
             role="toolbar"
-            aria-label="Format"
+            aria-label=ambre_commands::tr!("Format", "Format")
         >
             {controls.collect_view()}
             {children.map(|c| c())}

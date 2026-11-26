@@ -478,7 +478,7 @@ impl TrameView {
         self.needs_full = true;
         self.text_input.clear();
         self.text_input
-            .announce("A collaborator deleted the cell you were editing. Nothing was written.");
+            .announce(ambre_commands::tr!("A collaborator deleted the cell you were editing. Nothing was written.", "Un collaborateur a supprim\u{e9} la cellule que vous modifiiez. Rien n'a \u{e9}t\u{e9} \u{e9}crit."));
         self.show_formula_text(self.cell_seed(self.state.active_cell()));
     }
 

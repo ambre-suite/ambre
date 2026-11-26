@@ -232,8 +232,8 @@ pub(crate) fn TofuDialog(
                             <div class="ambre-tofu-panel">
                                 <h2>
                                     {match contact {
-                                        KeyContact::Changed => "Recipient key changed",
-                                        KeyContact::New => "Verify recipient key",
+                                        KeyContact::Changed => ambre_chrome::commands::tr!("Recipient key changed", "La cl\u{e9} du destinataire a chang\u{e9}"),
+                                        KeyContact::New => ambre_chrome::commands::tr!("Verify recipient key", "V\u{e9}rifier la cl\u{e9} du destinataire"),
                                     }}
                                 </h2>
                                 <p class="ambre-tofu-who">
@@ -275,7 +275,7 @@ pub(crate) fn TofuDialog(
                                         }
                                     }
                                 >
-                                    "Copy fingerprint"
+                                    {ambre_chrome::commands::tr!("Copy fingerprint", "Copier l'empreinte")}
                                 </button>
                                 <p class="ambre-tofu-limit">
                                     "Without out-of-band verification (in person, phone, SMS), this \
@@ -290,7 +290,7 @@ pub(crate) fn TofuDialog(
                                         class="ambre-tofu-cancel"
                                         on:click=move |_| prompt.set(None)
                                     >
-                                        "Cancel"
+                                        {ambre_chrome::commands::tr!("Cancel", "Annuler")}
                                     </button>
                                     <button
                                         r#type="button"
@@ -301,13 +301,13 @@ pub(crate) fn TofuDialog(
                                         }
                                     >
                                         {match (contact, direct) {
-                                            (KeyContact::Changed, false) => "Re-pin and invite",
+                                            (KeyContact::Changed, false) => ambre_chrome::commands::tr!("Re-pin and invite", "R\u{e9}\u{e9}pingler et inviter"),
                                             (KeyContact::New, false) if unproven => {
-                                                "Invite the unproven address"
+                                                ambre_chrome::commands::tr!("Invite the unproven address", "Inviter l'adresse non prouv\u{e9}e")
                                             }
-                                            (KeyContact::New, false) => "Confirm and invite",
-                                            (KeyContact::Changed, true) => "Re-pin and message",
-                                            (KeyContact::New, true) => "Confirm and message",
+                                            (KeyContact::New, false) => ambre_chrome::commands::tr!("Confirm and invite", "Confirmer et inviter"),
+                                            (KeyContact::Changed, true) => ambre_chrome::commands::tr!("Re-pin and message", "R\u{e9}\u{e9}pingler et \u{e9}crire"),
+                                            (KeyContact::New, true) => ambre_chrome::commands::tr!("Confirm and message", "Confirmer et \u{e9}crire"),
                                         }}
                                     </button>
                                 </div>

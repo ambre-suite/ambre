@@ -120,20 +120,20 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         // Rejections / validation failures: no CRDT mutation occurred, the user
         // needs to know why their action did nothing.
         TrameEvent::MergeRejected { at } => {
-            toasts.warning(format!(
-                "Merge rejected: cell {}{} is not empty",
+            toasts.warning(ambre_commands::trf!(
+                "Merge rejected: cell {}{} is not empty", "Fusion refus\u{e9}e\u{a0}: la cellule {}{} n'est pas vide",
                 crate::columns::col_to_alpha(at.col),
                 crate::columns::row_label(at.row)
             ));
         }
         TrameEvent::ValidationError { message, .. } => {
-            toasts.warning(format!("Invalid value: {message}"));
+            toasts.warning(ambre_commands::trf!("Invalid value: {message}", "Valeur non valide\u{a0}: {message}"));
         }
         TrameEvent::Error { refusal } => toasts.warning(refusal.to_string()),
         // A peer deleted the cell an open session was writing to, and the
         // session closed with nothing written (`TRAME-UI-176`).
         TrameEvent::EditTargetGone { .. } => toasts.warning(
-            "A collaborator deleted the cell you were editing. Your edit was not written.",
+            ambre_commands::tr!("A collaborator deleted the cell you were editing. Your edit was not written.", "Un collaborateur a supprim\u{e9} la cellule que vous modifiiez. Votre modification n'a pas \u{e9}t\u{e9} \u{e9}crite."),
         ),
         // The workbook was written by a newer client (`SCHEMA-008`). An error,
         // not a warning: nothing opened, and the remedy is not in this workbook.
@@ -143,7 +143,7 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         // warning. But it must be said: a register that silently reads as
         // unformatted is a workbook that looks intact and is not.
         TrameEvent::UndecodableRecords => toasts.warning(
-            "Some formatting in this workbook was written by a newer client and could not be read.",
+            ambre_commands::tr!("Some formatting in this workbook was written by a newer client and could not be read.", "Une partie de la mise en forme de ce classeur vient d'un client plus r\u{e9}cent et n'a pas pu \u{ea}tre lue."),
         ),
         // A converged concurrent edit masked a covered cell on an active merge.
         // Purely informational: the value reappears on unmerge.
@@ -163,13 +163,13 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         TrameEvent::FilterApplied {
             hidden_row_count, ..
         } => {
-            toasts.info(format!(
-                "Filter applied ({} rows hidden)",
+            toasts.info(ambre_commands::trf!(
+                "Filter applied ({} rows hidden)", "Filtre appliqu\u{e9} ({} lignes masqu\u{e9}es)",
                 hidden_row_count.get()
             ));
         }
-        TrameEvent::FilterCleared => toasts.info("Filter cleared"),
-        TrameEvent::SortComplete => toasts.info("Range sorted"),
+        TrameEvent::FilterCleared => toasts.info(ambre_commands::tr!("Filter cleared", "Filtre effac\u{e9}")),
+        TrameEvent::SortComplete => toasts.info(ambre_commands::tr!("Range sorted", "Plage tri\u{e9}e")),
         // A Replace All finished; confirm the rewritten-cell count (the data
         // refresh rides on the accompanying DataReset). `ui.rs` documents this
         // toast as the surface for ReplaceDone.
@@ -190,22 +190,22 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         }
         // A paste blocked by a protected range (Post-MVP); no CRDT mutation.
         TrameEvent::PasteRejected => {
-            toasts.warning("Paste rejected: the destination overlaps a protected range");
+            toasts.warning(ambre_commands::tr!("Paste rejected: the destination overlaps a protected range", "Collage refus\u{e9}\u{a0}: la destination chevauche une plage prot\u{e9}g\u{e9}e"));
         }
         // Validation warning (`trame-cell-editing`): the edit was applied
         // despite failing a Warn rule -- non-blocking, unlike ValidationError.
         TrameEvent::ValidationWarning { message, .. } => {
-            toasts.warning(format!("Validation warning: {message}"));
+            toasts.warning(ambre_commands::trf!("Validation warning: {message}", "Avertissement de validation\u{a0}: {message}"));
         }
         // Range protection (`trame-cell-editing`, Post-MVP): a local edit was
         // blocked, or a remote delta violated a protection. Both inform the user;
         // neither rolls back.
         TrameEvent::ProtectionDenied { description, .. } => {
-            toasts.warning(format!("Edit blocked: {description}"));
+            toasts.warning(ambre_commands::trf!("Edit blocked: {description}", "Modification bloqu\u{e9}e\u{a0}: {description}"));
         }
         TrameEvent::ProtectionViolationWarning { description, .. } => {
-            toasts.warning(format!(
-                "Protection violated by a collaborator: {description}"
+            toasts.warning(ambre_commands::trf!(
+                "Protection violated by a collaborator: {description}", "Protection enfreinte par un collaborateur\u{a0}: {description}"
             ));
         }
         // No toast for state-only events: cell data, toolbar style, sheet list,
@@ -282,5 +282,5 @@ pub const DOC_TYPE: DocType = DocType::Trame;
 
 /// The label of the landing "new document" button for this app.
 pub fn new_doc_label() -> &'static str {
-    "New Trame"
+    ambre_commands::tr!("New Trame", "Nouvelle Trame")
 }

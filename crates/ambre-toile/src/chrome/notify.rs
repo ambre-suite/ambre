@@ -52,14 +52,17 @@ pub fn notify_event<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(
         // that looks intact and is not.
         ToileEvent::UndecodableRecords => {
             toasts.warning(
-                "Some formatting in this board was written by a newer client and could not be read.",
+                ambre_commands::tr!("Some formatting in this board was written by a newer client and could not be read.", "Une partie de la mise en forme de ce tableau vient d'un client plus r\u{e9}cent et n'a pas pu \u{ea}tre lue."),
             );
         }
         // An arrow lost an end, here or under a peer's delete (`TOILE-044`,
         // `TOILE-165`). It stops being painted, so the board cannot show it.
         // The notice is the one surface that says the document still holds it.
         ToileEvent::DanglingConnector(_) => {
-            toasts.warning("An arrow lost an end and is no longer drawn");
+            toasts.warning(ambre_commands::tr!(
+                "An arrow lost an end and is no longer drawn",
+                "Une fl\u{e8}che a perdu une extr\u{e9}mit\u{e9} et n'est plus dessin\u{e9}e"
+            ));
         }
         _ => {}
     }

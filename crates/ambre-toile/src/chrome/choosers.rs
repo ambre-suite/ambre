@@ -79,7 +79,7 @@ pub fn ToileChoosers(
         // Embed a web page (`TOILE-087`).
         <Dialog open=embed_web_open class={StaticKey::<CssClasses>::new("ambre-embed-web")}>
             <div class="ambre-embed-panel">
-                <h2>"Embed a web page"</h2>
+                <h2>{ambre_commands::tr!("Embed a web page", "Int\u{e9}grer une page web")}</h2>
                 <input
                     type="url"
                     placeholder="example.com"
@@ -98,8 +98,8 @@ pub fn ToileChoosers(
                     {move || embed_web_error.get().map_or("", AddressError::message)}
                 </p>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| embed_web_open.set(Openness::Closed)>"Cancel"</button>
-                    <button on:click=move |_| place_web()>"Embed"</button>
+                    <button on:click=move |_| embed_web_open.set(Openness::Closed)>{ambre_commands::tr!("Cancel", "Annuler")}</button>
+                    <button on:click=move |_| place_web()>{ambre_commands::tr!("Embed", "Int\u{e9}grer")}</button>
                 </div>
             </div>
         </Dialog>
@@ -109,7 +109,7 @@ pub fn ToileChoosers(
         // (`TOILE-225`).
         <Dialog open=embed_doc_open class={StaticKey::<CssClasses>::new("ambre-embed-doc")}>
             <div class="ambre-embed-panel">
-                <h2>"Embed a document"</h2>
+                <h2>{ambre_commands::tr!("Embed a document", "Int\u{e9}grer un document")}</h2>
                 <ul class="ambre-embed-docs">
                     <For each=others key=|d| d.document_id let:doc>
                         {
@@ -127,7 +127,7 @@ pub fn ToileChoosers(
                     </For>
                 </ul>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| embed_doc_open.set(Openness::Closed)>"Cancel"</button>
+                    <button on:click=move |_| embed_doc_open.set(Openness::Closed)>{ambre_commands::tr!("Cancel", "Annuler")}</button>
                 </div>
             </div>
         </Dialog>
@@ -138,8 +138,8 @@ pub fn ToileChoosers(
         // off-screen ones a link exists to reach.
         <Dialog open=link_open class={StaticKey::<CssClasses>::new("ambre-link-chooser")}>
             <div class="ambre-embed-panel">
-                <h2>"Link this element"</h2>
-                <h3>"To a web page"</h3>
+                <h2>{ambre_commands::tr!("Link this element", "Lier cet \u{e9}l\u{e9}ment")}</h2>
+                <h3>{ambre_commands::tr!("To a web page", "Vers une page web")}</h3>
                 <input
                     type="url"
                     placeholder="example.com"
@@ -157,7 +157,7 @@ pub fn ToileChoosers(
                 <p class="ambre-embed-error" aria-live="polite">
                     {move || link_error.get().map_or("", AddressError::message)}
                 </p>
-                <h3>"To a frame on this board"</h3>
+                <h3>{ambre_commands::tr!("To a frame on this board", "Vers un cadre de ce tableau")}</h3>
                 <ul class="ambre-embed-docs">
                     <For
                         each=move || {
@@ -170,7 +170,7 @@ pub fn ToileChoosers(
                         {
                             let id = frame.id.clone();
                             let label = if frame.name.is_empty() {
-                                "Untitled frame".to_owned()
+                                ambre_commands::tr!("Untitled frame", "Cadre sans titre").to_owned()
                             } else {
                                 frame.name.clone()
                             };
@@ -185,7 +185,7 @@ pub fn ToileChoosers(
                         }
                     </For>
                 </ul>
-                <h3>"To another document"</h3>
+                <h3>{ambre_commands::tr!("To another document", "Vers un autre document")}</h3>
                 <ul class="ambre-embed-docs">
                     <For each=others key=|d| d.document_id let:doc>
                         {
@@ -203,8 +203,8 @@ pub fn ToileChoosers(
                     </For>
                 </ul>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| link_open.set(Openness::Closed)>"Cancel"</button>
-                    <button on:click=move |_| link_web()>"Link"</button>
+                    <button on:click=move |_| link_open.set(Openness::Closed)>{ambre_commands::tr!("Cancel", "Annuler")}</button>
+                    <button on:click=move |_| link_web()>{ambre_commands::tr!("Link", "Lier")}</button>
                 </div>
             </div>
         </Dialog>

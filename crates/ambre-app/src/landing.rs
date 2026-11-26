@@ -196,20 +196,20 @@ pub fn landing_view(
                             class="ambre-change-passphrase"
                             on:click=move |_| keys.open(crate::account::KeysFace::ChangePassphrase)
                         >
-                            "Change passphrase"
+                            {ambre_chrome::commands::tr!("Change passphrase", "Changer la phrase de passe")}
                         </button>
                         {sign_out_control(to_logic_signout.clone())}
                         <NewDocPicker on_pick=on_pick />
                         <button
                             class="ambre-open-file"
-                            title="Open an .ambre file from this device"
+                            title=ambre_chrome::commands::tr!("Open an .ambre file from this device", "Ouvrir un fichier .ambre de cet appareil")
                             on:click=move |_| crate::platform::open_ambre_file_picker(
                                 toasts,
                                 on_sealed,
                                 opened_file,
                             )
                         >
-                            "Open a file"
+                            {ambre_chrome::commands::tr!("Open a file", "Ouvrir un fichier")}
                         </button>
                     </div>
                 </Show>
@@ -292,13 +292,21 @@ fn document_list(
     // and hidden, otherwise.
     let status = move || {
         if docs.with(Vec::is_empty) {
-            return "No documents yet. Create one above.".to_owned();
+            return ambre_chrome::commands::tr!(
+                "No documents yet. Create one above.",
+                "Aucun document pour l'instant. Cr\u{e9}ez-en un ci-dessus."
+            )
+            .to_owned();
         }
         if !searching() {
             return String::new();
         }
         match rows().len() {
-            0 => "No document name contains this search.".to_owned(),
+            0 => ambre_chrome::commands::tr!(
+                "No document name contains this search.",
+                "Aucun nom de document ne contient cette recherche."
+            )
+            .to_owned(),
             1 => "1 document".to_owned(),
             n => format!("{n} documents"),
         }
@@ -308,8 +316,8 @@ fn document_list(
             <input
                 type="search"
                 class="ambre-doc-search-input"
-                aria-label="Search documents by name"
-                placeholder="Search documents"
+                aria-label=ambre_chrome::commands::tr!("Search documents by name", "Rechercher des documents par nom")
+                placeholder=ambre_chrome::commands::tr!("Search documents", "Rechercher des documents")
                 on:input=move |e| query.set(event_target_value(&e))
                 on:keydown=move |e| {
                     // Escape empties the query and keeps the focus in the
@@ -398,7 +406,7 @@ pub fn NewDocPicker(
                 aria-expanded=move || open.get().aria()
                 on:click=move |_| open.update(|o| *o = o.toggled())
             >
-                "New document"
+                {ambre_chrome::commands::tr!("New document", "Nouveau document")}
             </button>
             <Show when=move || open.get() == ambre_chrome::Openness::Open>
                 <ul
@@ -554,7 +562,7 @@ fn doc_card(
             <div class="ambre-doc-actions">
                 <button
                     class="ambre-doc-action"
-                    title="Rename"
+                    title=ambre_chrome::commands::tr!("Rename", "Renommer")
                     on:click=move |e| {
                         e.stop_propagation();
                         edit_value.set(
@@ -567,7 +575,7 @@ fn doc_card(
                         editing.set(true);
                     }
                 >
-                    "Rename"
+                    {ambre_chrome::commands::tr!("Rename", "Renommer")}
                 </button>
                 <button
                     class="ambre-doc-action ambre-doc-action-danger"
@@ -631,7 +639,7 @@ fn DeleteConfirm(
             on_close=on_close
             class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-confirm-dialog")}
         >
-            <h3>"Delete document?"</h3>
+            <h3>{ambre_chrome::commands::tr!("Delete document?", "Supprimer le document\u{a0}?")}</h3>
             <p>
                 "\""
                 {move || pending.get().map(|(_, label)| label.into_view())}
@@ -639,7 +647,7 @@ fn DeleteConfirm(
             </p>
             <div class="ambre-confirm-actions">
                 <button class="ambre-btn-secondary" on:click=move |_| pending.set(None)>
-                    "Cancel"
+                    {ambre_chrome::commands::tr!("Cancel", "Annuler")}
                 </button>
                 <button class="ambre-btn-danger" on:click=confirm>
                     "Delete"
@@ -699,7 +707,7 @@ pub(crate) fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl Int
                 }
             }
         >
-            {move || if leaving.get() { "Signing out..." } else { "Sign out" }}
+            {move || if leaving.get() { ambre_chrome::commands::tr!("Signing out...", "D\u{e9}connexion...") } else { ambre_chrome::commands::tr!("Sign out", "Se d\u{e9}connecter") }}
         </button>
     }
 }
@@ -710,7 +718,8 @@ fn sign_in_panel(
     keys: crate::account::KeysSignals,
     to_logic: crate::outbox::ShellOutbox,
 ) -> impl IntoView {
-    move || match dev_mode.get() {
+    move || {
+        match dev_mode.get() {
         // In a session, the development panel keeps only the recovery: a
         // recovery re-seals the seed of that session (`CHROME-135`). The
         // sign-in field stays hidden, so the setup ends in the list alone
@@ -721,7 +730,7 @@ fn sign_in_panel(
                     class="ambre-signin-link ambre-signin-recover"
                     on:click=move |_| keys.open(crate::account::KeysFace::Recover)
                 >
-                    "Recover an account with its recovery words"
+                    {ambre_chrome::commands::tr!("Recover an account with its recovery words", "R\u{e9}cup\u{e9}rer un compte avec ses mots de r\u{e9}cup\u{e9}ration")}
                 </button>
             </div>
         }
@@ -741,7 +750,7 @@ fn sign_in_panel(
                 <div class="ambre-signin">
                     <span class="ambre-signin-wordmark">"Ambre"</span>
                     <p class="ambre-signin-tagline">
-                        "Private collaborative office suite. End-to-end encrypted."
+                        {ambre_chrome::commands::tr!("Private collaborative office suite. End-to-end encrypted.", "Suite bureautique collaborative et priv\u{e9}e. Chiffr\u{e9}e de bout en bout.")}
                     </p>
                     {crate::dev_login::sign_in_field(to_logic.clone())}
                     // No setup link: no anonymous account exists (`SRV-319`).
@@ -760,7 +769,7 @@ fn sign_in_panel(
                 <div class="ambre-signin">
                     <span class="ambre-signin-wordmark">"Ambre"</span>
                     <p class="ambre-signin-tagline">
-                        "Private collaborative office suite. End-to-end encrypted."
+                        {ambre_chrome::commands::tr!("Private collaborative office suite. End-to-end encrypted.", "Suite bureautique collaborative et priv\u{e9}e. Chiffr\u{e9}e de bout en bout.")}
                     </p>
                     <button
                         class="ambre-signin-btn"
@@ -772,14 +781,15 @@ fn sign_in_panel(
                         }
                     >
                         {match provider {
-                            ambre_core::OidcProvider::Google => "Sign in with Google",
-                            ambre_core::OidcProvider::Oidc => "Sign in with your organization",
+                            ambre_core::OidcProvider::Google => ambre_chrome::commands::tr!("Sign in with Google", "Se connecter avec Google"),
+                            ambre_core::OidcProvider::Oidc => ambre_chrome::commands::tr!("Sign in with your organization", "Se connecter avec votre organisation"),
                         }}
                     </button>
                 </div>
             }
             .into_any()
         }
+    }
     }
 }
 

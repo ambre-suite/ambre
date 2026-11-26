@@ -102,7 +102,7 @@ pub const DOC_TYPE: DocType = DocType::Toile;
 
 /// The label of the landing "new document" button for Toile.
 pub fn new_doc_label() -> &'static str {
-    "New Toile"
+    ambre_commands::tr!("New Toile", "Nouvelle Toile")
 }
 
 /// Bind the Toile command chords into the launcher keymap. Ctrl+F opens Find and

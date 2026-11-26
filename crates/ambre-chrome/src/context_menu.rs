@@ -369,7 +369,7 @@ pub fn ContextMenu(
                 class="ambre-ctx-menu"
                 role="menu"
                 aria-orientation="vertical"
-                aria-label="Context menu"
+                aria-label=ambre_commands::tr!("Context menu", "Menu contextuel")
                 tabindex="-1"
                 style:left=move || format!("{}px", menu_at.get().x.get())
                 style:top=move || format!("{}px", menu_at.get().y.get())

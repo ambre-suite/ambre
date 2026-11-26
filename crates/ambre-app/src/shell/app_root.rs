@@ -100,7 +100,7 @@ pub(crate) fn MurmureShell(
                 <MurmureInviteLink link=invite_link />
                 <MessageSearch relay=relay send=send />
             </Toolbar>
-            <Sidebar slot label="Channels">
+            <Sidebar slot label=ambre_chrome::commands::tr!("Channels", "Canaux")>
                 // The view stamps a creation: the Logic thread reads no clock.
                 <SpaceList
                     relay=relay
@@ -115,7 +115,7 @@ pub(crate) fn MurmureShell(
                     when=move || matches!(pane.get(), MurmurePane::Members { .. })
                     // The thread is a canvas of its own, in the panel's cell
                     // (the Murmure message list spec). The host binds it by id.
-                    fallback=|| view! { <CanvasCell id=crate::host::THREAD_CANVAS label="Thread" /> }
+                    fallback=|| view! { <CanvasCell id=crate::host::THREAD_CANVAS label=ambre_chrome::commands::tr!("Thread", "Fil") /> }
                 >
                     <MemberList relay=relay send=send />
                 </Show>
@@ -200,9 +200,9 @@ fn ShellHeader(
             });
         });
         let label = if next == ambre_canvas::Theme::Dark {
-            "Dark theme"
+            ambre_chrome::commands::tr!("Dark theme", "Th\u{e8}me sombre")
         } else {
-            "Light theme"
+            ambre_chrome::commands::tr!("Light theme", "Th\u{e8}me clair")
         };
         toasts.info(label);
     };
@@ -253,14 +253,14 @@ fn ShellHeader(
             <Show when=move || current_doc.get().is_some()>
                 <ambre_chrome::PrimaryButton
                     icon=icondata::LuShare
-                    label="Share"
+                    label=ambre_chrome::commands::tr!("Share", "Partager")
                     expanded=share_open
                     on_press=Callback::new(move |()| share_open.set(ambre_chrome::Openness::Open))
                 />
             </Show>
             // The account and the settings of the person (`CHROME-156`).
             <ambre_chrome::HeaderMenu
-                label="Account"
+                label=ambre_chrome::commands::tr!("Account", "Compte")
                 class={StaticKey::<ambre_core::CssClasses>::new("ambre-account-menu")}
                 trigger={move || {
                     // The user's initials on their identity colour, the
@@ -282,9 +282,9 @@ fn ShellHeader(
                 <button role="menuitem" class="ambre-menu-item ambre-menu-theme" on:click=toggle_theme>
                     {move || {
                         let (icon, label) = if theme_sig.get() == ambre_canvas::Theme::Dark {
-                            (icondata::LuSun, "Light theme")
+                            (icondata::LuSun, ambre_chrome::commands::tr!("Light theme", "Th\u{e8}me clair"))
                         } else {
-                            (icondata::LuMoon, "Dark theme")
+                            (icondata::LuMoon, ambre_chrome::commands::tr!("Dark theme", "Th\u{e8}me sombre"))
                         };
                         view! { <Icon icon=icon /><span>{label}</span> }
                     }}
@@ -293,7 +293,7 @@ fn ShellHeader(
                 // it must not reach the menu, which closes on any click.
                 <div class="ambre-menu-language" on:click=|ev: leptos::ev::MouseEvent| ev.stop_propagation()>
                     <ambre_chrome::Select
-                        label="Language"
+                        label=ambre_chrome::commands::tr!("Language", "Langue")
                         choices=languages.clone()
                         selected=language_shown
                         on_pick=pick_language
@@ -387,7 +387,7 @@ pub(crate) fn HeaderTitle(
     };
     view! {
         <ambre_chrome::HeaderMenu
-            label="Ambre menu"
+            label=ambre_chrome::commands::tr!("Ambre menu", "Menu Ambre")
             class={StaticKey::<ambre_core::CssClasses>::new("ambre-brand")}
             trigger={|| view! {
                 <span class="ambre-mark" aria-hidden="true"></span>
@@ -397,7 +397,7 @@ pub(crate) fn HeaderTitle(
         >
             <a role="menuitem" class="ambre-menu-item ambre-home" href="/" on:click=go_home.clone()>
                 <Icon icon=icondata::LuLayoutGrid />
-                <span>"All documents"</span>
+                <span>{ambre_chrome::commands::tr!("All documents", "Tous les documents")}</span>
             </a>
             {palette.map(|command| {
                 let id = command.id;
@@ -427,7 +427,7 @@ pub(crate) fn HeaderTitle(
                 on:click=move |_| about_open.set(ambre_chrome::Openness::Open)
             >
                 <Icon icon=icondata::AiQuestionCircleOutlined />
-                <span>"About Ambre"</span>
+                <span>{ambre_chrome::commands::tr!("About Ambre", "\u{c0} propos d'Ambre")}</span>
             </button>
         </ambre_chrome::HeaderMenu>
         {move || {
@@ -1152,9 +1152,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <Dialog open=about_open class={StaticKey::<ambre_core::CssClasses>::new("ambre-about")}>
             <div class="ambre-about-panel">
                 <h2>"Ambre"</h2>
-                <p>"Collaborative office suite, 100% Rust, E2EE encrypted."</p>
+                <p>{ambre_chrome::commands::tr!("Collaborative office suite, 100% Rust, E2EE encrypted.", "Suite bureautique collaborative, 100\u{a0}% Rust, chiffr\u{e9}e de bout en bout.")}</p>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| about_open.set(ambre_chrome::Openness::Closed)>"Close"</button>
+                    <button on:click=move |_| about_open.set(ambre_chrome::Openness::Closed)>{ambre_chrome::commands::tr!("Close", "Fermer")}</button>
                 </div>
             </div>
         </Dialog>
@@ -1165,7 +1165,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             class={StaticKey::<ambre_core::CssClasses>::new("ambre-share")}
         >
             <div class="ambre-share-panel">
-                <h2>"Share document"</h2>
+                <h2>{ambre_chrome::commands::tr!("Share document", "Partager le document")}</h2>
 
                 // Current members.
                 <ShareMembers
@@ -1227,7 +1227,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     <input
                         r#type="text"
                         class="ambre-share-input"
-                        aria-label="Invitee"
+                        aria-label=ambre_chrome::commands::tr!("Invitee", "Invit\u{e9}")
                         placeholder=move || {
                             if dev_mode.get().is_some_and(landing::SignInMode::is_dev) {
                                 "username or email"
@@ -1239,22 +1239,22 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         on:input=move |ev| invitee_input.set(event_target_value(&ev))
                     />
                     <select
-                        aria-label="Role"
+                        aria-label=ambre_chrome::commands::tr!("Role", "R\u{f4}le")
                         on:change=move |ev| {
                             if let Ok(role) = event_target_value(&ev).parse::<Role>() {
                                 invite_role.set(role);
                             }
                         }
                     >
-                        <option value="editor" selected=true>"Editor"</option>
-                        <option value="viewer">"Viewer"</option>
-                        <option value="owner">"Owner"</option>
+                        <option value="editor" selected=true>{ambre_chrome::commands::tr!("Editor", "\u{c9}diteur")}</option>
+                        <option value="viewer">{ambre_chrome::commands::tr!("Viewer", "Lecteur")}</option>
+                        <option value="owner">{ambre_chrome::commands::tr!("Owner", "Propri\u{e9}taire")}</option>
                     </select>
-                    <button r#type="submit">"Invite"</button>
+                    <button r#type="submit">{ambre_chrome::commands::tr!("Invite", "Inviter")}</button>
                 </form>
 
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| share_open.set(ambre_chrome::Openness::Closed)>"Close"</button>
+                    <button on:click=move |_| share_open.set(ambre_chrome::Openness::Closed)>{ambre_chrome::commands::tr!("Close", "Fermer")}</button>
                 </div>
             </div>
         </Dialog>
@@ -1437,7 +1437,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <Show when=move || chrome_status.get().hydrating>
             <div class="ambre-doc-loading">
                 <div class="spinner"></div>
-                <p>"Loading..."</p>
+                <p>{ambre_chrome::commands::tr!("Loading...", "Chargement...")}</p>
             </div>
         </Show>
 
@@ -1505,7 +1505,10 @@ pub(super) fn read_clipboard(
             form,
         ));
     } else {
-        toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");
+        toasts.warning(ambre_chrome::commands::tr!(
+            "Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste",
+            "Presse-papiers indisponible ici (HTTPS requis)\u{a0}; collez avec Ctrl+V"
+        ));
     }
 }
 

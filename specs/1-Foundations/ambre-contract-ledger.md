@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**5263 rows: 4873 shipped, of which 14 loose. 390 unbuilt.**
+**5267 rows: 4877 shipped, of which 14 loose. 390 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1846 | 583 | 1003 | 851 | 576 | 4859 |
+| `verified` | 1850 | 583 | 1003 | 851 | 576 | 4863 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 14 |  |  |  |  | 14 |
 | `unimplemented` | 143 | 42 | 20 | 20 | 165 | 390 |
@@ -82,7 +82,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-undo.md` | 25 | 25 | 25 |  |  |
-| `ambre-spec-user-settings.md` | 50 | 50 | 50 |  |  |
+| `ambre-spec-user-settings.md` | 54 | 54 | 54 |  |  |
 | `ambre-spec-zero-knowledge.md` | 59 | 58 | 57 | 1 | 1 |
 | `ambre-spec-zoom.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-schema.md` | 17 | 17 | 17 |  |  |
@@ -368,6 +368,6 @@
 | `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154,286..288,290..291,298..301 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062..064,067 |
 | `ambre-spec-undo.md` | UNDO-001..025 |
-| `ambre-spec-user-settings.md` | SETTINGS-001..050 |
+| `ambre-spec-user-settings.md` | SETTINGS-001..054 |
 | `ambre-spec-zero-knowledge.md` | ZK-001..059 |
 | `ambre-spec-zoom.md` | ZOOM-001..011 |

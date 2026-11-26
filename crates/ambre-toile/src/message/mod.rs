@@ -212,9 +212,10 @@ impl FontSpec {
     /// named family shows its own label (`TOILE-UI-397`).
     #[must_use]
     pub fn picker_label(&self) -> Option<&'static str> {
-        self.family
-            .as_ref()
-            .map_or(Some("Default"), FontFamily::picker_label)
+        self.family.as_ref().map_or(
+            Some(ambre_commands::tr!("Default", "Par d\u{e9}faut")),
+            FontFamily::picker_label,
+        )
     }
 }
 
@@ -599,9 +600,15 @@ impl AddressError {
     /// What the dialog shows. Says what to do, not what went wrong.
     pub fn message(self) -> &'static str {
         match self {
-            Self::Empty => "Type a web address",
-            Self::NotHttps => "Only https addresses can be embedded",
-            Self::NoHost => "That address has no site in it",
+            Self::Empty => ambre_commands::tr!("Type a web address", "Saisissez une adresse web"),
+            Self::NotHttps => ambre_commands::tr!(
+                "Only https addresses can be embedded",
+                "Seules les adresses https peuvent \u{ea}tre int\u{e9}gr\u{e9}es"
+            ),
+            Self::NoHost => ambre_commands::tr!(
+                "That address has no site in it",
+                "Cette adresse ne contient aucun site"
+            ),
         }
     }
 }

@@ -74,7 +74,28 @@ pub fn shown(words: &TitleWords) -> &'static str {
 #[macro_export]
 macro_rules! tr {
     ($en:literal, $fr:literal) => {
-        $crate::shown(&$crate::TitleWords { en: $en, fr: $fr })
+        $crate::shown(&$crate::words!($en, $fr))
+    };
+}
+
+/// A sentence that names values, in English then in French: each language
+/// keeps its own word order, and both name the same arguments.
+#[macro_export]
+macro_rules! trf {
+    ($en:literal, $fr:literal $(, $arg:expr)* $(,)?) => {
+        match $crate::shown_locale() {
+            $crate::Locale::En => ::std::format!($en $(, $arg)*),
+            $crate::Locale::Fr => ::std::format!($fr $(, $arg)*),
+        }
+    };
+}
+
+/// The words of a label in English then in French, as data: a constant
+/// table holds them, and the view reads them through [`shown`].
+#[macro_export]
+macro_rules! words {
+    ($en:literal, $fr:literal) => {
+        $crate::TitleWords { en: $en, fr: $fr }
     };
 }
 

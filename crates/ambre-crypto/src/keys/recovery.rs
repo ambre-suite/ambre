@@ -231,6 +231,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     proptest::proptest! {
         /// `ZK-043`: every seed spells 24 listed words that read back to it.
         #[test]

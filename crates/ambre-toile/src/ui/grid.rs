@@ -128,13 +128,31 @@ pub struct BoardLook {
 /// The light tints the board section offers after the ground of the theme
 /// (`TOILE-UI-430`). Each one is light, so dark content reads on it in both
 /// themes.
-pub const TINTS: [(&str, ambre_core::Rgba); 6] = [
-    ("Ivory", ambre_core::Rgba::from_bits(0xFFFD_F5FF)),
-    ("Lemon", ambre_core::Rgba::from_bits(0xFDF8_DCFF)),
-    ("Mint", ambre_core::Rgba::from_bits(0xE6F4_EAFF)),
-    ("Sky", ambre_core::Rgba::from_bits(0xE8F1_FBFF)),
-    ("Lavender", ambre_core::Rgba::from_bits(0xEFEA_F8FF)),
-    ("Blush", ambre_core::Rgba::from_bits(0xFBEA_EAFF)),
+pub const TINTS: [(ambre_commands::TitleWords, ambre_core::Rgba); 6] = [
+    (
+        ambre_commands::words!("Ivory", "Ivoire"),
+        ambre_core::Rgba::from_bits(0xFFFD_F5FF),
+    ),
+    (
+        ambre_commands::words!("Lemon", "Citron"),
+        ambre_core::Rgba::from_bits(0xFDF8_DCFF),
+    ),
+    (
+        ambre_commands::words!("Mint", "Menthe"),
+        ambre_core::Rgba::from_bits(0xE6F4_EAFF),
+    ),
+    (
+        ambre_commands::words!("Sky", "Ciel"),
+        ambre_core::Rgba::from_bits(0xE8F1_FBFF),
+    ),
+    (
+        ambre_commands::words!("Lavender", "Lavande"),
+        ambre_core::Rgba::from_bits(0xEFEA_F8FF),
+    ),
+    (
+        ambre_commands::words!("Blush", "Rose poudr\u{e9}"),
+        ambre_core::Rgba::from_bits(0xFBEA_EAFF),
+    ),
 ];
 
 /// The step a drag, a resize and a nudge land on, `None` when they land

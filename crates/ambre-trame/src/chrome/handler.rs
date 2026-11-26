@@ -121,7 +121,10 @@ impl CommandHandler for TrameHandler {
             // (`trame-import-export`).
             IMPORT_CSV => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Csv,
-                unreadable: "Could not read the CSV file",
+                unreadable: ambre_commands::tr!(
+                    "Could not read the CSV file",
+                    "Impossible de lire le fichier CSV"
+                ),
                 read: Box::new(|data| {
                     TrameCommand::import_csv(crate::message::CsvImport {
                         data,
@@ -137,7 +140,10 @@ impl CommandHandler for TrameHandler {
             // the client (`trame-import-export`).
             IMPORT_XLSX => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Excel,
-                unreadable: "Could not read the Excel file",
+                unreadable: ambre_commands::tr!(
+                    "Could not read the Excel file",
+                    "Impossible de lire le fichier Excel"
+                ),
                 read: Box::new(|data| {
                     TrameCommand::Interop(ambre_bus::interop::InteropRequest::Import(
                         crate::message::TrameImport::Xlsx(crate::message::WorkbookImport { data }),
@@ -148,7 +154,10 @@ impl CommandHandler for TrameHandler {
             // (`TRAME-IO-029`).
             IMPORT_ODS => ShellAction::PickFile(FilePick {
                 accept: FileAccept::OpenDocumentSpreadsheet,
-                unreadable: "Could not read the OpenDocument spreadsheet",
+                unreadable: ambre_commands::tr!(
+                    "Could not read the OpenDocument spreadsheet",
+                    "Impossible de lire le classeur OpenDocument"
+                ),
                 read: Box::new(|data| {
                     TrameCommand::Interop(ambre_bus::interop::InteropRequest::Import(
                         crate::message::TrameImport::Ods(crate::message::WorkbookImport { data }),

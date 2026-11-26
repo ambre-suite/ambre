@@ -408,14 +408,24 @@
   fits: Swash has no feature that leaves the hinter out. The new ceiling also holds the second step
   of the interface language, by the Main ceiling has room for hinted text Story
   (`ambre-roadmap.md`).
-* **The ceiling of Main went up to 10 940 000 on 2026-11-26.** The census sets apart a thread
+* **The ceiling of Main went up to 10 925 000 on 2026-11-26.** The words of Trame, Toile, Murmure,
+  the shell and the shared chrome read the interface language (`SETTINGS-051` to `SETTINGS-054`).
+  Over `main` at `61fca83`, they took Main from 10 890 186 to 10 915 699 raw bytes. Brotli went from
+  2 935 044 to 2 942 939. A word read at render leaves the static template of `view!` for code of
+  its own, about 45 raw bytes a word.
+* **The cut before that raise.** A control that repeats the title of a property or a command reads
+  that title. A lazy module of French words was not taken: a French page would wait
+  on a fetch before its first frame. By the Main ceiling has room for the interface language Story
+  (`ambre-roadmap.md`).
+* **The ceiling of Main went up to 10 965 000 on 2026-11-26.** The census sets apart a thread
   with no receipt that counts and asks the owner (`SYNC-333`). A reply writes a fresh receipt
   under the current link key (`SYNC-334`).
 
-  Over `ccr` at `e77a2f3`, the first took Main to
-  10 908 562 raw bytes, 18 364 more than `main` at `61fca83`. The second took it to about
-  10 920 074. No cut was tried first. The owner of the project raised the ceiling for these two
-  security fixes, by the Main ceiling has room for the thread receipts Story (`ambre-roadmap.md`).
+  Over `ccr` at `e77a2f3`, the first took Main to 10 908 562 raw bytes, 18 364 more than `main`
+  at `61fca83`. The second added about 11 512 more. Over the 10 915 699 of the interface language,
+  the two make about 10 945 600. No cut was tried first. The owner of the project raised the
+  ceiling for these two security fixes, by the Main ceiling has room for the thread receipts
+  Story (`ambre-roadmap.md`).
 * **The figures of the cfg.** `just size` on the session container, over `main` at `f2f601d`, by
   the Win back room in Main Story (`ambre-roadmap.md`).
 

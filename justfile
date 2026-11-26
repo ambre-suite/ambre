@@ -81,6 +81,10 @@ lint-wasm:
     # target. This line compiles them for wasm, so a gate that drops a helper
     # the tests still call fails here, and not on the next wasm test run.
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-canvas --all-targets
+    # The crypto unit tests run on the host, and their property tests need the
+    # host-only proptest. This line compiles the rest for wasm, so a test that
+    # calls proptest without the host gate fails here.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-crypto --all-targets
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over

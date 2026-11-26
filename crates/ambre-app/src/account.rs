@@ -151,7 +151,10 @@ impl ReclaimLine {
     /// language, and this table owns the words.
     fn text(self, locale: Locale) -> &'static str {
         match (self, locale) {
-            (Self::Title, Locale::En) => "Your address was reclaimed",
+            (Self::Title, Locale::En) => ambre_chrome::commands::tr!(
+                "Your address was reclaimed",
+                "Votre adresse a \u{e9}t\u{e9} r\u{e9}cup\u{e9}r\u{e9}e"
+            ),
             (Self::Title, Locale::Fr) => "Votre adresse a \u{e9}t\u{e9} reprise",
             (Self::Meaning, Locale::En) => {
                 "An account that its provider verified now holds this address. Documents \
@@ -209,8 +212,15 @@ pub fn keys_view(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
 fn refusal_line(keys: KeysSignals, local: RwSignal<Option<FieldRefusal>>) -> impl IntoView {
     // A line whose form already unmounted reads no refusal of its own.
     let text = move || match local.try_get().flatten() {
-        Some(FieldRefusal::Empty) => "Type a passphrase.".to_owned(),
-        Some(FieldRefusal::Mismatch) => "The two passphrases do not match.".to_owned(),
+        Some(FieldRefusal::Empty) => {
+            ambre_chrome::commands::tr!("Type a passphrase.", "Saisissez une phrase de passe.")
+                .to_owned()
+        }
+        Some(FieldRefusal::Mismatch) => ambre_chrome::commands::tr!(
+            "The two passphrases do not match.",
+            "Les deux phrases de passe ne correspondent pas."
+        )
+        .to_owned(),
         None => keys
             .refusal
             .get()
@@ -294,24 +304,24 @@ fn change_form(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
     };
     view! {
         <form class="ambre-keys ambre-keys-change" on:submit=submit>
-            <h2>"Change your passphrase"</h2>
+            <h2>{ambre_chrome::commands::tr!("Change your passphrase", "Changez votre phrase de passe")}</h2>
             <p class="ambre-keys-note">
                 "Type your current passphrase, then choose a new one. Your recovery words \
                  stay the same."
             </p>
             <input node_ref=current class="ambre-keys-current" type="password"
-                aria-label="Current passphrase" placeholder="Current passphrase"
+                aria-label=ambre_chrome::commands::tr!("Current passphrase", "Phrase de passe actuelle") placeholder=ambre_chrome::commands::tr!("Current passphrase", "Phrase de passe actuelle")
                 autocomplete="current-password" />
             <input node_ref=first class="ambre-keys-passphrase" type="password"
-                aria-label="New passphrase" placeholder="New passphrase"
+                aria-label=ambre_chrome::commands::tr!("New passphrase", "Nouvelle phrase de passe") placeholder=ambre_chrome::commands::tr!("New passphrase", "Nouvelle phrase de passe")
                 autocomplete="new-password" />
             <input node_ref=second class="ambre-keys-confirm" type="password"
-                aria-label="Confirm the new passphrase" placeholder="Confirm the new passphrase"
+                aria-label=ambre_chrome::commands::tr!("Confirm the new passphrase", "Confirmez la nouvelle phrase de passe") placeholder=ambre_chrome::commands::tr!("Confirm the new passphrase", "Confirmez la nouvelle phrase de passe")
                 autocomplete="new-password" />
             {refusal_line(keys, local)}
             <div class="ambre-keys-actions">
                 <button type="button" class="ambre-keys-cancel" on:click=move |_| keys.close()>
-                    "Cancel"
+                    {ambre_chrome::commands::tr!("Cancel", "Annuler")}
                 </button>
                 <button type="submit" class="ambre-keys-submit">"Change the passphrase"</button>
             </div>
@@ -339,7 +349,7 @@ fn words_panel(keys: KeysSignals, words: Confidential<RecoveryWords>) -> impl In
     });
     view! {
         <div class="ambre-keys ambre-keys-words">
-            <h2>"Your recovery words"</h2>
+            <h2>{ambre_chrome::commands::tr!("Your recovery words", "Vos mots de r\u{e9}cup\u{e9}ration")}</h2>
             <p class="ambre-keys-note">
                 "Write these 24 words down, in order, and keep them offline. They are the \
                  only way back into your account if you forget your passphrase. Ambre shows \
@@ -348,7 +358,7 @@ fn words_panel(keys: KeysSignals, words: Confidential<RecoveryWords>) -> impl In
             <ol node_ref=list class="ambre-recovery-words" aria-label="Recovery words"></ol>
             <div class="ambre-keys-actions">
                 <button class="ambre-keys-submit ambre-words-done" on:click=move |_| keys.close()>
-                    "I have written them down"
+                    {ambre_chrome::commands::tr!("I have written them down", "Je les ai not\u{e9}s")}
                 </button>
             </div>
         </div>
@@ -409,23 +419,23 @@ fn recovery_form(keys: KeysSignals, to_logic: ShellOutbox) -> impl IntoView {
     };
     view! {
         <form class="ambre-keys ambre-keys-recover" on:submit=submit>
-            <h2>"Recover your account"</h2>
+            <h2>{ambre_chrome::commands::tr!("Recover your account", "R\u{e9}cup\u{e9}rez votre compte")}</h2>
             <p class="ambre-keys-note">
-                "Type your 24 recovery words in order, then choose a new passphrase."
+                {ambre_chrome::commands::tr!("Type your 24 recovery words in order, then choose a new passphrase.", "Saisissez vos 24 mots de r\u{e9}cup\u{e9}ration dans l'ordre, puis choisissez une nouvelle phrase de passe.")}
             </p>
             <textarea node_ref=words class="ambre-keys-words-field" aria-label="Recovery words"
                 placeholder="24 recovery words" rows="4" autocomplete="off"
                 autocapitalize="off" spellcheck="false"></textarea>
             <input node_ref=first class="ambre-keys-passphrase" type="password"
-                aria-label="New passphrase" placeholder="New passphrase"
+                aria-label=ambre_chrome::commands::tr!("New passphrase", "Nouvelle phrase de passe") placeholder=ambre_chrome::commands::tr!("New passphrase", "Nouvelle phrase de passe")
                 autocomplete="new-password" />
             <input node_ref=second class="ambre-keys-confirm" type="password"
-                aria-label="Confirm the new passphrase" placeholder="Confirm the new passphrase"
+                aria-label=ambre_chrome::commands::tr!("Confirm the new passphrase", "Confirmez la nouvelle phrase de passe") placeholder=ambre_chrome::commands::tr!("Confirm the new passphrase", "Confirmez la nouvelle phrase de passe")
                 autocomplete="new-password" />
             {refusal_line(keys, local)}
             <div class="ambre-keys-actions">
                 <button type="button" class="ambre-keys-cancel" on:click=move |_| keys.close()>
-                    "Cancel"
+                    {ambre_chrome::commands::tr!("Cancel", "Annuler")}
                 </button>
                 <button type="submit" class="ambre-keys-submit">"Recover the account"</button>
             </div>
