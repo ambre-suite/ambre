@@ -1,5 +1,8 @@
 //! Host tests for the crypto primitives and envelope.
 
+// proptest is a host dev-dependency: it pulls `wait-timeout`, which does not
+// build on wasm32. The other tests still compile for wasm.
+#[cfg(not(target_arch = "wasm32"))]
 use proptest::prelude::*;
 
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
@@ -989,6 +992,7 @@ fn a_media_address_binds_its_document() {
 
 // -- Property tests ----------------------------------------------------------
 
+#[cfg(not(target_arch = "wasm32"))]
 proptest! {
     /// `SYNC-264`: for any two keys wrapped in turn for one recipient, the
     /// second wrap, made from the held pair key, opens to its own key.
@@ -1094,6 +1098,7 @@ fn fingerprint_is_stable_grouped_base32() {
     );
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 proptest! {
     /// The hand-written base32 of the fingerprint spells what the RFC 4648
     /// encoder of `data-encoding` spells, grouped by 4, for any pair of keys.

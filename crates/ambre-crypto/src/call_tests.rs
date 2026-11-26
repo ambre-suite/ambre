@@ -6,14 +6,18 @@ use ambre_core::{
     PictureKind, PublicKey, SealedChunk, SenderIndex, Seq, TimeSpan, Track,
 };
 use ed25519_dalek::SigningKey;
+// proptest is a host dev-dependency: it pulls `wait-timeout`, which does not
+// build on wasm32. The other tests still compile for wasm.
+#[cfg(not(target_arch = "wasm32"))]
 use proptest::prelude::*;
 
+#[cfg(not(target_arch = "wasm32"))]
+use super::AUDIO_CHUNK_SIZE;
 use super::{
-    AUDIO_CHUNK_SIZE, CONFIG_BYTE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer,
-    DEPARTURE_SLOTS, Departures, HEADER_LEN, JoinClaim, KeyHandoff, MAX_RATCHETS,
-    OPENERS_PER_SENDER, ReceiveKeys, ReplayWindow, SWITCH_DELAY, SenderKey, SignedJoin, TAG_LEN,
-    VIDEO_OVERHEAD, WRAP_DOMAIN, WRAP_PLAIN_LEN, WrapBinding, WrappedSenderKey, unwrap_sender_key,
-    wrap_key, wrap_sender_key,
+    CONFIG_BYTE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer, DEPARTURE_SLOTS,
+    Departures, HEADER_LEN, JoinClaim, KeyHandoff, MAX_RATCHETS, OPENERS_PER_SENDER, ReceiveKeys,
+    ReplayWindow, SWITCH_DELAY, SenderKey, SignedJoin, TAG_LEN, VIDEO_OVERHEAD, WRAP_DOMAIN,
+    WRAP_PLAIN_LEN, WrapBinding, WrappedSenderKey, unwrap_sender_key, wrap_key, wrap_sender_key,
 };
 use crate::CryptoError;
 
@@ -400,6 +404,7 @@ fn a_chunk_that_names_another_sender_is_dropped() {
     );
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 proptest! {
     /// `CALL-023` and `ZK-028`: the seal leaves the clear prefix of any VP8 chunk unchanged, adds
     /// a fixed overhead alone, and the chunk opens back whole.
@@ -828,6 +833,7 @@ fn counter(value: u64) -> Seq<ChunkCounter> {
 
 /// The replay window as a second path: the set of the counters opened, and the highest one.
 /// A counter opens above the highest, or less than 128 behind it and never opened.
+#[cfg(not(target_arch = "wasm32"))]
 fn model_admits(opened: &std::collections::BTreeSet<u64>, highest: u64, value: u64) -> bool {
     value > highest || (highest - value < 128 && !opened.contains(&value))
 }
@@ -870,6 +876,7 @@ fn the_replay_window_carries_its_counters_when_the_highest_moves() {
     assert!(jumped.admits(counter(132)));
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 proptest! {
     /// `CALL-026`: the window admits what the model admits, over any order of counters, and
     /// a counter that fails to open moves neither of them.
