@@ -11,7 +11,7 @@
   --ink:#1f1b16; --muted:#6f675c; --faint:#9a9184;
   --accent:#b4530b; --accent-ink:#ffffff; --accent-soft:#f6e3d1;
   --ok:#2f8f5b; --ok-soft:#dcefe3; --danger:#c23a2b; --mention:#c23a78;
-  --stage:#e9e5de; --tile-name:#1f1b16b8;
+  --stage:#e9e5de; --tile-name:#1f1b16b8; --scrim:#1f1b1661;
   --shadow:0 1px 2px #1f1b1614, 0 6px 20px #1f1b1617;
   --shadow-float:0 2px 6px #1f1b161f, 0 14px 40px #1f1b1630;
   --font-ui:"Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -23,7 +23,7 @@
   --ink:#eee8df; --muted:#a59a89; --faint:#7b7266;
   --accent:#ec8a3c; --accent-ink:#1d1206; --accent-soft:#3a2614;
   --ok:#4fbf83; --ok-soft:#1c3427; --danger:#ef6a5a; --mention:#ec6aa6;
-  --stage:#100e0b; --tile-name:#000000a8;
+  --stage:#100e0b; --tile-name:#000000a8; --scrim:#000000a6;
   --shadow:0 1px 2px #0006, 0 8px 24px #0008; --shadow-float:0 2px 8px #0008, 0 16px 44px #000a; color-scheme:dark;
 }}
 :root[data-theme="dark"]{
@@ -31,7 +31,7 @@
   --ink:#eee8df; --muted:#a59a89; --faint:#7b7266;
   --accent:#ec8a3c; --accent-ink:#1d1206; --accent-soft:#3a2614;
   --ok:#4fbf83; --ok-soft:#1c3427; --danger:#ef6a5a; --mention:#ec6aa6;
-  --stage:#100e0b; --tile-name:#000000a8;
+  --stage:#100e0b; --tile-name:#000000a8; --scrim:#000000a6;
   --shadow:0 1px 2px #0006, 0 8px 24px #0008; --shadow-float:0 2px 8px #0008, 0 16px 44px #000a; color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -390,6 +390,84 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:78ch}
 .p-tabs{flex:none;display:flex;justify-content:space-around;border-top:1px solid var(--line);background:var(--surface);padding:6px 0 16px}
 .p-tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font:inherit;font-size:11px;color:var(--faint);padding:4px 14px}
 .p-tabs button.on{color:var(--accent,var(--ink));font-weight:650}
+/* ---------- create or join a space ---------- */
+.space-pop .row.sel{background:var(--accent-soft)}
+.space-pop .row{white-space:nowrap}
+.space-pop .row .ok{color:var(--accent);margin-left:2px}
+.space-pop .row.dim{cursor:default}
+.sj-scrim{position:absolute;inset:0;z-index:40;background:var(--scrim);display:grid;place-items:center}
+.sj{width:500px;max-width:calc(100% - 32px);background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-float);overflow:hidden}
+.sj-head{display:flex;align-items:center;gap:8px;padding:12px 10px 12px 18px;border-bottom:1px solid var(--line)}
+.sj-head h3{margin:0;font-size:15.5px;font-weight:700}
+.sj-head .ib{margin-left:auto}
+.sj-sec{padding:14px 18px 16px;display:grid;gap:10px}
+.sj-t{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600}
+.sj-create{display:flex;gap:14px;align-items:flex-start}
+.sj-mark{width:52px;height:52px;border-radius:14px;font-size:19px;margin-top:20px;transition:background .15s}
+.sj-mark.blank{background:var(--sunken)!important;color:var(--faint);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.sj-fields{flex:1;display:grid;gap:10px;min-width:0}
+.sj-line{display:flex;gap:8px}
+.fld{display:grid;gap:4px;font-size:12.5px;color:var(--muted);font-weight:500;min-width:0}
+.fld input{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;width:100%;min-width:0}
+.fld input::placeholder{color:var(--faint)}
+.fld input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.fld.bad input{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 6%,var(--surface))}
+.fld.ini{width:72px;flex:none}
+.fld.ini input{text-transform:uppercase;text-align:center;font-weight:650}
+.sj-link{font-family:var(--font-mono);font-size:12.5px!important}
+.sj-pal{display:flex;flex-wrap:wrap;gap:7px;padding-top:2px}
+.sj-pal button{width:24px;height:24px;border-radius:7px}
+.sj-pal button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--ink)}
+.sj-foot{display:flex;align-items:center;gap:12px}
+.sj-foot .hint{flex:1}
+.hint{font-size:12.5px;color:var(--muted)}
+.btn{height:34px;padding:0 16px;border-radius:8px;border:1px solid var(--line-strong);font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none}
+.btn:hover:not(:disabled){background:var(--sunken)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.pri:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 88%,var(--ink))}
+.btn:disabled{opacity:.45;cursor:default}
+.sj-or{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;font-weight:600;margin:0 18px}
+.sj-or::before,.sj-or::after{content:"";flex:1;border-top:1px solid var(--line)}
+.sj-row{display:flex;gap:8px}
+.sj-msg{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted)}
+.sj-msg svg.i{margin-top:1px}
+.sj-msg.err{color:var(--danger)}
+.sj-msg.err b{color:var(--ink)}
+.sj-msg .pinid{font-family:var(--font-mono);font-size:11.5px;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+/* a space with no channel yet */
+.empty-space{margin:6px 4px 4px;padding:12px;border:1px dashed var(--line-strong);border-radius:10px;display:grid;gap:6px;color:var(--muted);font-size:13px}
+.empty-space .item{color:var(--ink);font-weight:550}
+.space-ready{flex:1;display:grid;place-items:center;padding:24px}
+.space-ready .card{max-width:420px;text-align:center;display:grid;gap:12px;justify-items:center}
+.space-ready .space-ic{width:64px;height:64px;border-radius:18px;font-size:24px}
+.space-ready h2{margin:0;font-size:20px}
+.space-ready p{margin:0;color:var(--muted)}
+.space-ready .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+/* phone: the space switcher heads the channel list, and opens a bottom sheet */
+.p-spacehead{padding:0 6px 0 10px}
+.p-space{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:10px;font-weight:700;font-size:16px;flex:1;min-width:0;text-align:left}
+.p-space .space-ic{width:28px;height:28px;font-size:12.5px}
+.p-space span.nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-space[aria-expanded="true"]{background:var(--sunken)}
+.p-scrim{position:absolute;inset:0;z-index:30;background:var(--scrim)}
+.p-sheet{position:absolute;left:0;right:0;bottom:0;z-index:31;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--shadow-float);padding:8px 10px 26px}
+.p-sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line-strong);margin:2px auto 8px}
+.p-sheet h4{margin:0 8px 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+.p-sheet .row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px;border-radius:10px;font-size:15.5px;font-weight:550;text-align:left}
+.p-sheet .row .space-ic{width:32px;height:32px;font-size:13px}
+.p-sheet .row.sel{background:var(--accent-soft)}
+.p-sheet .row .ok{color:var(--accent);margin-left:auto}
+.p-sheet .row .dot{width:8px;height:8px;border-radius:50%;background:var(--ink);margin-left:auto}
+.p-sheet hr{border:0;border-top:1px solid var(--line);margin:6px 4px}
+.p-sj{flex:1;min-height:0;overflow:auto}
+.p-sj .sj-sec{padding:16px}
+.p-sj .sj-or{margin:0 16px}
+.p-sj .sj-mark{margin-top:20px}
+.p-sj .btn{height:46px;width:100%;font-size:15px;border-radius:12px}
+.p-sj .fld input{font-size:16px;padding:10px 12px;border-radius:10px}
+.p-sj .sj-pal{gap:10px}
+.p-sj .sj-pal button{width:32px;height:32px;border-radius:9px}
+.p-toast{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);z-index:20;background:var(--ink);color:var(--bg);border-radius:99px;padding:8px 14px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px;white-space:nowrap;box-shadow:var(--shadow-float)}
 /* desktop stage keeps its width and scrolls instead of squeezing */
 .stage-wrap:not(.phone)>*{min-width:1180px}
 @media (max-width:700px){
@@ -435,13 +513,17 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:78ch}
   <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.2 7 10 4-1.8 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-2 6z" fill="currentColor"/></symbol>
 </svg>
 
 <div class="wrap">
   <header class="top">
     <h1>Murmure: channels, calls, screen share</h1>
-    <div class="note" style="margin-top:8px"><b>Non-normative.</b> Snapshot of a design discussion held on 2026-11-21. The decisions it led to live in the Murmure specs (<code>specs/5-Murmure/</code>); where this page and a spec disagree, the spec wins. This file is frozen: it is not updated when the specs change.</div>
+    <div class="note" style="margin-top:8px"><b>Non-normative.</b> Snapshot of a design discussion held on 2026-11-21. The decisions it led to live in the Murmure specs (<code>specs/5-Murmure/</code>); where this page and a spec disagree, the spec wins. This file is frozen: it is not updated when the specs change. One addition since, on 2026-11-26: the screen that creates or joins a space, and the space switcher on phone (the “New space” control).</div>
     <p>Discussion mockup. Base: the Murmure specs of the time (three columns, thread on the right, call started from a channel, video above the composer). The table at the bottom gives the outcome of each point; orange marks a change to those specs.</p>
   </header>
 
@@ -461,6 +543,8 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:78ch}
       <div class="seg" id="seg-count"><button data-v="4">4</button><button data-v="20">20</button></div></div>
     <div class="ctl"><span class="ctl-label">Theme</span>
       <div class="seg" id="seg-theme"><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+    <div class="ctl"><span class="ctl-label">New space</span>
+      <div class="seg" id="seg-sj"><button data-v="off">Off</button><button data-v="empty">Empty</button><button data-v="filled">Filled</button><button data-v="invalid">Link invalid</button><button data-v="expired">Link no longer valid</button><button data-v="created">Created</button></div></div>
   </div>
 
   <div class="note" id="note"></div>
@@ -474,6 +558,8 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:78ch}
         <tr><td>Message model</td><td>Only one: a thread is a chain of replies on any message, opened on the right. “Also send to #channel” under the thread composer.</td><td><span class="tag keep">in spec</span></td></tr>
         <tr><td>Organisation</td><td>Spaces → categories → channels, then private channels, direct messages, channels to join. No icon rail.</td><td><span class="tag keep">in spec</span></td></tr>
         <tr><td>Space switcher</td><td>At the top of the sidebar. The sidebar shows <b>one</b> space at a time. <span class="kbd">Ctrl 1</span>…<span class="kbd">Ctrl 9</span> switch spaces. DMs stay shared across all spaces.</td><td><span class="tag new">adopted</span></td></tr>
+        <tr><td>Create or join a space</td><td>The last row of the switcher opens one dialog with both paths, create on top, join below: no tab hides one of them. Create takes a name and a mark: initials drawn from the name (editable, two letters) on a colour of the switcher palette. A blank name keeps “Create” off (<code>MURMURE-583</code>). The new space opens selected, with no channel, and offers “Create a channel” and “Invite people” (<code>MURMURE-584</code>, <code>MURMURE-585</code>). Join takes the invite link the owner sent; the mark of the inviter's key it carries shows before the join (<code>SYNC-236</code>). A cut link and a link that no longer opens a space each say what to do next.</td><td><span class="tag open">proposed</span></td></tr>
+        <tr><td>Space switcher on phone</td><td>The channel list, home of the stack, takes the space as its title: mark, name, chevron. A tap opens a bottom sheet with the spaces and “Create or join a space”, within reach of the thumb. Create or join stacks as a full page, with back. No space control in a channel: the stack already says where you are.</td><td><span class="tag open">proposed</span></td></tr>
         <tr><td>Collapsible categories</td><td>Each sidebar group folds: categories, Private, Direct messages, To join. Folded, it keeps the open channel, a channel with a call and the channels that mention you visible; the other unread channels sum up as a dot and a count. The fold state follows the account (Murmure settings), never the space catalogue.</td><td><span class="tag new">adopted; fold state follows the account</span></td></tr>
         <tr><td>Live call in the sidebar</td><td>A channel with a call shows a green phone and the participants' avatars; under it, the timer and “Join”. Join in one click, with no permanent room.</td><td><span class="tag new">adopted, reduced: icon and count, no names; avatars only for the shown channel (ZK-024)</span></td></tr>
         <tr><td>Call controls</td><td>In the channel header, grouped on a green background with the timer. No floating bar at the bottom in the Zoom style.</td><td><span class="tag keep">in spec</span></td></tr>
@@ -494,7 +580,16 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:78ch}
 <div class="tip" id="tip" hidden></div>
 
 <script>
-const S={pview:"channel",folded:new Set(["eng"]),count:"4",page:0,state:"channel",device:"desktop",theme:"auto",spaceOpen:false,pinned:null,bubbleMini:false,bubblePos:null,micOff:true,tick:14*60+32};
+const S={pview:"channel",folded:new Set(["eng"]),count:"4",page:0,state:"channel",device:"desktop",theme:"auto",spaceOpen:false,pinned:null,bubbleMini:false,bubblePos:null,micOff:true,tick:14*60+32,
+  sj:"off",cur:0,f:{name:"",ini:"",iniSet:false,color:"#138a86",link:""},err:null};
+/* the spaces of the switcher; North Studio is the only one the mockup fills with channels */
+const SPACES=[{n:"North Studio",i:"NS",c:"#b4530b"},{n:"Open Collective",i:"OC",c:"#2f6fd6",dot:true},{n:"Family",i:"FA",c:"#3f8a2f"}];
+const PALETTE=["#b4530b","#a8432f","#c23a78","#8a4fd1","#2f6fd6","#1f7a9a","#138a86","#3f8a2f","#8f6a00","#5b6472"];
+const LINK_OK="https://ambre.example/murmure#pin=7Q4M-K2XD-9HVA-3TNE";
+const LINK_CUT="https://ambre.example/murmure#pin=7Q4M-K2";
+const initials=n=>{const w=n.trim().split(/\s+/).filter(Boolean);return (w.length>1?w[0][0]+w[1][0]:(w[0]||"").slice(0,2)).toUpperCase();};
+const esc=t=>String(t).replace(/[&"<>]/g,c=>({"&":"&amp;",'"':"&quot;","<":"&lt;",">":"&gt;"})[c]);
+const dialogOpen=()=>["empty","filled","invalid","expired"].includes(S.sj);
 const P={
   me:{n:"You",i:"MC",c:"av-me",skin:"#e7b894",shirt:"#4a3f8f",c1:"#d9d1c4",c2:"#b9ae9d"},
   lea:{n:"Léa Martin",i:"LM",c:"av-lea",skin:"#f0c8a8",shirt:"#2f6fd6",c1:"#c9d6e8",c2:"#8ea6c8",cam:true},
@@ -560,21 +655,40 @@ function grp(k,label,items){
   return `<button class="sect fold ${f?"is-folded":""} ${unread?"has-unread":""}" data-act="fold" data-k="${k}" aria-expanded="${!f}">${ic("chev","i fchev")}<span>${label}</span>${f&&hidden?`<span class="fhid">${unread?'<span class="udot"></span>':""}${hidden}</span>`:""}</button>
       ${shown.map(i=>i.h).join("")}`;
 }
-function sidebar(){
+const smark=(sp,cls="space-ic")=>`<span class="${cls}" style="background:${sp.c}">${sp.i}</span>`;
+/* a row of the switcher: only North Studio and a space created here can be selected */
+const canPick=k=>k===0||k>=3;
+function spacePop(){
+  return `<div class="space-pop" role="menu">
+    ${SPACES.map((sp,k)=>`<button class="row ${k===S.cur?"sel":""} ${canPick(k)?"":"dim"}" ${canPick(k)?`data-act="space" data-k="${k}"`:""}>${smark(sp)}${sp.n}${k===S.cur?ic("check","i ok"):""}${sp.dot?'<span class="dot" style="margin-left:6px"></span>':""}<span class="kbd">Ctrl ${k+1}</span></button>`).join("")}
+    <hr><button class="row" style="color:var(--muted)" data-act="sjopen">${ic("plus")}Create or join a space</button></div>`;
+}
+function dmGroup(){
+  return grp("dm","Direct messages",[
+    {h:`<button class="item">${av("lea","").replace('class="avatar','style="width:18px;height:18px;font-size:8px" class="avatar')}Léa Martin</button>`},
+    {h:`<button class="item unread">${av("tom").replace('class="avatar','style="width:18px;height:18px;font-size:8px" class="avatar')}Tom Leroy<span class="count">1</span></button>`,unread:true}]);
+}
+function sidebar(phone=false){
   const live=inCall()||true;
-  return `<aside class="side">
-    <button class="space-btn" id="space-btn" aria-expanded="${S.spaceOpen}"><span class="space-ic" style="background:#b4530b">NS</span>North Studio ${ic("chev","i chev")}</button>
-    ${S.spaceOpen?`<div class="space-pop">
-      <button class="row"><span class="space-ic" style="background:#b4530b">NS</span>North Studio<span class="kbd">Ctrl 1</span></button>
-      <button class="row"><span class="space-ic" style="background:#2f6fd6">OC</span>Open Collective<span class="dot" style="margin-left:6px"></span><span class="kbd">Ctrl 2</span></button>
-      <button class="row"><span class="space-ic" style="background:#3f8a2f">FA</span>Family<span class="kbd">Ctrl 3</span></button>
-      <hr><button class="row" style="color:var(--muted)">${ic("plus")}Create or join a space</button></div>`:""}
-    <div class="side-scroll">
-      <div class="quick">
+  const sp=SPACES[S.cur];
+  const quick=`<div class="quick">
         <button class="item unread">${ic("thread")}Followed threads<span class="badge">3</span></button>
         <button class="item">${ic("inbox")}Unread<span class="count">12</span></button>
         <button class="item">${ic("bookmark")}Bookmarks</button>
-      </div>
+      </div>`;
+  const head=phone?"":`<button class="space-btn" id="space-btn" aria-haspopup="menu" aria-expanded="${S.spaceOpen}">${smark(sp)}${sp.n} ${ic("chev","i chev")}</button>
+    ${S.spaceOpen?spacePop():""}`;
+  if(S.cur!==0)return `<aside class="side">${head}
+    <div class="side-scroll">${quick}
+      <div class="sect">Channels</div>
+      <div class="empty-space">No channel yet. Only you are in this space.
+        <button class="item" data-act="noop">${ic("plus")}Create a channel</button>
+        <button class="item" data-act="noop">${ic("users")}Invite people</button></div>
+      ${dmGroup()}
+    </div></aside>`;
+  return `<aside class="side">${head}
+    <div class="side-scroll">
+      ${quick}
       ${grp("prod","Product",[
         {h:`<button class="item">${ic("hash")}general</button>`},
         {h:`<button class="item ${!away()?"on":""}">${ic("hash")}design${live?`<span class="live">${ic("phone","i ph")}<span class="ring">${av("lea")}${av("kar")}${av("ine")}${inCall()?av("me"):""}</span></span>`:""}</button>`
@@ -587,9 +701,7 @@ function sidebar(){
         {h:`<button class="item unread">${ic("hash")}migrations<span class="count">7</span></button>`,unread:true},
         {h:`<button class="item">${ic("hash")}wasm-render</button>`}])}
       ${grp("priv","Private",[{h:`<button class="item">${ic("lock")}leadership</button>`}])}
-      ${grp("dm","Direct messages",[
-        {h:`<button class="item">${av("lea","").replace('class="avatar','style="width:18px;height:18px;font-size:8px" class="avatar')}Léa Martin</button>`},
-        {h:`<button class="item unread">${av("tom").replace('class="avatar','style="width:18px;height:18px;font-size:8px" class="avatar')}Tom Leroy<span class="count">1</span></button>`,unread:true}])}
+      ${dmGroup()}
       ${grp("join","To join",[{h:`<button class="item">${ic("hash")}hiring</button>`}])}
     </div>
   </aside>`;
@@ -708,7 +820,56 @@ function callRegion(){
     <div class="strip">${pager(pg,true)}${pg.items.map(p=>camTile(p,{speak:p===SPEAKER})).join("")}${camTile("me",{mirror:true,pin:false,cls:"mine"})}</div>
   </div>`;
 }
+/* ---------- create or join a space ---------- */
+function sjBody(phone=false){
+  const f=S.f,blank=!f.name.trim();
+  const mark=`<span class="space-ic sj-mark ${blank&&!f.ini?"blank":""}" id="sj-mark" style="background:${f.color}">${f.ini||"?"}</span>`;
+  const msg=S.err==="invalid"
+    ?`<div class="sj-msg err" id="sj-msg">${ic("alert")}<span><b>This link is cut short.</b> The mark of the key of the person who invited you is missing at the end. Copy the whole link again from their message.</span></div>`
+    :S.err==="expired"
+    ?`<div class="sj-msg err" id="sj-msg">${ic("alert")}<span><b>This invite no longer opens a space.</b> The owner withdrew it, or sent it to another address than the one you signed in with. Ask the owner to invite you again.</span></div>`
+    :/#pin=[0-9A-Z]{4}(-[0-9A-Z]{4}){3}$/.test(f.link)
+    ?`<div class="sj-msg" id="sj-msg">${ic("shield")}<span>Invited by the key <span class="pinid">${esc(f.link.split("#pin=")[1])}</span>. Murmure checks the space against it when it opens.</span></div>`
+    :`<div class="sj-msg" id="sj-msg">${ic("link")}<span>The owner of a space invites your address, then sends you the link.</span></div>`;
+  return `<section class="sj-sec">
+      <div class="sj-t">Create a space</div>
+      <div class="sj-create">${mark}
+        <div class="sj-fields">
+          <div class="sj-line">
+            <label class="fld" style="flex:1"><span>Name</span><input id="sj-name" maxlength="40" autocomplete="off" placeholder="A team or a project" value="${esc(f.name)}"></label>
+            <label class="fld ini"><span>Initials</span><input id="sj-ini" maxlength="2" autocomplete="off" value="${esc(f.ini)}"></label>
+          </div>
+          <div class="fld"><span>Colour</span><div class="sj-pal">${PALETTE.map(c=>`<button style="background:${c}" aria-label="Colour ${c}" aria-pressed="${c===f.color}" data-act="sjcol" data-c="${c}"></button>`).join("")}</div></div>
+        </div>
+      </div>
+      ${phone?`<div class="hint">You become its owner. No one else joins until you invite them.</div><button class="btn pri" id="sj-create" data-act="sjcreate" ${blank?"disabled":""}>Create the space</button>`
+      :`<div class="sj-foot"><span class="hint">You become its owner. No one else joins until you invite them.</span><button class="btn pri" id="sj-create" data-act="sjcreate" ${blank?"disabled":""}>Create</button></div>`}
+    </section>
+    <div class="sj-or">or</div>
+    <section class="sj-sec">
+      <div class="sj-t">Join a space</div>
+      <label class="fld ${S.err?"bad":""}" id="sj-lfld"><span>Invite link</span>
+        ${phone?`<input id="sj-link" class="sj-link" autocomplete="off" spellcheck="false" placeholder="Paste the link" value="${esc(f.link)}">`
+        :`<div class="sj-row"><input id="sj-link" class="sj-link" autocomplete="off" spellcheck="false" placeholder="Paste the link the owner sent you" value="${esc(f.link)}"><button class="btn" id="sj-join" data-act="sjjoin" ${f.link.trim()?"":"disabled"}>Join</button></div>`}</label>
+      ${msg}
+      ${phone?`<button class="btn" id="sj-join" data-act="sjjoin" ${f.link.trim()?"":"disabled"}>Join</button>`:""}
+    </section>`;
+}
+function sjDialog(){
+  return `<div class="sj-scrim" data-act="sjclose"><div class="sj" role="dialog" aria-modal="true" aria-labelledby="sj-t" data-act="stay">
+    <div class="sj-head"><h3 id="sj-t">Create or join a space</h3><span class="kbd" style="margin-left:auto">Esc</span><button class="ib" style="margin-left:4px" data-act="sjclose" aria-label="Close">${ic("x")}</button></div>
+    ${sjBody()}</div></div>`;
+}
+function spaceReady(){
+  const sp=SPACES[S.cur];
+  return `<div class="chead"><h2>${sp.n}</h2><span class="topic">Only you, for now</span></div>
+    <div class="space-ready"><div class="card">${smark(sp)}<h2>${sp.n} is ready</h2>
+      <p>You are its owner, and its only member. Add a first channel, then invite the people who belong here.</p>
+      <div class="acts"><button class="btn pri" data-act="noop">${ic("hash")}Create a channel</button><button class="btn" data-act="noop">${ic("users")}Invite people</button></div></div></div>`;
+}
 function murmureDesktop(){
+  if(S.cur!==0)return `<div class="mock">${topbar("Murmure")}
+    <div class="body mur">${sidebar()}<section class="main">${spaceReady()}</section></div></div>`;
   const thread=S.state==="channel";
   const call=inCall()&&!away();
   const listGone=call&&S.state!=="band";
@@ -721,7 +882,7 @@ function murmureDesktop(){
         ${composer()}
       </section>
       ${thread?threadPane():""}
-    </div></div>`;
+    </div>${dialogOpen()?sjDialog():""}</div>`;
 }
 function proseDesktop(){
   return `<div class="mock">${topbar("Prose")}
@@ -798,12 +959,23 @@ function phone(){
       </div>
       <div class="p-sbar"><span>412 words</span><span>100 %</span></div></div>`;
   }
-  if(S.pview==="list"){
+  if(S.pview==="sj"){
     return `<div class="phone-frame">${status}
+      <div class="p-head"><button class="ib" data-act="sjclose" aria-label="Back">${ic("left")}</button><h2>Create or join a space</h2></div>
+      <div class="p-sj">${sjBody(true)}</div></div>`;
+  }
+  if(S.pview==="list"){
+    const sp=SPACES[S.cur];
+    return `<div class="phone-frame">${status}
+      <div class="p-head p-spacehead"><button class="p-space" id="space-btn" aria-haspopup="dialog" aria-expanded="${S.spaceOpen}">${smark(sp)}<span class="nm">${sp.n}</span>${ic("chev","i chev")}</button><button class="ib">${ic("search")}</button></div>
       ${inCall()?`<div class="p-pill" data-act="pchan">${ic("phone")}#design <span class="t">${fmt(S.tick)}</span><span class="ring">${av("lea")}${av("kar","p-speak")}${av("ine")}</span>
         <button class="pb">${ic(S.micOff?"micoff":"mic")}</button><button class="pb end" data-act="leave">${ic("end")}</button></div>`:""}
-      <div class="p-list">${sidebar()}</div>
-      <nav class="p-tabs"><button class="on">${ic("hash")}<span>Channels</span></button><button>${ic("inbox")}<span>Activity</span></button><button>${ic("search")}<span>Search</span></button></nav></div>`;
+      <div class="p-list">${sidebar(true)}</div>
+      <nav class="p-tabs"><button class="on">${ic("hash")}<span>Channels</span></button><button>${ic("inbox")}<span>Activity</span></button><button>${ic("search")}<span>Search</span></button></nav>
+      ${S.sj==="created"&&!S.spaceOpen?`<div class="p-toast">${ic("check")}${sp.n} created</div>`:""}
+      ${S.spaceOpen?`<div class="p-scrim" data-act="sheetclose"></div><div class="p-sheet" role="dialog" aria-label="Spaces"><div class="grab"></div><h4>Spaces</h4>
+        ${SPACES.map((s2,k)=>`<button class="row ${k===S.cur?"sel":""}" ${canPick(k)?`data-act="space" data-k="${k}"`:""}>${smark(s2)}${s2.n}${k===S.cur?ic("check","i ok"):s2.dot?'<span class="dot"></span>':""}</button>`).join("")}
+        <hr><button class="row" style="color:var(--muted)" data-act="sjopen">${ic("plus")}Create or join a space</button></div>`:""}</div>`;
   }
   const head=`<div class="p-head"><button class="ib" data-act="plist" aria-label="Channels">${ic("left")}</button><h2><span class="hash">#</span>design</h2>
     ${inCall()?`<button class="ib" ${tip(S.state==="band"?"fill":"shrink")} data-act="fill">${ic(S.state==="band"?"expand":"shrink")}</button>`:`<button class="joinbtn" data-act="join">${ic("phone")}3</button>`}
@@ -839,6 +1011,20 @@ const NOTES={
   bubble:"<b>Bubble.</b> You left #design for Prose: the call goes on in a bubble you can drag. Click the faces to see the shared screen. The dashed outline is the area it publishes to the canvas (“The floating cover”).",
 };
 
+const SJ_NOTES={
+  empty:"<b>Create or join a space, empty.</b> The last row of the switcher opens one dialog with both paths: create on top, join below, so no tab hides one of them. The mark waits for a name; “Create” and “Join” stay off while their field is blank (<code>MURMURE-583</code>). <span class='kbd'>Esc</span> or a click outside closes it.",
+  filled:"<b>Filled.</b> The initials follow the name until you type your own; the colour comes from the switcher palette. The pasted link carries the mark of the key of the person who invited you (<code>SYNC-236</code>): the dialog shows it before the join, and the open checks the space against it. Type in the fields: the mark follows.",
+  invalid:"<b>Link invalid.</b> A link cut short carries no inviter mark, so it pins nothing (<code>SYNC-209</code>). The dialog says what is missing and what to do: copy the whole link again.",
+  expired:"<b>Link no longer valid.</b> An Ambre invite link holds no expiry date: it names an inviter, and the relay holds the invite. A well-formed link fails when the owner withdrew the invite, or invited another address. The dialog names both causes and the way out. This mockup has no relay: any well-formed link ends here on “Join”.",
+  created:"<b>Space created.</b> The new space is selected in the switcher, with <span class='kbd'>Ctrl 4</span>. You are its owner and its only member (<code>MURMURE-035</code>, <code>MURMURE-036</code>). It has no channel: the sidebar and the main column offer “Create a channel” and “Invite people” (<code>MURMURE-584</code>, <code>MURMURE-585</code>). Direct messages stay: they belong to no space. Pick North Studio in the switcher to go back.",
+};
+const SJ_PNOTES={
+  empty:"<b>Create or join a space, phone.</b> The switcher heads the channel list, home of the stack: mark, name, chevron. A tap opens a bottom sheet, within reach of the thumb; its last row stacks this page, with back. Same two paths as on desktop, full-width buttons.",
+  filled:"<b>Filled, phone.</b> The initials follow the name; the link shows the inviter mark it carries before the join.",
+  invalid:"<b>Link invalid, phone.</b> The error sits under the field, above the button, so the keyboard does not hide it.",
+  expired:"<b>Link no longer valid, phone.</b> Same cause and same way out as on desktop.",
+  created:"<b>Space created, phone.</b> Back on the channel list, now titled with the new space; a toast confirms it. Tap the title to see it selected in the sheet. No space control sits in a channel: the stack already says where you are.",
+};
 function render(){
   document.querySelectorAll(".seg").forEach(seg=>{
     const key=seg.id.replace("seg-","");
@@ -855,9 +1041,12 @@ function render(){
   if(S.device==="phone"&&S.state==="present")note="<b>Presented document, phone.</b> The document is open on your phone, the call pill sits under the header, and “You are following Inès” shows above the text.";
   if(S.device==="phone"&&S.state==="scene")note="<b>Scene on phone.</b> Screen at the top, faces in a horizontal strip, round controls at the bottom, within reach of the thumb.";
   if(S.state==="fill"&&S.pinned)note="<b>Scene by pin.</b> The pinned participant takes the place of the screen. Same layout, no setting. Click the pin again to go back to the grid.";
+  if(S.device==="phone"&&S.pview==="list"&&S.spaceOpen&&S.sj==="off")note="<b>Space switcher, phone.</b> The channel list takes the space as its title. A tap opens this bottom sheet: the spaces, then “Create or join a space”, which stacks a full page.";
+  if(S.sj!=="off")note=(S.device==="phone"?SJ_PNOTES:SJ_NOTES)[S.sj];
   document.getElementById("note").innerHTML=note;
   st.innerHTML=S.device==="phone"?phone():(S.state==="present"?presentDesktop():away()?proseDesktop():murmureDesktop());
   if(away()&&S.device==="desktop")wireBubble();
+  wireSj();
   markSpeaker();
   const car=document.getElementById("carousel");
   if(car){const dots=document.getElementById("pdots");car.addEventListener("scroll",()=>{if(!dots)return;
@@ -871,6 +1060,9 @@ document.querySelectorAll(".seg").forEach(seg=>seg.addEventListener("click",e=>{
   const b=e.target.closest("button");if(!b)return;
   const key=seg.id.replace("seg-","");S[key]=b.dataset.v;
   if(key==="state"||key==="count"||key==="device"){S.pinned=null;S.spaceOpen=false;S.page=0;}
+  if(key==="state"||key==="count"){S.sj="off";S.cur=0;}
+  if(key==="sj")sjPreset(S.sj);
+  else if(key==="device"&&S.sj!=="off")sjPreset(S.sj);
   render();
 }));
 document.getElementById("stage").addEventListener("click",e=>{
@@ -878,6 +1070,8 @@ document.getElementById("stage").addEventListener("click",e=>{
   if(S.device==="phone"&&S.pview==="list"&&e.target.closest(".side .item")&&!e.target.closest("[data-act]")){S.pview="channel";render();return;}
   const a=e.target.closest("[data-act]");if(!a){if(S.spaceOpen&&!e.target.closest(".space-pop")){S.spaceOpen=false;render();}return;}
   const act=a.dataset.act;
+  if(act==="stay"||act==="noop")return;
+  if(act.startsWith("sj")||act==="space"||act==="sheetclose"){sjAct(act,a);return;}
   if(act==="join")S.state="band";
   else if(act==="leave"){S.state="channel";S.pinned=null;}
   else if(act==="fill"){S.state=S.state==="band"?"fill":"band";S.pinned=null;S.page=0;}
@@ -892,6 +1086,53 @@ document.getElementById("stage").addEventListener("click",e=>{
   else if(act==="thread")S.state="channel";
   hideTip();render();
 });
+/* ---------- create or join: presets, actions, live fields ---------- */
+function addCreated(){
+  let k=SPACES.findIndex((sp,j)=>j>=3&&sp.n==="Climbing Club");
+  if(k<0){SPACES.push({n:"Climbing Club",i:"CC",c:"#138a86"});k=SPACES.length-1;}
+  return k;
+}
+function sjPreset(v){
+  SPACES.length=3;
+  S.state="channel";S.pinned=null;S.err=null;S.cur=0;S.spaceOpen=false;
+  S.f={name:"",ini:"",iniSet:false,color:"#138a86",link:""};
+  if(v==="filled")S.f={name:"Climbing Club",ini:"CC",iniSet:false,color:"#138a86",link:LINK_OK};
+  if(v==="invalid"){S.f.link=LINK_CUT;S.err="invalid";}
+  if(v==="expired"){S.f.link=LINK_OK;S.err="expired";}
+  if(v==="created"){S.cur=addCreated();S.spaceOpen=S.device==="desktop";}
+  S.pview=S.device==="phone"?(dialogOpen()?"sj":"list"):S.pview==="sj"?"list":S.pview;
+}
+function sjAct(act,a){
+  if(act==="sjopen"){S.sj="empty";sjPreset("empty");}
+  else if(act==="sjclose"){S.sj="off";S.err=null;if(S.device==="phone")S.pview="list";}
+  else if(act==="sheetclose")S.spaceOpen=false;
+  else if(act==="space"){S.cur=Number(a.dataset.k);S.spaceOpen=false;if(S.cur===0&&S.sj==="created")S.sj="off";}
+  else if(act==="sjcol")S.f.color=a.dataset.c;
+  else if(act==="sjcreate"){const f=S.f;if(!f.name.trim())return;
+    SPACES.push({n:esc(f.name.trim()),i:esc((f.ini||initials(f.name)||"?").toUpperCase()),c:f.color});
+    S.cur=SPACES.length-1;S.sj="created";S.err=null;S.spaceOpen=S.device==="desktop";if(S.device==="phone")S.pview="list";}
+  else if(act==="sjjoin"){const l=S.f.link.trim();if(!l)return;
+    S.err=/^https:\/\/[^\s\/]+\/murmure#pin=[0-9A-Z]{4}(-[0-9A-Z]{4}){3}$/.test(l)?"expired":"invalid";
+    S.sj=S.err;}
+  hideTip();render();
+}
+/* the fields update the mark and the buttons in place, so typing keeps the focus */
+function wireSj(){
+  const name=document.getElementById("sj-name");if(!name)return;
+  const ini=document.getElementById("sj-ini"),link=document.getElementById("sj-link");
+  const sync=()=>{const f=S.f,m=document.getElementById("sj-mark");
+    m.textContent=f.ini||"?";m.classList.toggle("blank",!f.name.trim()&&!f.ini);
+    document.getElementById("sj-create").disabled=!f.name.trim();
+    document.getElementById("sj-join").disabled=!f.link.trim();};
+  name.addEventListener("input",()=>{S.f.name=name.value;if(!S.f.iniSet){S.f.ini=initials(name.value);ini.value=S.f.ini;}
+    if(S.sj==="empty"&&name.value)S.sj="filled";sync();});
+  ini.addEventListener("input",()=>{S.f.ini=ini.value.toUpperCase();S.f.iniSet=!!ini.value;if(!ini.value)S.f.ini=initials(S.f.name);sync();});
+  link.addEventListener("input",()=>{S.f.link=link.value;if(S.err){S.err=null;document.getElementById("sj-lfld").classList.remove("bad");
+    document.getElementById("sj-msg").outerHTML=`<div class="sj-msg" id="sj-msg">${ic("link")}<span>The owner of a space invites your address, then sends you the link.</span></div>`;}sync();});
+  name.addEventListener("keydown",e=>{if(e.key==="Enter")sjAct("sjcreate");});
+  link.addEventListener("keydown",e=>{if(e.key==="Enter")sjAct("sjjoin");});
+}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&(dialogOpen()||S.spaceOpen)){if(dialogOpen())sjAct("sjclose");else{S.spaceOpen=false;render();}}});
 function wireBubble(){
   const b=document.getElementById("bubble"),g=document.getElementById("grip"),area=document.getElementById("prose-area");
   const hint=document.createElement("div");hint.className="cover-hint";area.appendChild(hint);
