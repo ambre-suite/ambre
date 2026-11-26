@@ -110,7 +110,7 @@ pub fn FontPicker(
     view! {
         <span class="ambre-font">
             <Select
-                label="Font"
+                label=ambre_commands::tr!("Font", "Police")
                 choices=choices
                 selected=selected
                 on_pick=pick

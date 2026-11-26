@@ -262,7 +262,7 @@ impl std::fmt::Debug for CommentIntent {
         use ambre_core::Redacted;
         match self {
             Self::Post(body) => f.debug_tuple("Post").field(&Redacted::new(body)).finish(),
-            Self::Discard => f.write_str("Discard"),
+            Self::Discard => f.write_str(ambre_commands::tr!("Discard", "Abandonner")),
             Self::Reply { thread, body } => f
                 .debug_struct("Reply")
                 .field("thread", thread)

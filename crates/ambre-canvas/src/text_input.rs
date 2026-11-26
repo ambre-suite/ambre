@@ -62,10 +62,10 @@ impl ContentKind {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            Self::Spreadsheet => "Spreadsheet cell",
-            Self::Board => "Whiteboard",
-            Self::Page => "Document text",
-            Self::Conversation => "Messages",
+            Self::Spreadsheet => ambre_commands::tr!("Spreadsheet cell", "Cellule du classeur"),
+            Self::Board => ambre_commands::tr!("Whiteboard", "Tableau blanc"),
+            Self::Page => ambre_commands::tr!("Document text", "Texte du document"),
+            Self::Conversation => ambre_commands::tr!("Messages", "Messages"),
         }
     }
 

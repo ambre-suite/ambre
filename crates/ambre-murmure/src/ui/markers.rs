@@ -25,10 +25,16 @@ pub const MARK_CHORDS: [(KeyChar, TextStyle); 3] = [
 
 /// The controls of the format bar, in the order Prose shows the same marks,
 /// each with the title Prose gives its mark (`MURMURE-432`).
-pub const MARK_BAR: [(TextStyle, &str); 3] = [
-    (TextStyle::Bold, "Bold"),
-    (TextStyle::Italic, "Italic"),
-    (TextStyle::Code, "Inline code"),
+pub const MARK_BAR: [(TextStyle, ambre_commands::TitleWords); 3] = [
+    (TextStyle::Bold, ambre_commands::words!("Bold", "Gras")),
+    (
+        TextStyle::Italic,
+        ambre_commands::words!("Italic", "Italique"),
+    ),
+    (
+        TextStyle::Code,
+        ambre_commands::words!("Inline code", "Code en ligne"),
+    ),
 ];
 
 /// How much of a selection a style covers.

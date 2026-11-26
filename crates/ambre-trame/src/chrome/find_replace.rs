@@ -212,8 +212,8 @@ pub fn FindReplace(
                         <button
                             class="ambre-find-toggle"
                             aria-label=move || match replace_row {
-                                ambre_chrome::Openness::Open => "Hide replace",
-                                ambre_chrome::Openness::Closed => "Show replace",
+                                ambre_chrome::Openness::Open => ambre_commands::tr!("Hide replace", "Masquer le remplacement"),
+                                ambre_chrome::Openness::Closed => ambre_commands::tr!("Show replace", "Afficher le remplacement"),
                             }
                             aria-expanded=move || replace_row.aria()
                             on:click=move |_| toggle_mode()
@@ -226,7 +226,7 @@ pub fn FindReplace(
                         <input
                             type="text"
                             class="ambre-find-input"
-                            placeholder="Find"
+                            placeholder=ambre_commands::tr!("Find", "Rechercher")
                             node_ref=find_ref
                             on:input=move |ev| {
                                 let v = event_target_value(&ev);
@@ -259,17 +259,17 @@ pub fn FindReplace(
                             <input
                                 type="text"
                                 class="ambre-find-input"
-                                placeholder="Replace with"
+                                placeholder=ambre_commands::tr!("Replace with", "Remplacer par")
                                 on:input=move |ev| replacement.set(event_target_value(&ev))
                                 on:keydown=move |ev: web_sys::KeyboardEvent| {
                                     if ev.key() == "Escape" { ev.prevent_default(); close(); }
                                 }
                             />
                             <button class="ambre-find-replace" on:click=move |_| run_replace()>
-                                "Replace"
+                                {ambre_commands::tr!("Replace", "Remplacer")}
                             </button>
                             <button class="ambre-find-replace-all" on:click=move |_| run_replace_all()>
-                                "Replace all"
+                                {ambre_commands::tr!("Replace all", "Tout remplacer")}
                             </button>
                         </div>
                     </Show>
@@ -281,7 +281,7 @@ pub fn FindReplace(
                                 prop:checked=move || match_case.get()
                                 on:change=move |ev| match_case.set(event_target_checked(&ev))
                             />
-                            <span>"Match case"</span>
+                            <span>{ambre_commands::tr!("Match case", "Respecter la casse")}</span>
                         </label>
                         <label>
                             <input
@@ -289,7 +289,7 @@ pub fn FindReplace(
                                 prop:checked=move || whole_cell.get()
                                 on:change=move |ev| whole_cell.set(event_target_checked(&ev))
                             />
-                            <span>"Whole cell"</span>
+                            <span>{ambre_commands::tr!("Whole cell", "Cellule enti\u{e8}re")}</span>
                         </label>
                         <Show when=move || replace_row == ambre_chrome::Openness::Open fallback=|| ()>
                             <label>
@@ -298,7 +298,7 @@ pub fn FindReplace(
                                     prop:checked=move || in_formulas.get()
                                     on:change=move |ev| in_formulas.set(event_target_checked(&ev))
                                 />
-                                <span>"In formulas"</span>
+                                <span>{ambre_commands::tr!("In formulas", "Dans les formules")}</span>
                             </label>
                             <label>
                                 <input
@@ -306,7 +306,7 @@ pub fn FindReplace(
                                     prop:checked=move || all_sheets.get()
                                     on:change=move |ev| all_sheets.set(event_target_checked(&ev))
                                 />
-                                <span>"All sheets"</span>
+                                <span>{ambre_commands::tr!("All sheets", "Toutes les feuilles")}</span>
                             </label>
                         </Show>
                     </div>

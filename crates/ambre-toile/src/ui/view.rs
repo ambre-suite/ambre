@@ -31,17 +31,29 @@ use ambre_core::id::{Connector, Document, Element, Id, Thread};
 
 /// What the user is told when an edit is lost with its target
 /// (`TOILE-UI-387`, `TOILE-UI-388`, `TOILE-UI-389`).
-const EDIT_LOST: &str = "Someone deleted what you were editing. Your edit was not saved.";
+const EDIT_LOST: ambre_commands::TitleWords = ambre_commands::words!(
+    "Someone deleted what you were editing. Your edit was not saved.",
+    "Quelqu'un a supprim\u{e9} ce que vous modifiiez. Votre modification n'a pas \u{e9}t\u{e9} enregistr\u{e9}e."
+);
 /// What the user is told when a frame entry finds no frame to act on
 /// (`TOILE-UI-153`).
 #[cfg(any(test, target_arch = "wasm32"))]
-const NO_FRAME_CONTAINS: &str = "No frame contains the selection, so nothing was added.";
+const NO_FRAME_CONTAINS: ambre_commands::TitleWords = ambre_commands::words!(
+    "No frame contains the selection, so nothing was added.",
+    "Aucun cadre ne contient la s\u{e9}lection\u{a0}: rien n'a \u{e9}t\u{e9} ajout\u{e9}."
+);
 #[cfg(any(test, target_arch = "wasm32"))]
-const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was removed.";
+const NO_FRAME_HOLDS: ambre_commands::TitleWords = ambre_commands::words!(
+    "The selection is in no frame, so nothing was removed.",
+    "La s\u{e9}lection n'est dans aucun cadre\u{a0}: rien n'a \u{e9}t\u{e9} retir\u{e9}."
+);
 /// What the user is told when a fit to the selection has nothing to fit
 /// (`TOILE-UI-160`).
 #[cfg(any(test, target_arch = "wasm32"))]
-const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
+const NOTHING_TO_ZOOM: ambre_commands::TitleWords = ambre_commands::words!(
+    "Nothing is selected, so there is nothing to zoom to.",
+    "Rien n'est s\u{e9}lectionn\u{e9}\u{a0}: il n'y a rien sur quoi zoomer."
+);
 use ambre_bus::interop::InteropAnswer;
 use ambre_bus::{Feed, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
 use ambre_canvas::{
@@ -2936,7 +2948,8 @@ impl ToileView {
             }
             mb::ZOOM_TO_SELECTION => {
                 if self.selection.is_empty() {
-                    self.notices.publish(NOTHING_TO_ZOOM);
+                    self.notices
+                        .publish(ambre_commands::shown(&NOTHING_TO_ZOOM));
                 } else {
                     self.pending_fit = true;
                     self.send_edit(ToileCommand::RequestSelectionStats {
@@ -3006,7 +3019,7 @@ impl ToileView {
                 .iter()
                 .any(|s| self.selection_framed.contains(s))
         {
-            self.notices.publish(NO_FRAME_HOLDS);
+            self.notices.publish(ambre_commands::shown(&NO_FRAME_HOLDS));
             return;
         }
         // With an arrow selected the element selection is empty, so the ordinary
@@ -3031,7 +3044,8 @@ impl ToileView {
             },
         };
         if id == super::menu::ADD_TO_FRAME && cmds.is_empty() {
-            self.notices.publish(NO_FRAME_CONTAINS);
+            self.notices
+                .publish(ambre_commands::shown(&NO_FRAME_CONTAINS));
             return;
         }
         // A refused command ends the sequence: a cut whose copy went nowhere
@@ -3751,7 +3765,7 @@ impl ToileView {
         self.edit_pointer_down = false;
         // Repaint content: the static pass no longer suppresses a body.
         self.needs_full = true;
-        self.notices.publish(EDIT_LOST);
+        self.notices.publish(ambre_commands::shown(&EDIT_LOST));
     }
 
     /// Tell the user when the board refuses the editor's last write because
@@ -3769,7 +3783,7 @@ impl ToileView {
         };
         if named {
             self.edit_written = None;
-            self.notices.publish(EDIT_LOST);
+            self.notices.publish(ambre_commands::shown(&EDIT_LOST));
         }
     }
 

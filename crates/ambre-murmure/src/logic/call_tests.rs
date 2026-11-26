@@ -281,7 +281,7 @@ fn a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state() 
         channel_id,
         event: sent.event.clone(),
     });
-    assert_eq!(body(&lists), CALL_LIVE);
+    assert_eq!(body(&lists), ambre_commands::shown(&CALL_LIVE));
     assert!(lists.absorb(UiEvent::Channel {
         channel_id,
         event: MurmureEvent::CallMembers {
@@ -289,7 +289,10 @@ fn a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state() 
             members: CallMembers::Live(vec![ada]),
         },
     }));
-    assert_eq!(body(&lists), format!("{CALL_LIVE}: Ada"));
+    assert_eq!(
+        body(&lists),
+        format!("{}: Ada", ambre_commands::shown(&CALL_LIVE))
+    );
     lists.absorb(UiEvent::Channel {
         channel_id,
         event: MurmureEvent::CallMembers {
@@ -297,7 +300,7 @@ fn a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state() 
             members: CallMembers::Gone,
         },
     });
-    assert_eq!(body(&lists), CALL_ENDED);
+    assert_eq!(body(&lists), ambre_commands::shown(&CALL_ENDED));
     let mut fresh = Conversations::default();
     fresh.absorb(UiEvent::Channel {
         channel_id,
@@ -310,7 +313,7 @@ fn a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state() 
         channel_id,
         event: sent.event,
     });
-    assert_eq!(body(&fresh), CALL_ENDED);
+    assert_eq!(body(&fresh), ambre_commands::shown(&CALL_ENDED));
 }
 
 // --- The ring (the Murmure calls spec) ---

@@ -281,12 +281,17 @@ fn mount_prompt(
     node.set_class_name("ambre-web-embed-ask");
     let (line, picks): (String, &[(Pick, &str)]) = match decision {
         FrameLoad::Refused => (
-            format!("Pages from {} do not load on this device.", site.as_str()),
+            ambre_chrome::commands::trf!(
+                "Pages from {} do not load on this device.",
+                "Les pages de {} ne se chargent pas sur cet appareil.",
+                site.as_str()
+            ),
             &[(Pick::AskAgain, "Ask again")][..],
         ),
         FrameLoad::Ask | FrameLoad::Load => (
-            format!(
+            ambre_chrome::commands::trf!(
                 "This page loads from {}. The site then learns that you view it.",
+                "Cette page se charge depuis {}. Le site apprend alors que vous la consultez.",
                 site.as_str()
             ),
             &[

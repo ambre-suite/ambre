@@ -86,8 +86,11 @@ impl Unanswered {
     /// What the header tells the caller: that the call ended, and why.
     pub fn notice(self) -> &'static str {
         match self {
-            Self::Declined => "Call declined",
-            Self::NoAnswer => "No answer: the call ended",
+            Self::Declined => ambre_commands::tr!("Call declined", "Appel refus\u{e9}"),
+            Self::NoAnswer => ambre_commands::tr!(
+                "No answer: the call ended",
+                "Pas de r\u{e9}ponse\u{a0}: l'appel est termin\u{e9}"
+            ),
         }
     }
 }
@@ -272,7 +275,7 @@ pub fn decline_command(
 /// The text of the ring alert: who calls. A screen reader reads it when the alert shows.
 pub fn ring_title(caller: Option<&Validated<Name>>) -> String {
     caller.map_or_else(
-        || "Incoming call".to_owned(),
+        || ambre_commands::tr!("Incoming call", "Appel entrant").to_owned(),
         |name| format!("{} is calling", name.as_str()),
     )
 }

@@ -214,7 +214,7 @@ pub fn AppShell(
                         >
                             <button
                                 class="icon ambre-sidebar-fold"
-                                aria-label="Fold the sidebar"
+                                aria-label=ambre_commands::tr!("Fold the sidebar", "Replier la barre lat\u{e9}rale")
                                 aria-expanded=move || crate::Openness::from_bool(!folded.get()).aria()
                                 on:click=move |_| folded.update(|f| *f = !*f)
                             >

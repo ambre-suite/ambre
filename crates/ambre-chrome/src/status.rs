@@ -198,7 +198,7 @@ pub fn PerfChip(
         <div class="statusbar-perf">
             <button
                 class="statusbar-fps"
-                title="Toggle render diagnostics"
+                title=ambre_commands::tr!("Toggle render diagnostics", "Afficher ou masquer les diagnostics de rendu")
                 on:click=move |_| {
                     if has_detail {
                         show.update(|v| *v = v.toggled());

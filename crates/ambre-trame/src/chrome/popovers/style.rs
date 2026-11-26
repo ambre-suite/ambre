@@ -7,46 +7,85 @@ use ambre_core::Rgb;
 /// The border presets offered by the popover, each with its Bootstrap icon and
 /// tooltip. Clicking one applies the popover's current pen (line style + colour)
 /// to the named edges; `None` clears every edge.
-const BORDER_BUTTONS: &[(BorderPreset, icondata::Icon, &str)] = &[
-    (BorderPreset::All, icondata::BsBorderAll, "All borders"),
+const BORDER_BUTTONS: &[(BorderPreset, icondata::Icon, ambre_commands::TitleWords)] = &[
+    (
+        BorderPreset::All,
+        icondata::BsBorderAll,
+        ambre_commands::words!("All borders", "Toutes les bordures"),
+    ),
     (
         BorderPreset::Inner,
         icondata::BsBorderInner,
-        "Inner borders",
+        ambre_commands::words!("Inner borders", "Bordures int\u{e9}rieures"),
     ),
     (
         BorderPreset::InnerHorizontal,
         icondata::BsBorderMiddle,
-        "Inner horizontal",
+        ambre_commands::words!("Inner horizontal", "Int\u{e9}rieures horizontales"),
     ),
     (
         BorderPreset::InnerVertical,
         icondata::BsBorderCenter,
-        "Inner vertical",
+        ambre_commands::words!("Inner vertical", "Int\u{e9}rieures verticales"),
     ),
-    (BorderPreset::Outline, icondata::BsBorderOuter, "Outline"),
-    (BorderPreset::Top, icondata::BsBorderTop, "Top border"),
+    (
+        BorderPreset::Outline,
+        icondata::BsBorderOuter,
+        ambre_commands::words!("Outline", "Contour"),
+    ),
+    (
+        BorderPreset::Top,
+        icondata::BsBorderTop,
+        ambre_commands::words!("Top border", "Bordure sup\u{e9}rieure"),
+    ),
     (
         BorderPreset::Bottom,
         icondata::BsBorderBottom,
-        "Bottom border",
+        ambre_commands::words!("Bottom border", "Bordure inf\u{e9}rieure"),
     ),
-    (BorderPreset::Left, icondata::BsBorderLeft, "Left border"),
-    (BorderPreset::Right, icondata::BsBorderRight, "Right border"),
-    (BorderPreset::None, icondata::BsBorder, "Clear borders"),
+    (
+        BorderPreset::Left,
+        icondata::BsBorderLeft,
+        ambre_commands::words!("Left border", "Bordure gauche"),
+    ),
+    (
+        BorderPreset::Right,
+        icondata::BsBorderRight,
+        ambre_commands::words!("Right border", "Bordure droite"),
+    ),
+    (
+        BorderPreset::None,
+        icondata::BsBorder,
+        ambre_commands::words!("Clear borders", "Effacer les bordures"),
+    ),
 ];
 
 /// The border stroke styles offered by the line-style picker (line pattern +
 /// weight). Each is paired with its label. `BorderStyle::css_word` names the
 /// CSS modifier class that renders a visual preview of the stroke (see
 /// `.line-preview.*` in `styles.css`).
-const BORDER_STYLES: &[(BorderStyle, &str)] = &[
-    (BorderStyle::Solid, "Solid"),
-    (BorderStyle::Medium, "Medium"),
-    (BorderStyle::Thick, "Thick"),
-    (BorderStyle::Dashed, "Dashed"),
-    (BorderStyle::Dotted, "Dotted"),
-    (BorderStyle::Double, "Double"),
+const BORDER_STYLES: &[(BorderStyle, ambre_commands::TitleWords)] = &[
+    (BorderStyle::Solid, ambre_commands::words!("Solid", "Plein")),
+    (
+        BorderStyle::Medium,
+        ambre_commands::words!("Medium", "Moyen"),
+    ),
+    (
+        BorderStyle::Thick,
+        ambre_commands::words!("Thick", "\u{c9}pais"),
+    ),
+    (
+        BorderStyle::Dashed,
+        ambre_commands::words!("Dashed", "Tirets"),
+    ),
+    (
+        BorderStyle::Dotted,
+        ambre_commands::words!("Dotted", "Pointill\u{e9}s"),
+    ),
+    (
+        BorderStyle::Double,
+        ambre_commands::words!("Double", "Double"),
+    ),
 ];
 
 /// The composed borders control (`trame-cell-styles`) is a single toolbar button
@@ -96,7 +135,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
             // grid's focus on mousedown, so the active cell survives the press.
             <ambre_chrome::IconButton
                 icon=icondata::BsBorderAll
-                label="Borders"
+                label=ambre_commands::tr!("Borders", "Bordures")
                 expanded=Some(Signal::from(open))
                 on_press=Callback::new(move |()| open.update(|o| *o = o.toggled()))
             />
@@ -106,7 +145,8 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                     <div class="grid">
                         {BORDER_BUTTONS
                             .iter()
-                            .map(|&(preset, icon, label)| {
+                            .map(|&(preset, icon, words)| {
+                                let label = ambre_commands::shown(&words);
                                 view! {
                                     <button
                                         aria-label=label
@@ -126,7 +166,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                         <span class="ambre-line-style">
                             <button
                                 class="line-style-trigger"
-                                aria-label="Border style"
+                                aria-label=ambre_commands::tr!("Border style", "Style de bordure")
                                 aria-haspopup="true"
                                 aria-expanded=move || line_open.get().aria()
                                 on:click=move |_| line_open.update(|o| *o = o.toggled())
@@ -137,7 +177,8 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                 <div class="ambre-line-style-popover">
                                     {BORDER_STYLES
                                         .iter()
-                                        .map(|&(bs, label)| {
+                                        .map(|&(bs, words)| {
+                                            let label = ambre_commands::shown(&words);
                                             view! {
                                                 <button
                                                     class="line-style-item"
@@ -169,11 +210,11 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                         // Border colour: the same composed picker as Text colour
                         // (palette + "Automatic" reset + custom), driving the pen.
                         <ColorPopover
-                            title="Border colour"
+                            title=ambre_commands::tr!("Border colour", "Couleur de bordure")
                             icon=icondata::MdiBorderColor
                             current=style.border_color
                             default=Signal::derive(|| Rgb::from_bits(0x60_6060))
-                            reset_label="Automatic"
+                            reset_label=ambre_commands::tr!("Automatic", "Automatique")
                             on_pick=Callback::new(move |c| style.border_color.set(c))
                         />
                     </div>
@@ -200,47 +241,73 @@ pub(crate) fn FontPopover(style: StyleState, on_style: Callback<StylePatch>) -> 
 
 /// The number-format families offered by the format popover, paired with their
 /// labels. Clicking an item applies its [`CellFormat`] through [`StylePatch`].
-pub(crate) const NUMBER_FORMATS: &[(CellFormat, &str)] = &[
-    (CellFormat::General, "General"),
-    (CellFormat::Number, "Number"),
-    (CellFormat::Currency, "Currency"),
-    (CellFormat::Percent, "Percent"),
-    (CellFormat::Scientific, "Scientific"),
-    (CellFormat::Fraction, "Fraction"),
-    (CellFormat::Date, "Date"),
-    (CellFormat::Time, "Time"),
-    (CellFormat::Text, "Text"),
+pub(crate) const NUMBER_FORMATS: &[(CellFormat, ambre_commands::TitleWords)] = &[
+    (
+        CellFormat::General,
+        ambre_commands::words!("General", "Standard"),
+    ),
+    (
+        CellFormat::Number,
+        ambre_commands::words!("Number", "Nombre"),
+    ),
+    (
+        CellFormat::Currency,
+        ambre_commands::words!("Currency", "Mon\u{e9}taire"),
+    ),
+    (
+        CellFormat::Percent,
+        ambre_commands::words!("Percent", "Pourcentage"),
+    ),
+    (
+        CellFormat::Scientific,
+        ambre_commands::words!("Scientific", "Scientifique"),
+    ),
+    (
+        CellFormat::Fraction,
+        ambre_commands::words!("Fraction", "Fraction"),
+    ),
+    (CellFormat::Date, ambre_commands::words!("Date", "Date")),
+    (CellFormat::Time, ambre_commands::words!("Time", "Heure")),
+    (CellFormat::Text, ambre_commands::words!("Text", "Texte")),
 ];
 
 /// The horizontal alignments offered by the popover, each with its icon and
 /// tooltip. The trigger mirrors the active entry's icon.
-pub(crate) const H_ALIGNS: &[(HAlign, icondata::Icon, &str)] = &[
-    (HAlign::Left, icondata::BiAlignLeftRegular, "Align left"),
+pub(crate) const H_ALIGNS: &[(HAlign, icondata::Icon, ambre_commands::TitleWords)] = &[
+    (
+        HAlign::Left,
+        icondata::BiAlignLeftRegular,
+        ambre_commands::words!("Align left", "Aligner \u{e0} gauche"),
+    ),
     (
         HAlign::Center,
         icondata::BiAlignMiddleRegular,
-        "Align center",
+        ambre_commands::words!("Align center", "Centrer"),
     ),
-    (HAlign::Right, icondata::BiAlignRightRegular, "Align right"),
+    (
+        HAlign::Right,
+        icondata::BiAlignRightRegular,
+        ambre_commands::words!("Align right", "Aligner \u{e0} droite"),
+    ),
 ];
 
 /// The vertical alignments offered by the popover, each with its icon and
 /// tooltip. The trigger mirrors the active entry's icon.
-pub(crate) const V_ALIGNS: &[(VAlign, icondata::Icon, &str)] = &[
+pub(crate) const V_ALIGNS: &[(VAlign, icondata::Icon, ambre_commands::TitleWords)] = &[
     (
         VAlign::Top,
         icondata::AiVerticalAlignTopOutlined,
-        "Align top",
+        ambre_commands::words!("Align top", "Aligner en haut"),
     ),
     (
         VAlign::Middle,
         icondata::AiVerticalAlignMiddleOutlined,
-        "Align middle",
+        ambre_commands::words!("Align middle", "Centrer verticalement"),
     ),
     (
         VAlign::Bottom,
         icondata::AiVerticalAlignBottomOutlined,
-        "Align bottom",
+        ambre_commands::words!("Align bottom", "Aligner en bas"),
     ),
 ];
 

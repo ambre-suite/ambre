@@ -243,7 +243,7 @@ pub fn SheetTabs(
                             tabindex="-1"
                             on:click=move |_| start_rename(id_rename.clone())
                         >
-                            "Rename"
+                            {ambre_commands::tr!("Rename", "Renommer")}
                         </button>
                     </li>
                     <li role="none">
@@ -267,8 +267,8 @@ pub fn SheetTabs(
         {tabs}
         <button
             class="tab-add"
-            title="Add sheet"
-            aria-label="Add sheet"
+            title=ambre_commands::tr!("Add sheet", "Ajouter une feuille")
+            aria-label=ambre_commands::tr!("Add sheet", "Ajouter une feuille")
             on:click=move |_| on_create.run(())
         >
             "+"

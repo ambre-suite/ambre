@@ -82,7 +82,11 @@ pub(crate) fn page_visible() -> bool {
 /// Whether the page offers the notification API at all.
 fn has_notifications() -> bool {
     web_sys::window().is_some_and(|window| {
-        js_sys::Reflect::has(&window, &JsValue::from_str("Notification")).unwrap_or(false)
+        js_sys::Reflect::has(
+            &window,
+            &JsValue::from_str(ambre_chrome::commands::tr!("Notification", "Notification")),
+        )
+        .unwrap_or(false)
     })
 }
 

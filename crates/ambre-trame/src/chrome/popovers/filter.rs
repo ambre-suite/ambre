@@ -98,7 +98,7 @@ pub fn FilterPopover(
                     style:z-index="50"
                 >
                     <div class="ambre-filter-head">
-                        {format!("Filter column {}", col_label(st.col))}
+                        {ambre_commands::trf!("Filter column {}", "Filtrer la colonne {}", col_label(st.col))}
                     </div>
                     <div class="ambre-filter-modes">
                         <button
@@ -106,14 +106,14 @@ pub fn FilterPopover(
                             aria-pressed=move || ambre_chrome::Pressed::from_bool(by_values.get()).aria()
                             on:click=move |_| by_values.set(true)
                         >
-                            "By values"
+                            {ambre_commands::tr!("By values", "Par valeurs")}
                         </button>
                         <button
                             class="mode"
                             aria-pressed=move || ambre_chrome::Pressed::from_bool(!by_values.get()).aria()
                             on:click=move |_| by_values.set(false)
                         >
-                            "By condition"
+                            {ambre_commands::tr!("By condition", "Par condition")}
                         </button>
                     </div>
 
@@ -177,8 +177,8 @@ pub fn FilterPopover(
                         <button on:click=move |_| {
                             on_command.run(CLEAR_FILTER);
                             close();
-                        }>"Clear filter"</button>
-                        <button on:click=move |_| close()>"Cancel"</button>
+                        }>{ambre_commands::tr!("Clear filter", "Effacer le filtre")}</button>
+                        <button on:click=move |_| close()>{ambre_commands::tr!("Cancel", "Annuler")}</button>
                     </div>
                 </div>
             }

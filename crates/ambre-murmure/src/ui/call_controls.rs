@@ -34,9 +34,18 @@ impl MicrophoneRefusal {
     /// What the header tells the user: that the call did not start, and why.
     pub fn notice(self) -> &'static str {
         match self {
-            Self::Blocked => "Microphone blocked: the call did not start",
-            Self::Missing => "No microphone found: the call did not start",
-            Self::Unavailable => "The microphone did not open: the call did not start",
+            Self::Blocked => ambre_commands::tr!(
+                "Microphone blocked: the call did not start",
+                "Micro bloqu\u{e9}\u{a0}: l'appel n'a pas d\u{e9}marr\u{e9}"
+            ),
+            Self::Missing => ambre_commands::tr!(
+                "No microphone found: the call did not start",
+                "Aucun micro trouv\u{e9}\u{a0}: l'appel n'a pas d\u{e9}marr\u{e9}"
+            ),
+            Self::Unavailable => ambre_commands::tr!(
+                "The microphone did not open: the call did not start",
+                "Le micro ne s'est pas ouvert\u{a0}: l'appel n'a pas d\u{e9}marr\u{e9}"
+            ),
         }
     }
 }
@@ -87,9 +96,18 @@ impl CameraRefusal {
     /// goes on.
     pub fn notice(self) -> &'static str {
         match self {
-            Self::Blocked => "Camera blocked: the call goes on with its audio",
-            Self::Missing => "No camera found: the call goes on with its audio",
-            Self::Unavailable => "The camera did not open: the call goes on with its audio",
+            Self::Blocked => ambre_commands::tr!(
+                "Camera blocked: the call goes on with its audio",
+                "Cam\u{e9}ra bloqu\u{e9}e\u{a0}: l'appel continue avec le son"
+            ),
+            Self::Missing => ambre_commands::tr!(
+                "No camera found: the call goes on with its audio",
+                "Aucune cam\u{e9}ra trouv\u{e9}e\u{a0}: l'appel continue avec le son"
+            ),
+            Self::Unavailable => ambre_commands::tr!(
+                "The camera did not open: the call goes on with its audio",
+                "La cam\u{e9}ra ne s'est pas ouverte\u{a0}: l'appel continue avec le son"
+            ),
         }
     }
 }
@@ -179,9 +197,18 @@ impl ShareRefusal {
     /// What the header tells the user: that no screen is shared, and why.
     pub fn notice(self) -> &'static str {
         match self {
-            Self::Refused => "Screen not shared: the share was refused or cancelled",
-            Self::Missing => "Screen not shared: no screen was found",
-            Self::Unavailable => "Screen not shared: the capture did not open",
+            Self::Refused => ambre_commands::tr!(
+                "Screen not shared: the share was refused or cancelled",
+                "\u{c9}cran non partag\u{e9}\u{a0}: le partage a \u{e9}t\u{e9} refus\u{e9} ou annul\u{e9}"
+            ),
+            Self::Missing => ambre_commands::tr!(
+                "Screen not shared: no screen was found",
+                "\u{c9}cran non partag\u{e9}\u{a0}: aucun \u{e9}cran trouv\u{e9}"
+            ),
+            Self::Unavailable => ambre_commands::tr!(
+                "Screen not shared: the capture did not open",
+                "\u{c9}cran non partag\u{e9}\u{a0}: la capture ne s'est pas ouverte"
+            ),
         }
     }
 }
@@ -245,7 +272,10 @@ impl Share {
     pub fn notice(self) -> Option<&'static str> {
         match self {
             Self::Refused(refusal) => Some(refusal.notice()),
-            Self::TakenOver => Some("Another member shares the screen now"),
+            Self::TakenOver => Some(ambre_commands::tr!(
+                "Another member shares the screen now",
+                "Un autre membre partage maintenant l'\u{e9}cran"
+            )),
             Self::Off | Self::Asking | Self::On => None,
         }
     }

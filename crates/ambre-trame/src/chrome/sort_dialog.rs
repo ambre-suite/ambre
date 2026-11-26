@@ -141,7 +141,7 @@ pub fn SortDialog(
                             prop:checked=move || has_header.get()
                             on:change=move |ev| has_header.set(event_target_checked(&ev))
                         />
-                        <span>"Data has header row"</span>
+                        <span>{ambre_commands::tr!("Data has header row", "Les donn\u{e9}es ont une ligne d'en-t\u{ea}te")}</span>
                     </label>
 
                     <div class="ambre-sort-levels">
@@ -184,7 +184,7 @@ pub fn SortDialog(
                                     </select>
                                     <button
                                         class="ambre-sort-remove"
-                                        aria-label="Remove sort level"
+                                        aria-label=ambre_commands::tr!("Remove sort level", "Retirer le niveau de tri")
                                         // Keep at least one level.
                                         prop:disabled=move || levels.with(|ls| ls.len() <= 1)
                                         on:click=move |_| levels.update(|ls| {
@@ -212,7 +212,7 @@ pub fn SortDialog(
                             })
                         >
                             <Icon icon=icondata::AiPlusOutlined />
-                            <span>"Add sort level"</span>
+                            <span>{ambre_commands::tr!("Add sort level", "Ajouter un niveau de tri")}</span>
                         </button>
                         <span class="ambre-sort-spacer"></span>
                         <button class="ambre-sort-cancel" on:click=move |_| close()>"Cancel"</button>
@@ -227,7 +227,7 @@ pub fn SortDialog(
         <ambre_chrome::Dialog
             open=open
             class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-sort-modal")}
-            label="Sort range"
+            label=ambre_commands::tr!("Sort range", "Trier la plage")
             on_close=Callback::new(move |()| close())
         >
             {body}

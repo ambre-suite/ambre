@@ -1038,9 +1038,16 @@ pub fn initials_of(text: &str) -> String {
 /// a mute (`MURMURE-685`). A member the page cannot name yet reads as a participant.
 pub fn label(who: Who, name: Option<&Validated<DisplayName>>, microphone: Microphone) -> String {
     match (who, microphone) {
-        (Who::Member(_), _) => name.map_or("A participant", Validated::as_str).to_owned(),
-        (Who::Own, Microphone::Live) => "You".to_owned(),
-        (Who::Own, Microphone::Muted) => "You, muted".to_owned(),
+        (Who::Member(_), _) => name
+            .map_or(
+                ambre_commands::tr!("A participant", "Un participant"),
+                Validated::as_str,
+            )
+            .to_owned(),
+        (Who::Own, Microphone::Live) => ambre_commands::tr!("You", "Vous").to_owned(),
+        (Who::Own, Microphone::Muted) => {
+            ambre_commands::tr!("You, muted", "Vous, micro coup\u{e9}").to_owned()
+        }
     }
 }
 

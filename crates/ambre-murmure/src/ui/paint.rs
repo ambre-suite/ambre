@@ -801,7 +801,7 @@ fn line_height(font_cx: &mut FontContext, cache: &mut TextCache, width: Px<View>
         + text_height(shape(
             font_cx,
             cache,
-            UNREAD_LINE,
+            ambre_commands::shown(&UNREAD_LINE),
             FONT_UI,
             width,
             ambre_canvas::Weight::Bold,
@@ -823,7 +823,7 @@ fn draw_line<S: DrawSurface>(
     let layout = shape(
         font_cx,
         cache,
-        UNREAD_LINE,
+        ambre_commands::shown(&UNREAD_LINE),
         FONT_UI,
         wrap,
         ambre_canvas::Weight::Bold,
@@ -837,7 +837,7 @@ fn draw_line<S: DrawSurface>(
     draw(
         surface,
         layout,
-        UNREAD_LINE,
+        ambre_commands::shown(&UNREAD_LINE),
         ambre_core::Point::new(SPACE_8, y),
         palette.selection,
     );
@@ -1449,7 +1449,12 @@ pub(crate) mod tests {
         let author: usize = runs(&surface, LIGHT.cell_text).iter().map(|r| r.1).sum();
         assert_eq!(author, 3);
         let muted: usize = runs(&surface, LIGHT.header_text).iter().map(|r| r.1).sum();
-        assert_eq!(muted, 1 + crate::ui::list::DELETED.chars().count());
+        assert_eq!(
+            muted,
+            1 + ambre_commands::shown(&crate::ui::list::DELETED)
+                .chars()
+                .count()
+        );
         assert!(!runs(&surface, LIGHT.selection).is_empty());
     }
 
@@ -1908,7 +1913,12 @@ pub(crate) mod tests {
         let [(line_y, glyphs)] = line.as_slice() else {
             panic!("one run of the line, got {line:?}");
         };
-        assert_eq!(*glyphs, crate::ui::list::UNREAD_LINE.chars().count());
+        assert_eq!(
+            *glyphs,
+            ambre_commands::shown(&crate::ui::list::UNREAD_LINE)
+                .chars()
+                .count()
+        );
         let bodies = runs(&surface, LIGHT.cell_text);
         let [_, (read_y, 1), (unread_y, 4)] = bodies.as_slice() else {
             panic!("the author, then both bodies, got {bodies:?}");

@@ -125,7 +125,7 @@ pub fn SelectionToolbar(
                         <div
                             class="ambre-selbar ambre-commandbar"
                             role="toolbar"
-                            aria-label="Selection actions"
+                            aria-label=ambre_commands::tr!("Selection actions", "Actions sur la s\u{e9}lection")
                             node_ref=node
                             style:left=left
                             style:top=top
@@ -136,7 +136,7 @@ pub fn SelectionToolbar(
                                     icon=icondata::MdiFormatColorFill
                                     current=fill
                                     default=Signal::derive(|| Rgba::from_bits(0xffff_ffff))
-                                    reset_label="No fill"
+                                    reset_label=ambre_commands::tr!("No fill", "Aucun remplissage")
                                     on_pick=on_fill
                                 />
                             </span>
@@ -147,7 +147,7 @@ pub fn SelectionToolbar(
                                     icon=icondata::MdiFormatColorText
                                     current=text_color
                                     default=Signal::derive(|| Rgba::from_bits(0x1a1a_1aff))
-                                    reset_label="Default"
+                                    reset_label=ambre_commands::tr!("Default", "Par d\u{e9}faut")
                                     on_pick=on_text_color
                                 />
                             </span>

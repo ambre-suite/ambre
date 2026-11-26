@@ -46,7 +46,7 @@ pub fn StatusBar(
         view! {
             <ambre_chrome::IconButton
                 icon=icondata::MdiDotsGrid
-                label="Show grid"
+                label=ambre_commands::tr!("Show grid", "Afficher la grille")
                 pressed=Some(Signal::derive(move || {
                     ambre_chrome::Pressed::from_bool(
                         board.with(|b| b.grid == crate::ui::grid::GridShown::Shown),
@@ -101,6 +101,6 @@ pub fn StatusBar(
         {grid}
         // The zoom closes the band, at its right end, in every application
         // that zooms (`CHROME-206`).
-        <ZoomChip zoom=zoom range=crate::message::ZOOM_RANGE title="Board zoom" />
+        <ZoomChip zoom=zoom range=crate::message::ZOOM_RANGE title=ambre_commands::tr!("Board zoom", "Zoom du tableau") />
     }
 }

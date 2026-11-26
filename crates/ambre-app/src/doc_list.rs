@@ -76,11 +76,11 @@ impl Recency {
     /// The heading the list shows above the band.
     pub fn heading(self) -> &'static str {
         match self {
-            Self::PastDay => "Past day",
-            Self::PastWeek => "Past week",
-            Self::PastMonth => "Past month",
-            Self::Older => "Older",
-            Self::Unlisted => "On this device",
+            Self::PastDay => ambre_chrome::commands::tr!("Past day", "Dernier jour"),
+            Self::PastWeek => ambre_chrome::commands::tr!("Past week", "Derni\u{e8}re semaine"),
+            Self::PastMonth => ambre_chrome::commands::tr!("Past month", "Dernier mois"),
+            Self::Older => ambre_chrome::commands::tr!("Older", "Plus ancien"),
+            Self::Unlisted => ambre_chrome::commands::tr!("On this device", "Sur cet appareil"),
         }
     }
 }
@@ -349,6 +349,17 @@ mod tests {
         let headings: std::collections::BTreeSet<&str> =
             bands.iter().map(|b| b.heading()).collect();
         assert_eq!(headings.len(), bands.len());
+    }
+
+    /// `SETTINGS-054`: a word of the shell shows in the interface language of
+    /// the page: the headings of the document list read French.
+    #[test]
+    fn the_band_headings_read_the_interface_language() {
+        ambre_chrome::commands::show_locale(ambre_chrome::commands::Locale::Fr);
+        let french = [Recency::PastDay.heading(), Recency::Unlisted.heading()];
+        ambre_chrome::commands::show_locale(ambre_chrome::commands::Locale::En);
+        assert_eq!(french, ["Dernier jour", "Sur cet appareil"]);
+        assert_eq!(Recency::PastDay.heading(), "Past day");
     }
 
     /// A write the reader's clock places in the future reads as the first band.

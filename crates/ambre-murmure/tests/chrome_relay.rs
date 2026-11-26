@@ -230,7 +230,7 @@ fn a_root_lost_tells_the_user_the_thread_cannot_open() {
     let texts = toasts_for(&[lost, left]);
     assert_eq!(texts.len(), 1, "only the lost root is told: {texts:?}");
     assert!(
-        texts[0].contains(ambre_murmure::chrome::ROOT_LOST),
+        texts[0].contains(ambre_commands::shown(&ambre_murmure::chrome::ROOT_LOST)),
         "{texts:?}"
     );
 }
@@ -255,7 +255,9 @@ fn a_channel_that_cannot_open_is_told_and_opens_anew() {
     let texts = toasts_for(&[failed]);
     assert_eq!(texts.len(), 1, "{texts:?}");
     assert!(
-        texts[0].contains(ambre_murmure::chrome::CHANNEL_NOT_OPENED),
+        texts[0].contains(ambre_commands::shown(
+            &ambre_murmure::chrome::CHANNEL_NOT_OPENED
+        )),
         "{texts:?}"
     );
     assert!(!texts[0].contains("refused"), "the cause stays out of it");
@@ -314,7 +316,9 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
     let texts = toasts_for(&[failed]);
     assert_eq!(texts.len(), 1, "{texts:?}");
     assert!(
-        texts[0].contains(ambre_murmure::chrome::SPACE_NOT_OPENED),
+        texts[0].contains(ambre_commands::shown(
+            &ambre_murmure::chrome::SPACE_NOT_OPENED
+        )),
         "{texts:?}"
     );
     assert!(!texts[0].contains("refused"), "the cause stays out of it");
@@ -332,7 +336,9 @@ fn a_channel_change_that_failed_is_told() {
     let texts = toasts_for(&[failed]);
     assert_eq!(texts.len(), 1, "{texts:?}");
     assert!(
-        texts[0].contains(ambre_murmure::chrome::CHANNEL_NOT_CHANGED),
+        texts[0].contains(ambre_commands::shown(
+            &ambre_murmure::chrome::CHANNEL_NOT_CHANGED
+        )),
         "{texts:?}"
     );
     assert!(!texts[0].contains("refused"), "the cause stays out of it");

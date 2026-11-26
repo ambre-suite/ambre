@@ -151,7 +151,7 @@ const MARK_ALL_READ_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWor
     fr: "Tout marquer comme lu",
 };
 
-const SEARCH_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+pub(crate) const SEARCH_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
     en: "Search messages",
     fr: "Rechercher dans les messages",
 };
@@ -181,7 +181,7 @@ const EDIT_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
     fr: "Modifier le message",
 };
 
-const DELETE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+pub(crate) const DELETE_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
     en: "Delete message",
     fr: "Supprimer le message",
 };
@@ -191,7 +191,7 @@ const JOIN_CALL_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
     fr: "Rejoindre l'appel",
 };
 
-const KEYS_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
+pub(crate) const KEYS_TITLE: ambre_commands::TitleWords = ambre_commands::TitleWords {
     en: "Keyboard shortcuts",
     fr: "Raccourcis clavier",
 };
@@ -1171,7 +1171,11 @@ impl AskedAll {
 
 /// The question an `@channel` past the member threshold asks.
 pub fn asked_all_title(members: ambre_core::Count<ambre_core::Members>) -> String {
-    format!("Notify all {} members of this channel?", members.get())
+    ambre_commands::trf!(
+        "Notify all {} members of this channel?",
+        "Notifier les {} membres de ce canal\u{a0}?",
+        members.get()
+    )
 }
 
 /// The actions offered on `target` to the member `me`, in menu order. A

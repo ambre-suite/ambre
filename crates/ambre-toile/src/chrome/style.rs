@@ -201,7 +201,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             row("W", panel::WIDTH, |p| Px::<Board>::new(p.frame.width()), PlaceField::Width),
             row("H", panel::HEIGHT, |p| Px::<Board>::new(p.frame.height()), PlaceField::Height),
             view! {
-                <Field label="Rotation">
+                <Field label=ambre_commands::shown(&prop(panel::ROTATION).title)>
                     <LengthField
                         property=prop(panel::ROTATION)
                         value=rotation
@@ -231,7 +231,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                 .map(|f| {
                     let id = f.id.clone();
                     let name = if f.name.is_empty() {
-                        "Untitled frame".to_owned()
+                        ambre_commands::tr!("Untitled frame", "Cadre sans titre").to_owned()
                     } else {
                         f.name
                     };
@@ -270,7 +270,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                 {labelled(crate::ui::menu_bar::COMMENTS)}
                 {labelled(crate::ui::menu_bar::DECK)}
             </Row>
-            <Field label="Grid">
+            <Field label=ambre_commands::tr!("Grid", "Grille")>
                 <PropertyToggle
                     property=prop(panel::SNAP)
                     icon=icondata::MdiMagnet
@@ -285,20 +285,20 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                     })
                 />
             </Field>
-            <Field label="Background">{grounds(look)}</Field>
+            <Field label=ambre_commands::shown(&prop(panel::BACKGROUND).title)>{grounds(look)}</Field>
         }
         .into_any()
     };
 
     let shape = move || {
         view! {
-            <Field label="Fill">
+            <Field label=ambre_commands::shown(&prop(panel::FILL).title)>
                 <ColourField
                     property=prop(panel::FILL)
                     icon=icondata::MdiFormatColorFill
                     value=colour(|s| s.fill, |m| m.fill)
                     default=Signal::derive(|| Rgba::from_bits(0xffff_ffff))
-                    reset_label="No fill"
+                    reset_label=ambre_commands::tr!("No fill", "Aucun remplissage")
                     on_write=Callback::new(move |c| commit(StyleEdit::Fill(c)))
                     layout=ColourLayout::Swatches
                 />
@@ -306,7 +306,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             {stroke_fields(base, commit)}
             // The link of an element is a property of the element, never of
             // its arrangement. One compact row (`CHROME-250`).
-            <Field label="Link">
+            <Field label=ambre_commands::tr!("Link", "Lien")>
                 {icon_command(crate::ui::menu_bar::LINK_SET, icondata::MdiLinkVariant)}
                 {icon_command(crate::ui::menu_bar::LINK_CLEAR, icondata::MdiLinkVariantOff)}
             </Field>
@@ -346,35 +346,35 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             }
         };
         view! {
-            <Field label="Colour">
+            <Field label=ambre_commands::tr!("Colour", "Couleur")>
                 <ColourField
                     property=prop(panel::TEXT_COLOUR)
                     icon=icondata::MdiFormatColorText
                     value=colour(|s| s.text_color, |m| m.text_color)
                     default=Signal::derive(|| Rgba::from_bits(0x1a1a_1aff))
-                    reset_label="Default"
+                    reset_label=ambre_commands::tr!("Default", "Par d\u{e9}faut")
                     on_write=Callback::new(move |c| commit(StyleEdit::TextColor(c)))
                 />
             </Field>
-            <Field label="Font">
+            <Field label=ambre_commands::shown(&prop(panel::FONT).title)>
                 <FontField
                     property=prop(panel::FONT)
                     value=font
                     on_write=Callback::new(move |f: Option<FontFamily>| commit(StyleEdit::Font(f)))
                 />
             </Field>
-            <Field label="Size">
+            <Field label=ambre_commands::shown(&prop(panel::SIZE).title)>
                 <span data-reach=ambre_chrome::commands::Reach::Property(panel::SIZE).marker()>
                     <FontSizeSelect
                         current=size
                         on_pick=Callback::new(move |p: Option<FontSize>| {
                             commit(StyleEdit::Size(FontSizeChoice::picked(p)))
                         })
-                        auto_label="Auto"
+                        auto_label=ambre_commands::tr!("Auto", "Auto")
                     />
                 </span>
             </Field>
-            <Field label="Style">
+            <Field label=ambre_commands::tr!("Style", "Style")>
                 {toggle(panel::BOLD, icondata::BsTypeBold, |s| s.font.weight.is_bold(), |m| m.bold,
                     |on| StyleEdit::Bold(ambre_core::Weight::from_bool(on)))}
                 {toggle(panel::ITALIC, icondata::BsTypeItalic, |s| s.font.italic.as_bool(), |m| m.italic,
@@ -417,7 +417,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                 {labelled(menu::DELETE)}
             </Row>
             <Show when=multi>
-                <Field label="Align">
+                <Field label=ambre_commands::tr!("Align", "Aligner")>
                     {command(menu::ALIGN_LEFT)}
                     {command(menu::ALIGN_HCENTER)}
                     {command(menu::ALIGN_RIGHT)}
@@ -425,13 +425,13 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                     {command(menu::ALIGN_VCENTER)}
                     {command(menu::ALIGN_BOTTOM)}
                 </Field>
-                <Field label="Distribute">
+                <Field label=ambre_commands::tr!("Distribute", "R\u{e9}partir")>
                     {command(menu::DISTRIBUTE_H)}
                     {command(menu::DISTRIBUTE_V)}
                 </Field>
             </Show>
             <Show when=framing>
-                <Field label="Frame">
+                <Field label=ambre_commands::tr!("Frame", "Cadre")>
                     <Show when=move || scope.with(|s| s.containing_frame.is_some())>
                         {command(menu::ADD_TO_FRAME)}
                     </Show>
@@ -443,7 +443,7 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
                     </Show>
                 </Field>
             </Show>
-            <Field label="React">
+            <Field label=ambre_commands::tr!("React", "R\u{e9}agir")>
                 {command(menu::REACT_THUMBSUP)}
                 {command(menu::REACT_HEART)}
                 {command(menu::REACT_CHECK)}
@@ -468,27 +468,48 @@ pub fn toile_panel(signals: ToilePanelSignals) -> PanelContent {
             .iter()
             .filter_map(|&key| {
                 Some(match key {
-                    k if k == panel::BOARD => {
-                        PanelSection::new(k, "Board", icondata::MdiViewDashboardOutline, board)
-                    }
-                    k if k == panel::FRAMES => {
-                        PanelSection::new(k, "Frames", icondata::MdiImageFrame, frames)
-                    }
-                    k if k == panel::POSITION => {
-                        PanelSection::new(k, "Position", icondata::MdiArrowAll, position)
-                    }
-                    k if k == panel::SHAPE => {
-                        PanelSection::new(k, "Shape", icondata::MdiShapeOutline, shape)
-                    }
-                    k if k == panel::TEXT => {
-                        PanelSection::new(k, "Text", icondata::MdiFormatText, text)
-                    }
-                    k if k == panel::ARRANGE => {
-                        PanelSection::new(k, "Arrange", icondata::MdiArrangeBringToFront, arrange)
-                    }
-                    k if k == panel::CONNECTOR => {
-                        PanelSection::new(k, "Connector", icondata::MdiVectorLine, connector)
-                    }
+                    k if k == panel::BOARD => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Board", "Tableau"),
+                        icondata::MdiViewDashboardOutline,
+                        board,
+                    ),
+                    k if k == panel::FRAMES => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Frames", "Cadres"),
+                        icondata::MdiImageFrame,
+                        frames,
+                    ),
+                    k if k == panel::POSITION => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Position", "Position"),
+                        icondata::MdiArrowAll,
+                        position,
+                    ),
+                    k if k == panel::SHAPE => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Shape", "Forme"),
+                        icondata::MdiShapeOutline,
+                        shape,
+                    ),
+                    k if k == panel::TEXT => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Text", "Texte"),
+                        icondata::MdiFormatText,
+                        text,
+                    ),
+                    k if k == panel::ARRANGE => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Arrange", "Disposer"),
+                        icondata::MdiArrangeBringToFront,
+                        arrange,
+                    ),
+                    k if k == panel::CONNECTOR => PanelSection::new(
+                        k,
+                        ambre_commands::tr!("Connector", "Connecteur"),
+                        icondata::MdiVectorLine,
+                        connector,
+                    ),
                     _ => return None,
                 })
             })
@@ -519,8 +540,12 @@ fn grounds(look: RwSignal<crate::ui::grid::BoardLook>) -> AnyView {
             .and_then(|i| crate::ui::grid::TINTS.get(i))
             .map_or(BoardGround::Theme, |&(_, c)| BoardGround::Tint(c))
     };
-    let choices = std::iter::once("Default")
-        .chain(crate::ui::grid::TINTS.iter().map(|&(name, _)| name))
+    let choices = std::iter::once(ambre_commands::tr!("Default", "Par d\u{e9}faut"))
+        .chain(
+            crate::ui::grid::TINTS
+                .iter()
+                .map(|(name, _)| ambre_commands::shown(name)),
+        )
         .map(ChoiceView::text)
         .collect();
     view! {
@@ -565,27 +590,27 @@ fn stroke_fields(
         )
     });
     view! {
-        <Field label="Stroke">
+        <Field label=ambre_commands::tr!("Stroke", "Contour")>
             <ColourField
                 property=prop(panel::STROKE)
                 icon=icondata::MdiBorderColor
                 value=stroke
                 default=Signal::derive(|| Rgba::from_bits(0x3333_33ff))
-                reset_label="No stroke"
+                reset_label=ambre_commands::tr!("No stroke", "Aucun contour")
                 on_write=Callback::new(move |c| commit(StyleEdit::Stroke(c)))
                 layout=ColourLayout::Swatches
             />
         </Field>
-        <Field label="Width">
+        <Field label=ambre_commands::tr!("Width", "Largeur")>
             <LengthField
                 property=prop(panel::STROKE_WIDTH)
                 value=width
                 on_write=Callback::new(move |w| commit(StyleEdit::StrokeWidth(w)))
             />
         </Field>
-        <Field label="Opacity">
+        <Field label=ambre_commands::shown(&prop(panel::OPACITY).title)>
             <Slider
-                label="Opacity"
+                label=ambre_commands::shown(&prop(panel::OPACITY).title)
                 value=Signal::derive(move || opacity.get().uniform().map(Bounded::<ambre_core::Opacity>::fraction))
                 on_write=Callback::new(move |p: Bounded<UnitFraction>| {
                     commit(StyleEdit::Opacity(Bounded::<ambre_core::Opacity>::of_fraction(p)));

@@ -55,7 +55,7 @@ pub fn DeckPanel(
                         <span class="ambre-deck-heading">"Deck"</span>
                         <button
                             class="ambre-deck-close"
-                            aria-label="Close"
+                            aria-label=ambre_commands::tr!("Close", "Fermer")
                             on:click=move |_| state.set(PanelState::Closed)
                         >
                             "x"
@@ -74,21 +74,21 @@ pub fn DeckPanel(
                                     <li class="ambre-deck-row">
                                         <button
                                             class="ambre-deck-goto"
-                                            aria-label="Go to slide"
+                                            aria-label=ambre_commands::tr!("Go to slide", "Aller \u{e0} la diapositive")
                                             on:click=move |_| on_intent.run(DeckIntent::Goto(rank))
                                         >
                                             <span class="ambre-deck-rank">{rank.number().to_string()}</span>
                                         </button>
                                         <input
                                             class="ambre-deck-name"
-                                            aria-label="Frame title"
+                                            aria-label=ambre_commands::tr!("Frame title", "Titre du cadre")
                                             placeholder=deck_label(&frame, rank)
                                             prop:value=frame.name.clone()
                                             on:change=name_handler(on_intent, frame.id.clone())
                                         />
                                         <button
                                             class="ambre-deck-up"
-                                            aria-label="Move up"
+                                            aria-label=ambre_commands::tr!("Move up", "Monter")
                                             disabled=rank == Pos::ZERO
                                             on:click=move |_| {
                                                 on_intent.run(DeckIntent::Shift(rank, Move::Up))
@@ -98,7 +98,7 @@ pub fn DeckPanel(
                                         </button>
                                         <button
                                             class="ambre-deck-down"
-                                            aria-label="Move down"
+                                            aria-label=ambre_commands::tr!("Move down", "Descendre")
                                             disabled=rank == last
                                             on:click=move |_| {
                                                 on_intent.run(DeckIntent::Shift(rank, Move::Down))
@@ -108,7 +108,7 @@ pub fn DeckPanel(
                                         </button>
                                         <button
                                             class="ambre-deck-remove"
-                                            aria-label="Remove from deck"
+                                            aria-label=ambre_commands::tr!("Remove from deck", "Retirer de la pr\u{e9}sentation")
                                             on:click=move |_| on_intent.run(DeckIntent::Remove(rank))
                                         >
                                             "x"
@@ -137,7 +137,7 @@ pub fn DeckPanel(
                                                 <li class="ambre-deck-pool-row">
                                                     <input
                                                         class="ambre-deck-name"
-                                                        aria-label="Frame title"
+                                                        aria-label=ambre_commands::tr!("Frame title", "Titre du cadre")
                                                         placeholder=deck_label(&frame, rank)
                                                         prop:value=frame.name.clone()
                                                         on:change=name_handler(
@@ -147,7 +147,7 @@ pub fn DeckPanel(
                                                     />
                                                     <button
                                                         class="ambre-deck-add-btn"
-                                                        aria-label="Add to deck"
+                                                        aria-label=ambre_commands::tr!("Add to deck", "Ajouter \u{e0} la pr\u{e9}sentation")
                                                         on:click=move |_| {
                                                             on_intent.run(DeckIntent::Add(id.clone()))
                                                         }
@@ -166,7 +166,7 @@ pub fn DeckPanel(
                     {move || {
                         view.get().slides.is_empty().then(|| view! {
                             <p class="ambre-deck-empty">
-                                "No slides yet. Add a frame to start the deck."
+                                {ambre_commands::tr!("No slides yet. Add a frame to start the deck.", "Aucune diapositive pour l'instant. Ajoutez un cadre pour commencer la pr\u{e9}sentation.")}
                             </p>
                         })
                     }}

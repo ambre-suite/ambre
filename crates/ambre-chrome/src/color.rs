@@ -51,14 +51,42 @@ const PALETTE: &[Rgb] = &[
 /// palette, in its order.
 /// Each one carries its name and its CSS text as constants, so a swatch
 /// formats nothing at run time.
-pub(crate) const INLINE: [(&str, &str, Rgb); 7] = [
-    ("Black", "#000000", Rgb::from_bits(0x00_0000)),
-    ("Light grey", "#d9d9d9", Rgb::from_bits(0xd9_d9d9)),
-    ("Red", "#ff0000", Rgb::from_bits(0xff_0000)),
-    ("Amber", "#ffc000", Rgb::from_bits(0xff_c000)),
-    ("Green", "#00b050", Rgb::from_bits(0x00_b050)),
-    ("Blue", "#0070c0", Rgb::from_bits(0x00_70c0)),
-    ("Purple", "#7030a0", Rgb::from_bits(0x70_30a0)),
+pub(crate) const INLINE: [(ambre_commands::TitleWords, &str, Rgb); 7] = [
+    (
+        ambre_commands::words!("Black", "Noir"),
+        "#000000",
+        Rgb::from_bits(0x00_0000),
+    ),
+    (
+        ambre_commands::words!("Light grey", "Gris clair"),
+        "#d9d9d9",
+        Rgb::from_bits(0xd9_d9d9),
+    ),
+    (
+        ambre_commands::words!("Red", "Rouge"),
+        "#ff0000",
+        Rgb::from_bits(0xff_0000),
+    ),
+    (
+        ambre_commands::words!("Amber", "Ambre"),
+        "#ffc000",
+        Rgb::from_bits(0xff_c000),
+    ),
+    (
+        ambre_commands::words!("Green", "Vert"),
+        "#00b050",
+        Rgb::from_bits(0x00_b050),
+    ),
+    (
+        ambre_commands::words!("Blue", "Bleu"),
+        "#0070c0",
+        Rgb::from_bits(0x00_70c0),
+    ),
+    (
+        ambre_commands::words!("Purple", "Violet"),
+        "#7030a0",
+        Rgb::from_bits(0x70_30a0),
+    ),
 ];
 
 /// What an unset colour reads as when a pick keeps its alpha: opaque black.
@@ -329,6 +357,20 @@ fn color_popover(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `SETTINGS-054`: a word of the shared chrome shows in the interface
+    /// language of the page. The swatches name their colour in French.
+    #[test]
+    fn the_swatches_name_their_colour_in_the_interface_language() {
+        ambre_commands::show_locale(ambre_commands::Locale::Fr);
+        let names: Vec<&str> = INLINE
+            .iter()
+            .map(|(n, _, _)| ambre_commands::shown(n))
+            .collect();
+        ambre_commands::show_locale(ambre_commands::Locale::En);
+        assert_eq!(names[..3], ["Noir", "Gris clair", "Rouge"]);
+        assert_eq!(ambre_commands::shown(&INLINE[0].0), "Black");
+    }
 
     #[test]
     fn parse_hex_reads_the_native_widget_value() {

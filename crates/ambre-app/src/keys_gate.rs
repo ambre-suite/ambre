@@ -186,16 +186,25 @@ mod view {
                 move || submission.get() == Submission::Sent && gate.refusal.get().is_none();
             let (heading, note, action) = match face {
                 KeysFace::Unlock => (
-                    "Unlock your account",
-                    "Type your account passphrase. It opens your keys on this device.",
-                    "Unlock",
+                    ambre_chrome::commands::tr!(
+                        "Unlock your account",
+                        "D\u{e9}verrouillez votre compte"
+                    ),
+                    ambre_chrome::commands::tr!(
+                        "Type your account passphrase. It opens your keys on this device.",
+                        "Saisissez la phrase de passe du compte. Elle ouvre vos cl\u{e9}s sur cet appareil."
+                    ),
+                    ambre_chrome::commands::tr!("Unlock", "D\u{e9}verrouiller"),
                 ),
                 KeysFace::SetUp => (
-                    "Choose your account passphrase",
+                    ambre_chrome::commands::tr!(
+                        "Choose your account passphrase",
+                        "Choisissez la phrase de passe du compte"
+                    ),
                     "It seals your keys on this device. Four or more random words resist a \
                      guess. Nobody can reset it: the recovery words shown next are the only \
                      other way in.",
-                    "Set up",
+                    ambre_chrome::commands::tr!("Set up", "Configurer"),
                 ),
             };
             Some(view! {
@@ -206,7 +215,7 @@ mod view {
                     // shows them, and asks for neither (`CHROME-144`).
                     {move || gate.identity.get().map(|identity| view! {
                         <p class="ambre-keys-identity">
-                            "Signed in as "
+                            {ambre_chrome::commands::tr!("Signed in as ", "Connect\u{e9} en tant que ")}
                             <span class="ambre-keys-name">{identity.display_name.into_string()}</span>
                             " ("
                             <span class="ambre-keys-email">{identity.email.as_str().to_owned()}</span>
@@ -218,10 +227,10 @@ mod view {
                         class="ambre-signin-input ambre-keys-passphrase"
                         type="password"
                         autocomplete=if face == KeysFace::Unlock { "current-password" } else { "new-password" }
-                        aria-label="Passphrase"
+                        aria-label=ambre_chrome::commands::tr!("Passphrase", "Phrase de passe")
                         aria-describedby=REFUSAL_ID.as_str()
                         aria-invalid=move || if gate.refusal.get().is_some() { "true" } else { "false" }
-                        placeholder="Passphrase"
+                        placeholder=ambre_chrome::commands::tr!("Passphrase", "Phrase de passe")
                         node_ref=first
                         on:keydown=on_key
                     />
@@ -230,9 +239,9 @@ mod view {
                             class="ambre-signin-input ambre-keys-confirm"
                             type="password"
                             autocomplete="new-password"
-                            aria-label="Passphrase again"
+                            aria-label=ambre_chrome::commands::tr!("Passphrase again", "Phrase de passe, \u{e0} nouveau")
                             aria-describedby=REFUSAL_ID.as_str()
-                            placeholder="Passphrase again"
+                            placeholder=ambre_chrome::commands::tr!("Passphrase again", "Phrase de passe, \u{e0} nouveau")
                             node_ref=second
                             on:keydown=on_key
                         />
@@ -258,7 +267,7 @@ mod view {
                             class="ambre-signin-link ambre-keys-recover"
                             on:click=move |_| keys.open(crate::account::KeysFace::Recover)
                         >
-                            "Forgot the passphrase? Recover the account with its recovery words"
+                            {ambre_chrome::commands::tr!("Forgot the passphrase? Recover the account with its recovery words", "Phrase de passe oubli\u{e9}e ? R\u{e9}cup\u{e9}rez le compte avec ses mots de r\u{e9}cup\u{e9}ration")}
                         </button>
                     </Show>
                     // The header and its sign-out show only once a session

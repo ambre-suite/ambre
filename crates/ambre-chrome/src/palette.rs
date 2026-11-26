@@ -232,7 +232,7 @@ pub fn CommandPalette(
         <crate::dialog::Dialog
             open=open
             class={StaticKey::<ambre_core::CssClasses>::new("ambre-palette-modal")}
-            label="Command palette"
+            label=ambre_commands::tr!("Command palette", "Palette de commandes")
         >
             <div class="ambre-palette">
                 <input
@@ -240,7 +240,7 @@ pub fn CommandPalette(
                     class="ambre-palette-query"
                     type="text"
                     role="combobox"
-                    aria-label="Search commands"
+                    aria-label=ambre_commands::tr!("Search commands", "Rechercher une commande")
                     aria-expanded="true"
                     autocomplete="off"
                     prop:value=move || query.get()

@@ -69,8 +69,13 @@ impl PassphraseRefusal {
     /// The line the prompt shows under its fields.
     pub fn message(self) -> &'static str {
         match self {
-            Self::Empty => "Type a passphrase.",
-            Self::Mismatch => "The two passphrases do not match.",
+            Self::Empty => {
+                ambre_commands::tr!("Type a passphrase.", "Saisissez une phrase de passe.")
+            }
+            Self::Mismatch => ambre_commands::tr!(
+                "The two passphrases do not match.",
+                "Les deux phrases de passe ne correspondent pas."
+            ),
         }
     }
 }
@@ -151,15 +156,21 @@ pub fn PassphraseDialog(
     };
 
     let heading = if sealing {
-        "Save to an encrypted file"
+        ambre_commands::tr!(
+            "Save to an encrypted file",
+            "Enregistrer dans un fichier chiffr\u{e9}"
+        )
     } else {
-        "Open an encrypted file"
+        ambre_commands::tr!("Open an encrypted file", "Ouvrir un fichier chiffr\u{e9}")
     };
     let note = if sealing {
         "This passphrase is the only way to open the file. Ambre cannot recover it, \
          and it is not your account passphrase."
     } else {
-        "Type the passphrase this file was sealed with."
+        ambre_commands::tr!(
+            "Type the passphrase this file was sealed with.",
+            "Saisissez la phrase de passe qui a scell\u{e9} ce fichier."
+        )
     };
 
     view! {
@@ -170,7 +181,7 @@ pub fn PassphraseDialog(
                 <input
                     type="password"
                     autocomplete="new-password"
-                    placeholder="Passphrase"
+                    placeholder=ambre_commands::tr!("Passphrase", "Phrase de passe")
                     prop:value=move || first.get()
                     on:input=move |ev| {
                         first.set(event_target_value(&ev));
@@ -183,7 +194,7 @@ pub fn PassphraseDialog(
                     <input
                         type="password"
                         autocomplete="new-password"
-                        placeholder="Passphrase again"
+                        placeholder=ambre_commands::tr!("Passphrase again", "Phrase de passe, \u{e0} nouveau")
                         prop:value=move || second.get()
                         on:input=move |ev| {
                             second.set(event_target_value(&ev));
@@ -200,9 +211,9 @@ pub fn PassphraseDialog(
                     <button on:click=move |_| {
                         clear();
                         open.set(crate::Openness::Closed);
-                    }>"Cancel"</button>
+                    }>{ambre_commands::tr!("Cancel", "Annuler")}</button>
                     <button on:click=move |_| submit()>
-                        {if sealing { "Save" } else { "Open" }}
+                        {if sealing { ambre_commands::tr!("Save", "Enregistrer") } else { ambre_commands::tr!("Open", "Ouverts") }}
                     </button>
                 </div>
             </div>

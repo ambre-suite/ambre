@@ -214,8 +214,9 @@ fn read_file_into(
         mime = ambre_core::MediaType::from("image/svg+xml");
     }
     if !accepts(&mime) {
-        toasts.warning(format!(
+        toasts.warning(ambre_commands::trf!(
             "Ambre cannot bring a {} file onto a board",
+            "Ambre ne peut pas placer un fichier {} sur un tableau",
             label(&mime)
         ));
         return;
@@ -228,7 +229,10 @@ fn read_file_into(
                 );
                 dropped.set(Some(DroppedFile { bytes, mime, at }));
             }
-            Err(_) => toasts.warning("Could not read the file"),
+            Err(_) => toasts.warning(ambre_commands::tr!(
+                "Could not read the file",
+                "Impossible de lire le fichier"
+            )),
         }
     });
 }

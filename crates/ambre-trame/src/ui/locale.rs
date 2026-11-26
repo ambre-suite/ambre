@@ -17,7 +17,9 @@ pub struct LocaleView {
 
 /// The tag a reader reads for `locale`, or the words for none.
 fn spelled(locale: &DocumentLocale) -> &str {
-    locale.as_str().unwrap_or("no language")
+    locale
+        .as_str()
+        .unwrap_or(ambre_commands::tr!("no language", "aucune langue"))
 }
 
 /// The notice a view shows when it formats in a locale other than the
@@ -26,8 +28,9 @@ fn spelled(locale: &DocumentLocale) -> &str {
 #[must_use]
 pub fn locale_notice(view: &LocaleView) -> Option<String> {
     view.reader.shows_another(&view.document).then(|| {
-        format!(
+        ambre_commands::trf!(
             "Numbers shown in {}; the document is in {}",
+            "Nombres affich\u{e9}s en {}\u{a0}; le document est en {}",
             spelled(view.reader.shown(&view.document)),
             spelled(&view.document)
         )
@@ -81,6 +84,19 @@ mod tests {
         assert_eq!(
             locale_notice(&view("fr", "fr", NumberConvention::AllMine)),
             None
+        );
+    }
+
+    /// `SETTINGS-051`: a word of the Trame chrome shows in the interface
+    /// language of the page: the notice of another locale reads French.
+    #[test]
+    fn the_locale_notice_reads_the_interface_language() {
+        ambre_commands::show_locale(ambre_commands::Locale::Fr);
+        let french = locale_notice(&view("en", "fr", NumberConvention::AllMine));
+        ambre_commands::show_locale(ambre_commands::Locale::En);
+        assert_eq!(
+            french.as_deref(),
+            Some("Nombres affich\u{e9}s en fr\u{a0}; le document est en en")
         );
     }
 

@@ -47,9 +47,9 @@ pub enum PresenterIntent {
 impl std::fmt::Debug for PresenterIntent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Prev => f.write_str("Prev"),
-            Self::Next => f.write_str("Next"),
-            Self::Exit => f.write_str("Exit"),
+            Self::Prev => f.write_str(ambre_commands::tr!("Prev", "Pr\u{e9}c.")),
+            Self::Next => f.write_str(ambre_commands::tr!("Next", "Suivant")),
+            Self::Exit => f.write_str(ambre_commands::tr!("Exit", "Quitter")),
             Self::EditNotes { base, delta } => f
                 .debug_struct("EditNotes")
                 .field("base", &Redacted::new(base))

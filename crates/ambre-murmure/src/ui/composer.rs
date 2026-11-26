@@ -59,10 +59,14 @@ use crate::ui::uploads::{UploadFile, Uploads};
 use crate::ui::view::WindowWidth;
 
 /// The strip above the field while the composer holds an edit.
-pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
+pub const EDITING_LINE: ambre_commands::TitleWords = ambre_commands::words!(
+    "Editing a message. Escape cancels.",
+    "Modification d'un message. \u{c9}chap annule."
+);
 
 /// The words an empty composer shows.
-pub const COMPOSER_HINT: &str = "Write a message";
+pub const COMPOSER_HINT: ambre_commands::TitleWords =
+    ambre_commands::words!("Write a message", "\u{c9}crire un message");
 
 /// The height of the field when it holds no line yet.
 const MIN_LINE_HEIGHT: Px<View> = Px::<View>::new(FONT_BODY.get() + SPACE_4.get());
@@ -74,7 +78,8 @@ const FAMILY: ambre_core::FontFamily = ambre_core::FontFamily::Sans;
 const TYPING_HEIGHT: Px<View> = Px::<View>::new(FONT_UI.get() + SPACE_4.get());
 
 /// The words beside the box under a thread's field (`MURMURE-531`).
-pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
+pub const ALSO_IN_CHANNEL: ambre_commands::TitleWords =
+    ambre_commands::words!("Also send to the channel", "Envoyer aussi dans le canal");
 
 /// The chord that turns the box, named after its words at the desktop width
 /// (`MURMURE-544`). The box draws it as the binding spells itself.
@@ -118,7 +123,7 @@ pub fn also_said(echo: ReplyEcho) -> String {
     } else {
         "unchecked"
     };
-    format!("{ALSO_IN_CHANNEL}, {state}")
+    format!("{}, {state}", ambre_commands::shown(&ALSO_IN_CHANNEL))
 }
 
 /// The line that names the members typing, `None` when nobody types. Past
@@ -130,15 +135,23 @@ pub fn typing_line(
     let names: Vec<&str> = names
         .iter()
         .map(|name| {
-            name.as_ref()
-                .map_or("Someone", ambre_core::Validated::as_str)
+            name.as_ref().map_or(
+                ambre_commands::tr!("Someone", "Quelqu'un"),
+                ambre_core::Validated::as_str,
+            )
         })
         .collect();
     match names.as_slice() {
         [] => None,
         [one] => Some(format!("{one} is typing")),
         [one, two] => Some(format!("{one} and {two} are typing")),
-        _ => Some("Several people are typing".to_owned()),
+        _ => Some(
+            ambre_commands::tr!(
+                "Several people are typing",
+                "Plusieurs personnes \u{e9}crivent"
+            )
+            .to_owned(),
+        ),
     }
 }
 
@@ -1653,7 +1666,7 @@ impl Composer {
                 let words = shape(
                     font_cx,
                     cache,
-                    ALSO_IN_CHANNEL,
+                    ambre_commands::shown(&ALSO_IN_CHANNEL),
                     FONT_UI,
                     width,
                     ambre_canvas::Weight::Regular,
@@ -1664,7 +1677,7 @@ impl Composer {
                 draw(
                     surface,
                     words,
-                    ALSO_IN_CHANNEL,
+                    ambre_commands::shown(&ALSO_IN_CHANNEL),
                     ambre_core::Point::new(label_x, label_y),
                     palette.header_text,
                 );
@@ -1711,7 +1724,7 @@ impl Composer {
             let hint = shape(
                 font_cx,
                 cache,
-                COMPOSER_HINT,
+                ambre_commands::shown(&COMPOSER_HINT),
                 FONT_BODY,
                 width,
                 ambre_canvas::Weight::Regular,
@@ -1719,7 +1732,7 @@ impl Composer {
             draw(
                 surface,
                 hint,
-                COMPOSER_HINT,
+                ambre_commands::shown(&COMPOSER_HINT),
                 ambre_core::Point::new(SPACE_8, inner.top),
                 palette.header_text,
             );

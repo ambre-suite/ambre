@@ -129,8 +129,10 @@ impl TrameView {
             }
             TrameEvent::UndecodableRecords => {
                 tracing::warn!("[UI] Trame met a register it cannot decode");
-                self.text_input
-                    .announce("Some formatting in this workbook could not be read.");
+                self.text_input.announce(ambre_commands::tr!(
+                    "Some formatting in this workbook could not be read.",
+                    "Une partie de la mise en forme de ce classeur n'a pas pu \u{ea}tre lue."
+                ));
             }
             // Shared filter (`trame-shared-filter`): track the filtered column for the funnel
             // badge, and publish the flag the context menu reads. The
@@ -278,7 +280,10 @@ impl TrameView {
                 Ok(_) => {}
                 Err(ambre_bus::conduit::TryRecvError::Empty) => break,
                 Err(ambre_bus::conduit::TryRecvError::Disconnected) => {
-                    self.signal_fatal("Logic thread disconnected");
+                    self.signal_fatal(ambre_commands::tr!(
+                        "Logic thread disconnected",
+                        "Fil logique d\u{e9}connect\u{e9}"
+                    ));
                     break;
                 }
             }

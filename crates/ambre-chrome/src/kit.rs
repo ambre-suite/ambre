@@ -215,7 +215,7 @@ fn swatch_row(
     let choices = std::iter::once((none_label, None, None)).chain(
         crate::color::INLINE
             .iter()
-            .map(|&(name, css, c)| (name, Some(css), Some(c))),
+            .map(|&(name, css, c)| (ambre_commands::shown(&name), Some(css), Some(c))),
     );
     choices
         .map(|(name, css, rgb)| {
