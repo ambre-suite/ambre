@@ -85,6 +85,10 @@ lint-wasm:
     # host-only proptest. This line compiles the rest for wasm, so a test that
     # calls proptest without the host gate fails here.
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-crypto --all-targets
+    # The PDF tests of Toile read host-only items: proptest, the count of armed
+    # fetches. This line compiles the rest for wasm, so a test that reads one
+    # without the host gate fails here. The benches need criterion, host-only.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-toile --tests --features pdf
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over
@@ -402,6 +406,19 @@ phone-measures page host:
 # as `just test-browser` builds it. It prints one `BELT-SEED` line.
 belt-seed count="5000":
     SEED_MESSAGES="{{count}}" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt -- --ignored --exact --nocapture murmure_seed::tests::seed_the_belt_relay
+
+# The Murmure screenshots beside the mockup (`crates/ambre-belt/src/murmure_shots.rs`). No CI
+# job runs them. Five headless members seed the space of `research/mockups/murmure-calls.html`
+# through the belt relay and its SFU. The relay writes to `ambre_shots`, a database this recipe
+# empties first in the Postgres of `just services-up`: the names of the mockup are the same on
+# every run, so the user's sidebar would gather one space per run. Each state, device and theme
+# writes the app shot, the mockup render and the two side by side into `target/murmure-shots`.
+murmure-shots:
+    trunk build --features dev-login,chrome-gallery
+    cargo build -p ambre-server
+    cargo build -p ambre-sfu
+    docker compose exec -T postgres psql -q -U ambre -d ambre_dev -c 'DROP DATABASE IF EXISTS ambre_shots WITH (FORCE)' -c 'CREATE DATABASE ambre_shots'
+    SHOTS_DATABASE_URL="postgres://ambre:ambre@localhost:5432/ambre_shots" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt -- --ignored --exact --nocapture murmure_shots::tests::write_the_murmure_shots
 
 # The seed of the phone stack (`ambre-spec-murmure-phone-measures.md section 3.2`). No CI
 # job runs it. A headless Chrome opens the stack at `SEED_ORIGIN`, by default
