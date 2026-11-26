@@ -488,6 +488,9 @@ mod tests {
         let later = named(&alice, 12);
         let past = plan(&later, Some(signed(doc, &later, &bytes, &bob)));
         assert_eq!(past.fallback, None, "a horizon past the latest");
+        let level = named(&alice, 9);
+        let at = plan(&level, Some(signed(doc, &level, &bytes, &bob)));
+        assert_eq!(at.fallback, None, "a horizon at the latest");
     }
 
     /// `AUTHOR-030`: a snapshot this user built opens whole on its own word.

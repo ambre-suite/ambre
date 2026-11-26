@@ -1332,6 +1332,52 @@ mod tests {
         assert_eq!(kept_token(&shared).as_deref(), Some("refresh-1"));
     }
 
+    /// `SRV-331`: the account answer after the renewal retries under the
+    /// same limit. One failure waits, then reads the answer. Past the last
+    /// retry the resume reads nothing more, and the record keeps the renewed
+    /// token for the next boot. The renewal stops at its own last retry.
+    #[tokio::test]
+    async fn the_account_answer_retries_under_the_limit_of_the_renewal() {
+        let user = Id::<User>::mint();
+        let fault = || Ok((500, serde_json::json!({})));
+        let (vault, _) = vault_with(user, "refresh-1");
+        let transport = Scripted::new([
+            Ok((200, renewed("access-2"))),
+            fault(),
+            Ok((200, me(user, None))),
+        ]);
+        let (waited, pause) = recorder();
+        let resumed = resume_via(&transport, &api(), &vault, pause).await;
+        assert!(matches!(resumed, Resumed::Ready { .. }));
+        assert_eq!(*waited.borrow(), [1_000]);
+
+        let (vault, shared) = vault_with(user, "refresh-1");
+        let transport = Scripted::new(
+            std::iter::once(Ok((200, renewed("access-2"))))
+                .chain(std::iter::repeat_with(fault).take(6))
+                .chain([Ok((200, me(user, None)))]),
+        );
+        let (waited, pause) = recorder();
+        let resumed = resume_via(&transport, &api(), &vault, pause).await;
+        assert!(matches!(resumed, Resumed::Unreachable));
+        assert_eq!(*waited.borrow(), [1_000, 2_000, 4_000, 8_000, 16_000]);
+        assert_eq!(kept_token(&shared).as_deref(), Some("refresh-2"));
+
+        // Past the last retry of the renewal, a relay that answers again is
+        // never asked.
+        let (vault, shared) = vault_with(user, "refresh-1");
+        let transport = Scripted::new(
+            std::iter::repeat_with(fault)
+                .take(6)
+                .chain([Ok((200, renewed("access-2"))), Ok((200, me(user, None)))]),
+        );
+        let (_, pause) = recorder();
+        let resumed = resume_via(&transport, &api(), &vault, pause).await;
+        assert!(matches!(resumed, Resumed::Unreachable));
+        assert_eq!(transport.sent.borrow().len(), 6);
+        assert_eq!(kept_token(&shared).as_deref(), Some("refresh-1"));
+    }
+
     /// A relay that honours each refresh token once, as `SRV-009` states.
     /// It yields before it answers, so two renewals in flight interleave.
     struct OnceRelay {
@@ -1594,6 +1640,24 @@ mod tests {
         let vault = memory(&state);
         assert!(vault.vault.borrow().keys().is_empty());
         assert!(state.kept_link().is_some());
+    }
+
+    /// `SRV-330`: a teardown that is no sign-out keeps the record
+    /// and forgets who it is for. A later session that keeps nothing hands
+    /// its renewals no record of the device.
+    #[test]
+    fn a_session_after_a_teardown_renews_no_kept_record() {
+        let (mut state, _rx) = worker();
+        let ada = ready(&mut state, "Ada", [7; 32], Keeping::Under(DeviceKey::Fresh));
+        assert!(state.kept_link().is_some());
+        state.handle_logout();
+        let vault = memory(&state);
+        assert_eq!(vault.vault.borrow().kept().map(|k| k.user_id), Some(ada));
+        ready(&mut state, "Bob", [8; 32], Keeping::Nothing);
+        assert!(
+            state.kept_link().is_none(),
+            "a renewal of Bob reaches the record"
+        );
     }
 
     /// `SRV-326`: with no relay, a resume answers that no session is kept.
