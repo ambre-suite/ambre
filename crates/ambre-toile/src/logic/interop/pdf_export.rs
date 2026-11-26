@@ -1020,6 +1020,9 @@ mod tests {
         assert_eq!(rest(printed.ops()), rest(screen.ops()));
     }
 
+    // proptest is a host dev-dependency: it pulls `wait-timeout`, which does
+    // not build on wasm32. The other tests still compile for wasm.
+    #[cfg(not(target_arch = "wasm32"))]
     proptest::proptest! {
         #![proptest_config(proptest::prelude::ProptestConfig::with_cases(32))]
 

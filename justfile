@@ -85,6 +85,10 @@ lint-wasm:
     # host-only proptest. This line compiles the rest for wasm, so a test that
     # calls proptest without the host gate fails here.
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-crypto --all-targets
+    # The PDF tests of Toile read host-only items: proptest, the count of armed
+    # fetches. This line compiles the rest for wasm, so a test that reads one
+    # without the host gate fails here. The benches need criterion, host-only.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-toile --tests --features pdf
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over
