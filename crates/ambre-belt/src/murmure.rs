@@ -11,11 +11,11 @@ pub(crate) mod tests {
     use crate::relay::Relay;
 
     /// The WebDriver codes of the keys these tests press.
-    const ENTER: &str = "\u{E007}";
-    const UP: &str = "\u{E013}";
-    const DOWN: &str = "\u{E015}";
-    const SHIFT: &str = "\u{E008}";
-    const F10: &str = "\u{E03A}";
+    pub(crate) const ENTER: &str = "\u{E007}";
+    pub(crate) const UP: &str = "\u{E013}";
+    pub(crate) const DOWN: &str = "\u{E015}";
+    pub(crate) const SHIFT: &str = "\u{E008}";
+    pub(crate) const F10: &str = "\u{E03A}";
 
     /// A fresh dev user name. The relay gives it the address
     /// `<name>@dev.local`.
@@ -78,7 +78,7 @@ pub(crate) mod tests {
     }
 
     /// The script that answers the sidebar entry named `name`, or `null`.
-    fn entry_js(name: &str) -> String {
+    pub(crate) fn entry_js(name: &str) -> String {
         format!(
             "[...document.querySelectorAll('.murmure-entry')] \
                .find(e => e.querySelector('.murmure-entry-name')?.textContent === {})",
@@ -173,7 +173,7 @@ pub(crate) mod tests {
     }
 
     /// Presses and releases each of `keys` in turn: a character or a key code.
-    async fn press(page: &Page, keys: &[&str]) {
+    pub(crate) async fn press(page: &Page, keys: &[&str]) {
         let actions: Vec<Value> = keys
             .iter()
             .flat_map(|k| {
@@ -193,7 +193,7 @@ pub(crate) mod tests {
     /// rest. The line is near the top, in the list, or `from_bottom` in the
     /// composer's field. That is above the row of a thread's composer that
     /// also sends the reply to the channel.
-    async fn reachable(page: &Page, selector: &str, from_bottom: bool) -> (f64, f64) {
+    pub(crate) async fn reachable(page: &Page, selector: &str, from_bottom: bool) -> (f64, f64) {
         let at = page
             .browser
             .script(
@@ -261,7 +261,7 @@ pub(crate) mod tests {
     /// Presses the composer at the foot of the canvas `selector`, types
     /// `text` and sends it with Enter. Nothing on the page says the message
     /// left, so the peer's read is the check.
-    async fn send(page: &Page, selector: &str, text: &str) {
+    pub(crate) async fn send(page: &Page, selector: &str, text: &str) {
         take_keys(page, selector).await;
         page.browser
             .perform(json!([{ "type": "key", "id": "keyboard", "actions": typed_and_sent(text) }]))
@@ -390,7 +390,7 @@ pub(crate) mod tests {
     /// Waits until the sidebar entry `name` counts `count` unread
     /// messages. The relay's mark may show first, until a count replaces it
     /// (`MURMURE-119`, `MURMURE-120`).
-    async fn wait_unread(page: &Page, name: &str, count: u32) {
+    pub(crate) async fn wait_unread(page: &Page, name: &str, count: u32) {
         wait_unread_within(page, name, count, STEP).await;
     }
 
@@ -439,13 +439,13 @@ pub(crate) mod tests {
     }
 
     /// The canvas of the thread, in the panel beside the channel.
-    const THREAD: &str = "#murmure-thread-canvas";
+    pub(crate) const THREAD: &str = "#murmure-thread-canvas";
 
     /// Focuses the latest message of the channel that holds `text`, then
     /// runs the reply action of its menu, which opens its thread in the
     /// panel. The palette offers the action with no message to act on, so
     /// the menu of the focused message is the way (`MURMURE-419`).
-    async fn open_thread(page: &Page, text: &str) {
+    pub(crate) async fn open_thread(page: &Page, text: &str) {
         read_latest(page, CHANNEL, text).await;
         page.browser
             .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
@@ -503,7 +503,7 @@ pub(crate) mod tests {
 
     /// Opens the member list of the shown channel and the direct message
     /// with the member `name`, confirming the first sight of their key.
-    async fn message_member(page: &Page, name: &str) {
+    pub(crate) async fn message_member(page: &Page, name: &str) {
         let name = Value::String(name.to_owned());
         page.browser
             .wait_for(
@@ -1066,7 +1066,7 @@ pub(crate) mod tests {
     }
 
     /// Focuses the latest message, a live call message, and runs Join call from its menu.
-    async fn join_from_message(page: &Page) {
+    pub(crate) async fn join_from_message(page: &Page) {
         read_until_after(
             page,
             "a live call",
@@ -1126,7 +1126,7 @@ pub(crate) mod tests {
     }
 
     /// Whether the call message reads exactly `members` in the call, in any order.
-    fn in_call(heard: &str, members: &[&str]) -> bool {
+    pub(crate) fn in_call(heard: &str, members: &[&str]) -> bool {
         roster(heard).is_some_and(|mut seated| {
             let mut members = members.to_vec();
             seated.sort_unstable();
@@ -3828,7 +3828,7 @@ pub(crate) mod tests {
     }
 
     /// The `aria-pressed` of the camera button, once it shows.
-    async fn camera_pressed(page: &Page, pressed: &str) {
+    pub(crate) async fn camera_pressed(page: &Page, pressed: &str) {
         let pressed = Value::String(pressed.to_owned());
         page.browser
             .wait_for(
@@ -4394,7 +4394,7 @@ pub(crate) mod tests {
     /// Presses the control `selector` of the header of `page` with the pointer, as a hand does.
     /// The browser asks a capture of the screen to come from such a gesture, and a click a script
     /// dispatches is none.
-    async fn press_header(page: &Page, selector: &str) {
+    pub(crate) async fn press_header(page: &Page, selector: &str) {
         let selector = Value::String(format!(".murmure-channel-header {selector}"));
         let at = page
             .browser
@@ -4421,7 +4421,7 @@ pub(crate) mod tests {
     }
 
     /// The `aria-pressed` of the share button, once it shows and takes a press.
-    async fn share_pressed(page: &Page, pressed: &str) {
+    pub(crate) async fn share_pressed(page: &Page, pressed: &str) {
         let pressed = Value::String(pressed.to_owned());
         page.browser
             .wait_for(

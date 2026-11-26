@@ -407,6 +407,19 @@ phone-measures page host:
 belt-seed count="5000":
     SEED_MESSAGES="{{count}}" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt -- --ignored --exact --nocapture murmure_seed::tests::seed_the_belt_relay
 
+# The Murmure screenshots beside the mockup (`crates/ambre-belt/src/murmure_shots.rs`). No CI
+# job runs them. Five headless members seed the space of `research/mockups/murmure-calls.html`
+# through the belt relay and its SFU. The relay writes to `ambre_shots`, a database this recipe
+# empties first in the Postgres of `just services-up`: the names of the mockup are the same on
+# every run, so the user's sidebar would gather one space per run. Each state, device and theme
+# writes the app shot, the mockup render and the two side by side into `target/murmure-shots`.
+murmure-shots:
+    trunk build --features dev-login,chrome-gallery
+    cargo build -p ambre-server
+    cargo build -p ambre-sfu
+    docker compose exec -T postgres psql -q -U ambre -d ambre_dev -c 'DROP DATABASE IF EXISTS ambre_shots WITH (FORCE)' -c 'CREATE DATABASE ambre_shots'
+    SHOTS_DATABASE_URL="postgres://ambre:ambre@localhost:5432/ambre_shots" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt -- --ignored --exact --nocapture murmure_shots::tests::write_the_murmure_shots
+
 # The seed of the phone stack (`ambre-spec-murmure-phone-measures.md section 3.2`). No CI
 # job runs it. A headless Chrome opens the stack at `SEED_ORIGIN`, by default
 # `https://localhost:8443`, and signs in as `user`. It fills a new channel with `count`

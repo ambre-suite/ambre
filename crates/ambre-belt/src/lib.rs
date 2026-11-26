@@ -36,6 +36,8 @@ mod murmure;
 #[cfg(test)]
 mod murmure_seed;
 #[cfg(test)]
+mod murmure_shots;
+#[cfg(test)]
 mod page;
 #[cfg(test)]
 mod proof;
