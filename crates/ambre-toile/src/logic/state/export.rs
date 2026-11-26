@@ -356,7 +356,9 @@ impl ToileState {
 mod tests {
     /// The converter the Logic thread's host build hands in: the engine,
     /// linked in place.
-    #[cfg(feature = "pdf")]
+    // The host links the engine. What a wasm build hands in is not settled.
+    // The tests that load it, and the helpers only they read, run on the host.
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     fn host_converter() -> ambre_convert::Converter {
         ambre_convert::Converter::load(
             ambre_core::ConverterFamily::Pdf,
@@ -496,7 +498,7 @@ mod tests {
     /// (`TOILE-IO-029`). The bytes are opaque here, because `logic::interop`
     /// covers the page walk. This test holds the seam instead: a live board, the
     /// real font faces, and a file at the end of it.
-    #[cfg(feature = "pdf")]
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     #[test]
     fn the_deck_exports_as_a_pdf_document() {
         let st = board_with_a_rect();
@@ -511,7 +513,7 @@ mod tests {
     /// A PDF export writes nothing: the oplog's version vector is the same after
     /// it, so no delta can leave for a peer (`PDF-016`). The receiver is shared,
     /// but the `LoroDoc` mutates through one, so the type does not hold this.
-    #[cfg(feature = "pdf")]
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     #[test]
     fn a_pdf_export_leaves_the_oplog_unchanged() {
         let st = board_with_a_rect();
@@ -524,7 +526,7 @@ mod tests {
     }
 
     /// A board holding one text element whose body is `body`.
-    #[cfg(feature = "pdf")]
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     fn board_with_text(body: &str) -> ToileState {
         let mut st = ToileState::new();
         st.handle_command(ToileCommand::CreateElement {
@@ -540,7 +542,7 @@ mod tests {
 
     /// A sealed context holding the shipped faces in `files`, as the Logic
     /// thread holds what the UI thread delivered to it.
-    #[cfg(feature = "pdf")]
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     fn held_faces(files: &[&str]) -> ambre_draw::FontContext {
         let mut font_cx = ambre_draw::sealed_font_context();
         for file in files {
@@ -553,7 +555,7 @@ mod tests {
     }
 
     /// The bytes of one face the application ships.
-    #[cfg(feature = "pdf")]
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     fn shipped_face(file: &str) -> Vec<u8> {
         const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         std::fs::read(format!("{DIR}{file}")).expect("the workspace ships the face")
@@ -577,7 +579,7 @@ mod tests {
 
     /// The glyph ids of every run of `document` whose text holds `c`, each
     /// with the bytes of the face the run draws in.
-    #[cfg(feature = "pdf")]
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     fn runs_holding(
         document: &ambre_draw::list::PrintDocument,
         c: char,
@@ -604,7 +606,8 @@ mod tests {
     /// The thread's count of armed fetches is the spy. The export runs on the
     /// calling thread, so the count reads what it armed. A fetching cache
     /// meeting the same text on the same thread is the control.
-    #[cfg(feature = "pdf")]
+    // The count of armed fetches is a host hook of `ambre-canvas`.
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     #[test]
     fn an_export_arms_no_fetch_for_a_face_the_thread_lacks() {
         let armed = ambre_canvas::fonts::fetches_armed_on_this_thread;
@@ -640,7 +643,8 @@ mod tests {
 
     /// An export draws a script in the face the thread holds for it, and
     /// arms no fetch for it either (`PDF-019`).
-    #[cfg(feature = "pdf")]
+    // The count of armed fetches is a host hook of `ambre-canvas`.
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     #[test]
     fn an_export_draws_a_script_in_the_face_the_thread_holds() {
         let armed = ambre_canvas::fonts::fetches_armed_on_this_thread;
@@ -664,7 +668,7 @@ mod tests {
     /// `TOILE-IO-048`: a board with nothing on it has no page to draw. The
     /// caller turns the refusal into a message rather than handing the user an
     /// empty file.
-    #[cfg(feature = "pdf")]
+    #[cfg(all(feature = "pdf", not(target_arch = "wasm32")))]
     #[test]
     fn an_empty_board_has_no_pdf_to_export() {
         let st = ToileState::new();
