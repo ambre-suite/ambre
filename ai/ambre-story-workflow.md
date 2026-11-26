@@ -63,7 +63,8 @@
   questions 1 to 4 of `ai/ambre-rust-style.md` fails, and why. "The type does not exist yet" is
   no reason: the change adds the type, as `ai/ambre-rust-style.md` states.
 * **A story that changes an interface drawn in `research/mockups` compares before it reports
-  done.** It screenshots the app in each state it touches, light and dark, puts each shot beside
-  the render of the same state of the mockup, and fixes each difference or names it in its report.
+  done.** It screenshots the app in each state it touches, light and dark. It puts each shot
+  beside the render of the same state of the mockup, and fixes each difference or names it in its
+  report.
   Tests and `verified` rows say that the interface works, never that it looks like its mockup.
 * **Ticking the box is the whole of it**, as `specs/ambre-roadmap.md` section 1 states.
